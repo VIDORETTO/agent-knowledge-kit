@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "names": ["Acme API", "acme"],
+      "slug": "acme",
+      "docs_url": "https://docs.example.test/acme",
+      "repo_url": "https://github.com/example/acme-docs",
+      "official": true,
+      "confidence": 0.98,
+      "evidence": ["publisher-owned documentation domain", "publisher repository"],
+      "license": "MIT"
+    }
+  ]
+}

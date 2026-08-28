@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consulta-documentacao.invalid/schemas/golden.schema.json",
+  "title": "docops reviewed golden set",
+  "type": "object",
+  "required": ["schema_version", "reviewed", "cases"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "reviewed": {"type": "boolean"},
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["query", "expected_filepath", "reviewed"],
+        "properties": {
+          "query": {"type": "string", "minLength": 1},
+          "expected_filepath": {"type": "string", "minLength": 1},
+          "kind": {"enum": ["conceptual", "factual"]},
+          "reviewed": {"const": true}
+        }
+      }
+    }
+  }
+}

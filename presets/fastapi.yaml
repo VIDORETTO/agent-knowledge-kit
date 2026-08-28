@@ -1,0 +1,55 @@
+# Corpus profile for the local FastAPI pilot. Copy this over config.yaml only
+# when the active corpus is FastAPI; paths remain relative to the clone.
+paths:
+  documents_dir: "./documents"
+  data_dir: "./data"
+  models_cache_dir: "./models_cache"
+
+documents:
+  supported_formats: [.md, .txt, .pdf, .docx, .py, .c, .h, .cpp, .js, .jsx, .ts, .tsx, .json, .yaml, .yml, .xml, .csv, .ipynb]
+  exclude_patterns: [node_modules, .venv, .venv-rag, __pycache__, .git, dist, build, .next, data, models_cache]
+  chunking:
+    chunk_size: 1200
+    chunk_overlap: 250
+
+models:
+  embedding:
+    profile: "compact"
+    gpu: false
+  reranker:
+    enabled: false
+    model: "Xenova/ms-marco-MiniLM-L-6-v2"
+    top_k_multiplier: 3
+
+search:
+  default_results: 5
+  max_results: 100
+  collection_name: "knowledge_base"
+
+category_mappings: {}
+keyword_routes: {}
+query_expansions:
+  oauth2: [oauth2-jwt, jwt, password bearer]
+  jwt: [oauth2-jwt, json web tokens, password bearer]
+  basesettings: [pydantic-settings, environment variables, settings]
+  docker: [dockerfile, container image, fastapi run]
+  testclient: [testing fastapi applications, httpx, pytest]
+  httpx: [testclient, testing fastapi applications, pytest]
+  middleware: [middleware stack, outermost, innermost]
+
+server:
+  transport: "stdio"
+  host: "127.0.0.1"
+  port: 8179
+  auth:
+    bearer_token: ""
+  rate_limit:
+    enabled: false
+    requests_per_minute: 60
+    burst: 10
+  metrics:
+    enabled: false
+    port: 9179
+  logging:
+    format: "text"
+    level: "INFO"

@@ -1,0 +1,28 @@
+# Ambientes, índices e caches — nunca versionar
+.venv/
+/.venv-rag/
+/data/
+/models_cache/
+/.rag_state.json
+.pytest_cache/
+.ruff_cache/
+.coverage
+__pycache__/
+*.pyc
+
+# Corpora podem conter material protegido. Fixtures e instruções sintéticas
+# ficam versionáveis; fontes adquiridas permanecem ignoradas.
+documents/*
+!documents/README.md
+!documents/examples/
+!documents/examples/**
+!documents/fixtures/
+!documents/fixtures/**
+
+# Saídas de execuções e configurações com credenciais.
+/artifacts/
+/build/
+/dist/
+*.egg-info/
+skills/generated/
+config/network.yaml

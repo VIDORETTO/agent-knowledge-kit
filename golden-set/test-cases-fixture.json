@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "reviewed": true,
+  "cases": [
+    {
+      "query": "How does the Acme client authenticate with a bearer token?",
+      "expected_filepath": "guide.md",
+      "kind": "factual",
+      "reviewed": true
+    },
+    {
+      "query": "What timeout option was added in version 1.1.0?",
+      "expected_filepath": "release.md",
+      "kind": "factual",
+      "reviewed": true
+    }
+  ]
+}

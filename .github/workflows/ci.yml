@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quick:
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install operator and test profile
+        run: python -m pip install --disable-pip-version-check -e ".[dev,formats]"
+      - name: Unit and contract tests
+        run: python -m pytest -q
+      - name: Lint
+        run: python -m ruff check docops tests scripts
+      - name: Doctor
+        run: python -m docops doctor --json
+      - name: Release audit
+        run: python scripts/audit_release.py --tracked-only --json
+
+  clean-clone:
+    name: clean clone / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify outside checkout state
+        run: python scripts/verify_clean_clone.py

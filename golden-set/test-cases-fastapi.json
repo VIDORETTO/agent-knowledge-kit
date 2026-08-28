@@ -1,0 +1,16 @@
+[
+  {"query": "first steps minimal app FastAPI", "expected_filepath": "documents/fastapi-docs/tutorial/first-steps.md"},
+  {"query": "response_model filter output data", "expected_filepath": "documents/fastapi-docs/tutorial/response-model.md"},
+  {"query": "OAuth2 password JWT token user", "expected_filepath": "documents/fastapi-docs/tutorial/security/oauth2-jwt.md"},
+  {"query": "pydantic settings BaseSettings env var", "expected_filepath": "documents/fastapi-docs/advanced/settings.md"},
+  {"query": "deploy docker container uvicorn", "expected_filepath": "documents/fastapi-docs/deployment/docker.md"},
+  {"query": "TestClient httpx override dependency", "expected_filepath": "documents/fastapi-docs/tutorial/testing.md"},
+  {"query": "handling errors exception handler", "expected_filepath": "documents/fastapi-docs/tutorial/handling-errors.md"},
+  {"query": "middleware CORS add_middleware", "expected_filepath": "documents/fastapi-docs/tutorial/middleware.md"},
+  {"query": "background tasks BackgroundTasks response", "expected_filepath": "documents/fastapi-docs/tutorial/background-tasks.md"},
+  {"query": "extend openapi schema metadata custom docs", "expected_filepath": "documents/fastapi-docs/how-to/extending-openapi.md"},
+  {"query": "body multiple params embed model", "expected_filepath": "documents/fastapi-docs/tutorial/body-multiple-params.md"},
+  {"query": "features based on open standards JSON Schema", "expected_filepath": "documents/fastapi-docs/features.md"},
+  {"query": "sql database SQLAlchemy sessions dependency", "expected_filepath": "documents/fastapi-docs/tutorial/sql-databases.md"},
+  {"query": "numeric validations path query", "expected_filepath": "documents/fastapi-docs/tutorial/path-params-numeric-validations.md"}
+]

@@ -1,0 +1,24 @@
+# Opt-in network profile for knowledge-rag.
+# Copy to config/network.yaml, replace the token, audit it, and keep the copy
+# outside version control. The default config.yaml remains local stdio.
+paths:
+  documents_dir: "./documents"
+  data_dir: "./data"
+  models_cache_dir: "./models_cache"
+
+server:
+  transport: "streamable-http"
+  host: "127.0.0.1"
+  port: 8179
+  auth:
+    bearer_token: "REPLACE_WITH_A_RANDOM_TOKEN_OF_AT_LEAST_16_CHARACTERS"
+  rate_limit:
+    enabled: true
+    requests_per_minute: 60
+    burst: 10
+  metrics:
+    enabled: true
+    port: 9179
+  logging:
+    format: "json"
+    level: "INFO"

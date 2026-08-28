@@ -1,0 +1,11 @@
+[{ "query": "default retries client request", "expected_filepath": "documents/examples/acme-api-client.md" },
+  { "query": "timeout max value client", "expected_filepath": "documents/examples/acme-api-client.md" },
+  { "query": "429 rate limited behavior", "expected_filepath": "documents/examples/acme-api-client.md" },
+  { "query": "page_size max pagination", "expected_filepath": "documents/examples/acme-api-client.md" },
+  { "query": "removed in v4 join endpoint", "expected_filepath": "documents/examples/acme-api-client.md" },
+  { "query": "ApiVersionError condition", "expected_filepath": "documents/examples/acme-api-client.md" },
+  { "query": "async request module", "expected_filepath": "documents/examples/acme-api-client.md" },
+  { "query": "AcmeApiVersionError path without v3", "expected_filepath": "documents/examples/acme-api-client.md" },
+  { "query": "compress gzip Accept-Encoding request", "expected_filepath": "documents/examples/v3.4.0-release-notes.md" },
+  { "query": "log_requests stderr logging", "expected_filepath": "documents/examples/v3.4.0-release-notes.md" }
+]

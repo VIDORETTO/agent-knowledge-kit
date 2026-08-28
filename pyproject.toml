@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools==65.5.0", "wheel==0.45.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "consulta-documentacao"
+version = "0.1.0"
+description = "Portable agent skills, source acquisition, RAG orchestration and package validation"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "consulta-documentacao contributors" }]
+dependencies = []
+
+[project.optional-dependencies]
+rag = ["knowledge-rag==4.8.5"]
+formats = ["PyYAML==6.0.3", "pypdf==6.16.2", "python-docx==1.2.0"]
+dev = ["pytest==8.4.1", "ruff==0.12.7"]
+
+[project.scripts]
+docops = "docops.__main__:main"
+
+[tool.setuptools]
+packages = ["docops"]
+
+[tool.setuptools.package-data]
+docops = ["templates/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
