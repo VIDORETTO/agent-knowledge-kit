@@ -4,18 +4,18 @@ from __future__ import annotations
 
 import fnmatch
 import hashlib
+import http.client
 import ipaddress
 import math
 import re
 import socket
+import ssl
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from io import BytesIO
 from typing import Any
-from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qsl, urljoin, urlsplit, urlunsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener
 from urllib.robotparser import RobotFileParser
 
 from . import __version__
@@ -131,11 +131,6 @@ class WebAcquisitionResult:
         }
 
 
-class _NoRedirect(HTTPRedirectHandler):
-    def redirect_request(self, *_args: Any, **_kwargs: Any) -> None:
-        return None
-
-
 def _host_port(parsed: Any) -> tuple[str, int]:
     try:
         host = parsed.hostname or ""
@@ -183,7 +178,7 @@ class NetworkPolicy:
     def __init__(self, *, allow_private: bool = False) -> None:
         self.allow_private = allow_private
 
-    def validate(self, url: str) -> str:
+    def _parse_and_check(self, url: str) -> tuple[Any, str, int]:
         try:
             parsed = urlsplit(url)
         except ValueError as exc:
@@ -197,8 +192,19 @@ class NetworkPolicy:
         host, port = _host_port(parsed)
         if not self.allow_private and (host in self._blocked_names or _address_is_private(host)):
             raise NetworkPolicyError("ssrf_blocked", f"network target is not allowed: {host}", url=url)
+        return parsed, host, port
+
+    def resolve_addresses(self, url: str) -> tuple[str, ...]:
+        """Return the addresses permitted for one request.
+
+        Callers that connect to a public URL must use the returned literal
+        addresses. Re-resolving the hostname during the socket connection
+        would reopen a DNS-rebinding/TOCTOU gap between this policy check and
+        the actual request.
+        """
+        _parsed, host, port = self._parse_and_check(url)
         if self.allow_private:
-            return canonicalize_url(url)
+            return (host,)
         try:
             addresses = {
                 item[4][0]
@@ -211,7 +217,15 @@ class NetworkPolicy:
             raise AcquisitionError("dns_failed", f"could not resolve {host}", url=url)
         if any(_address_is_private(address) for address in addresses):
             raise NetworkPolicyError("ssrf_blocked", f"network target resolves to a private address: {host}", url=url)
-        return canonicalize_url(url)
+        return tuple(sorted(addresses))
+
+    def validate(self, url: str) -> str:
+        try:
+            canonical = canonicalize_url(url)
+        except ValueError as exc:
+            raise NetworkPolicyError("invalid_url", "URL is malformed", url=url) from exc
+        self.resolve_addresses(canonical)
+        return canonical
 
 
 class _DocumentHTMLParser(HTMLParser):
@@ -431,7 +445,50 @@ class WebAcquirer:
     def __init__(self, *, policy: FetchPolicy | None = None, network_policy: NetworkPolicy | None = None) -> None:
         self.policy = policy or FetchPolicy()
         self.network_policy = network_policy or NetworkPolicy(allow_private=self.policy.allow_private)
-        self._opener = build_opener(_NoRedirect)
+
+    def _open_pinned(self, url: str) -> tuple[http.client.HTTPConnection, http.client.HTTPResponse]:
+        """Open a direct HTTP(S) connection to a policy-approved IP.
+
+        ``urllib`` delegates hostname resolution to ``http.client`` after the
+        SSRF check. That gap is exploitable by DNS rebinding. This small direct
+        client keeps the original Host/SNI name for virtual hosting while
+        dialing one of the literal addresses approved immediately beforehand.
+        """
+        parsed = urlsplit(url)
+        host, port = _host_port(parsed)
+        addresses = self.network_policy.resolve_addresses(url)
+        target = urlunsplit(("", "", parsed.path or "/", parsed.query, ""))
+        headers = {
+            "Accept": "text/html,application/xhtml+xml,text/plain,application/xml,application/json,application/pdf",
+            "Connection": "close",
+            "Host": parsed.netloc,
+            "User-Agent": self.policy.user_agent,
+        }
+        last_error: OSError | None = None
+        for address in addresses:
+            raw_socket: socket.socket | None = None
+            connection: http.client.HTTPConnection | None = None
+            try:
+                raw_socket = socket.create_connection((address, port), timeout=self.policy.timeout_seconds)
+                if parsed.scheme == "https":
+                    context = ssl.create_default_context()
+                    wrapped_socket = context.wrap_socket(raw_socket, server_hostname=host)
+                    raw_socket = None
+                    connection = http.client.HTTPSConnection(host, port, timeout=self.policy.timeout_seconds, context=context)
+                    connection.sock = wrapped_socket
+                else:
+                    connection = http.client.HTTPConnection(host, port, timeout=self.policy.timeout_seconds)
+                    connection.sock = raw_socket
+                    raw_socket = None
+                connection.request("GET", target, headers=headers)
+                return connection, connection.getresponse()
+            except OSError as exc:
+                last_error = exc
+                if connection is not None:
+                    connection.close()
+                if raw_socket is not None:
+                    raw_socket.close()
+        raise OSError(f"could not connect to {host}:{port}: {last_error}")
 
     def fetch(self, url: str) -> FetchedResponse:
         try:
@@ -443,58 +500,64 @@ class WebAcquirer:
         for redirect_number in range(self.policy.max_redirects + 1):
             current = self.network_policy.validate(current)
             last_error: AcquisitionError | None = None
+            redirected = False
             for attempt in range(self.policy.retries + 1):
-                request = Request(current, headers={"User-Agent": self.policy.user_agent, "Accept": "text/html,application/xhtml+xml,text/plain,application/xml,application/json,application/pdf"})
+                response: http.client.HTTPResponse | None = None
+                connection: http.client.HTTPConnection | None = None
                 try:
-                    response = self._opener.open(request, timeout=self.policy.timeout_seconds)
-                except HTTPError as exc:
-                    if 300 <= exc.code < 400:
-                        location = exc.headers.get("Location")
+                    connection, response = self._open_pinned(current)
+                    status = getattr(response, "status", 200)
+                    if 300 <= status < 400:
+                        location = response.headers.get("Location")
                         if location:
                             redirects.append(current)
                             current = urljoin(current, location)
+                            redirected = True
                             break
-                    if exc.code in {408, 429, 500, 502, 503, 504} and attempt < self.policy.retries:
-                        last_error = AcquisitionError("temporary_http_error", f"HTTP {exc.code}", url=current)
+                    if status in {408, 429, 500, 502, 503, 504} and attempt < self.policy.retries:
+                        last_error = AcquisitionError("temporary_http_error", f"HTTP {status}", url=current)
                         continue
-                    code = "authentication_required" if exc.code in {401, 403} else "http_error"
-                    raise AcquisitionError(code, f"HTTP {exc.code} for {current}", url=current) from exc
-                except (URLError, TimeoutError, socket.timeout) as exc:
+                    if status < 200 or status >= 400:
+                        code = "authentication_required" if status in {401, 403} else "http_error"
+                        raise AcquisitionError(code, f"HTTP {status} for {current}", url=current)
+                    content_type = response.headers.get_content_type().casefold()
+                    if content_type not in self.policy.allowed_content_types:
+                        raise AcquisitionError("unsupported_content_type", f"content type is not supported: {content_type}", url=current)
+                    content_length = response.headers.get("Content-Length")
+                    if content_length and content_length.isdigit() and int(content_length) > self.policy.max_bytes:
+                        raise AcquisitionError("payload_too_large", f"response exceeds {self.policy.max_bytes} bytes", url=current)
+                    body = bytearray()
+                    while True:
+                        block = response.read(min(64 * 1024, self.policy.max_bytes - len(body) + 1))
+                        if not block:
+                            break
+                        body.extend(block)
+                        if len(body) > self.policy.max_bytes:
+                            raise AcquisitionError("payload_too_large", f"response exceeds {self.policy.max_bytes} bytes", url=current)
+                    return FetchedResponse(requested, current, status, content_type, bytes(body), tuple(redirects))
+                except AcquisitionError:
+                    raise
+                except (OSError, http.client.HTTPException, TimeoutError, socket.timeout) as exc:
                     if attempt < self.policy.retries:
                         last_error = AcquisitionError("network_error", str(exc), url=current)
                         continue
                     raise AcquisitionError("network_error", f"could not fetch {current}: {exc}", url=current) from exc
                 else:
-                    try:
-                        try:
-                            content_type = response.headers.get_content_type().casefold()
-                            if content_type not in self.policy.allowed_content_types:
-                                raise AcquisitionError("unsupported_content_type", f"content type is not supported: {content_type}", url=current)
-                            content_length = response.headers.get("Content-Length")
-                            if content_length and content_length.isdigit() and int(content_length) > self.policy.max_bytes:
-                                raise AcquisitionError("payload_too_large", f"response exceeds {self.policy.max_bytes} bytes", url=current)
-                            body = bytearray()
-                            while True:
-                                block = response.read(min(64 * 1024, self.policy.max_bytes - len(body) + 1))
-                                if not block:
-                                    break
-                                body.extend(block)
-                                if len(body) > self.policy.max_bytes:
-                                    raise AcquisitionError("payload_too_large", f"response exceeds {self.policy.max_bytes} bytes", url=current)
-                            return FetchedResponse(requested, current, getattr(response, "status", 200), content_type, bytes(body), tuple(redirects))
-                        except AcquisitionError:
-                            raise
-                        except (OSError, ValueError, UnicodeError) as exc:
-                            raise AcquisitionError("network_error", f"could not read {current}: {exc}", url=current) from exc
-                    finally:
+                    if redirected:
+                        break
+                finally:
+                    if response is not None:
                         response.close()
+                    if connection is not None:
+                        connection.close()
+            if redirected:
+                if len(redirects) > self.policy.max_redirects:
+                    raise AcquisitionError("redirect_limit", "redirect limit exceeded", url=current)
+                continue
             else:
                 if last_error:
                     raise last_error
                 raise AcquisitionError("network_error", f"could not fetch {current}", url=current)
-            # The inner loop broke after following a redirect.
-            if len(redirects) > self.policy.max_redirects:
-                raise AcquisitionError("redirect_limit", "redirect limit exceeded", url=current)
         raise AcquisitionError("redirect_limit", "redirect limit exceeded", url=current)
 
     def acquire(self, start_url: str, *, options: CrawlOptions | None = None) -> WebAcquisitionResult:

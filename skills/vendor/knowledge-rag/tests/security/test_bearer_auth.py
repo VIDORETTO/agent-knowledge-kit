@@ -269,35 +269,16 @@ def test_stdio_transport_bypasses_auth(monkeypatch):
     assert ran["transport"] == "stdio"
 
 
-def test_http_transport_without_token_warns_and_stays_open(monkeypatch, capsys):
-    """Backwards compatibility: unset token keeps the current warn-then-serve behaviour.
-
-    v4.8.5: HealthMiddleware is now wired in front of the app on both auth
-    branches, and uvicorn.run replaces mcp.run for HTTP transports so
-    /health probes can be served without auth. The test therefore mocks
-    uvicorn.run AND the app factory to avoid a real bind that would hang
-    the test process indefinitely (regression caught in release.yml).
-    """
+def test_http_transport_without_token_fails_closed(monkeypatch):
+    """A missing token must never bind an unauthenticated HTTP port."""
     from mcp_server import server as server_module
 
     monkeypatch.setattr(server_module.config, "auth_bearer_token", "")
     monkeypatch.setattr(server_module.mcp, "streamable_http_app", lambda **kwargs: _SpyApp())
-    monkeypatch.setattr(
-        server_module.mcp,
-        "run",
-        lambda **kw: pytest.fail("mcp.run must not be called on the HTTP path (v4.8.5+)"),
-    )
+    monkeypatch.setattr("uvicorn.run", lambda *args, **kwargs: pytest.fail("must not bind without a token"))
 
-    served: dict = {}
-    monkeypatch.setattr("uvicorn.run", lambda app, **kwargs: served.update(app=app, **kwargs))
-
-    server_module._run_transport("streamable-http")
-
-    # v4.8.5: the served app is HealthMiddleware(app) when token is empty.
-    from mcp_server.health import HealthMiddleware
-
-    assert isinstance(served["app"], HealthMiddleware)
-    assert "Bearer auth disabled" in capsys.readouterr().err
+    with pytest.raises(RuntimeError, match="requires server.auth.bearer_token"):
+        server_module._run_transport("streamable-http")
 
 
 def test_http_transport_with_token_installs_the_middleware(monkeypatch):

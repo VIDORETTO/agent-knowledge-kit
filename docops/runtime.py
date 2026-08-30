@@ -78,6 +78,7 @@ def runtime_environment(
     *,
     environ: Mapping[str, str] | None = None,
     disable_watcher: bool = True,
+    vendor_root: Path | str | None = None,
 ) -> dict[str, str]:
     """Build a subprocess environment rooted at the current clone."""
 
@@ -85,6 +86,13 @@ def runtime_environment(
     environment = dict(os.environ if environ is None else environ)
     environment["KNOWLEDGE_RAG_DIR"] = str(root)
     environment["PYTHONUNBUFFERED"] = "1"
+    reviewed_vendor = Path(vendor_root).resolve() if vendor_root else root / "skills" / "vendor" / "knowledge-rag"
+    if (reviewed_vendor / "mcp_server").is_dir():
+        inherited_pythonpath = environment.get("PYTHONPATH", "")
+        paths = [str(reviewed_vendor)]
+        if inherited_pythonpath:
+            paths.append(inherited_pythonpath)
+        environment["PYTHONPATH"] = os.pathsep.join(paths)
     if disable_watcher:
         environment["KNOWLEDGE_RAG_WATCHER_DISABLED"] = "1"
     else:

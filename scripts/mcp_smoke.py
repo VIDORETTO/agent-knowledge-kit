@@ -13,10 +13,13 @@ Exemplo:
 from __future__ import annotations
 
 import json
+import queue
 import subprocess
 import sys
 import threading
 import time
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as package_version
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -37,17 +40,56 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 
-def _drain_stderr(proc: subprocess.Popen) -> None:
+def _drain_stderr(proc: subprocess.Popen, lines: list[str]) -> None:
     """Lê stderr do servidor em thread (evita deadlock no pipe) e telegrafa."""
-    for line in iter(proc.stderr.readline, ""):
-        sys.stderr.write(f"  [server] {line}")
-        sys.stderr.flush()
+    try:
+        for line in iter(proc.stderr.readline, ""):
+            lines.append(line)
+            sys.stderr.write(f"  [server] {line}")
+            sys.stderr.flush()
+    except (OSError, ValueError):
+        # The child may close the pipe while the parent is handling an early
+        # termination. The captured lines are still useful for diagnostics.
+        return
+
+
+_STDOUT_EOF = object()
+
+
+def _server_version_error(server_info: object, *, expected_version: str | None = None) -> str | None:
+    """Return a version-drift error when the installed package exposes one."""
+
+    if not isinstance(server_info, dict):
+        return "MCP initialize did not return a serverInfo object"
+    expected = expected_version
+    if expected is None:
+        try:
+            expected = package_version("knowledge-rag")
+        except PackageNotFoundError:
+            return None
+    actual = server_info.get("version")
+    if actual != expected:
+        return f"knowledge-rag serverInfo version {actual!r} differs from installed package {expected!r}"
+    return None
 
 
 class McpClient:
     def __init__(self, proc: subprocess.Popen):
         self.proc = proc
         self._next_id = 1
+        self._stdout_lines: queue.Queue[str | object] = queue.Queue()
+        self._stdout_reader = threading.Thread(target=self._read_stdout, daemon=True)
+        self._stdout_reader.start()
+
+    def _read_stdout(self) -> None:
+        """Move blocking pipe reads off the caller so timeout is enforceable."""
+        try:
+            for line in iter(self.proc.stdout.readline, ""):
+                self._stdout_lines.put(line)
+        except (OSError, ValueError):
+            pass
+        finally:
+            self._stdout_lines.put(_STDOUT_EOF)
 
     def send_json(self, payload: dict) -> None:
         self.proc.stdin.write(json.dumps(payload) + "\n")
@@ -55,11 +97,18 @@ class McpClient:
 
     def recv_json(self, timeout: float = 60.0) -> dict:
         """Lê linhas de stdout até obter uma mensagem JSON-RPC válida."""
-        deadline = time.time() + timeout
+        deadline = time.monotonic() + timeout
 
-        for line in iter(self.proc.stdout.readline, ""):
-            if time.time() > deadline:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
                 raise TimeoutError("timeout esperando resposta JSON-RPC")
+            try:
+                line = self._stdout_lines.get(timeout=remaining)
+            except queue.Empty as exc:
+                raise TimeoutError("timeout esperando resposta JSON-RPC") from exc
+            if line is _STDOUT_EOF:
+                raise RuntimeError("stdout do servidor fechou antes de responder")
             line = line.strip()
             if not line:
                 continue
@@ -68,7 +117,6 @@ class McpClient:
             except json.JSONDecodeError:
                 # prints de bootstrap do servidor (não-JSON) — ignorar
                 continue
-        raise RuntimeError("stdout do servidor fechou antes de responder")
 
     def call(self, method: str, **params) -> dict:
         req_id = self._next_id
@@ -107,7 +155,8 @@ def main() -> int:
         bufsize=1,
     )
 
-    drip = threading.Thread(target=_drain_stderr, args=(proc,), daemon=True)
+    stderr_lines: list[str] = []
+    drip = threading.Thread(target=_drain_stderr, args=(proc, stderr_lines), daemon=True)
     drip.start()
 
     try:
@@ -123,7 +172,12 @@ def main() -> int:
             print(f"FALHOU initialize: {init['error']}")
             return 1
         print(f"    initialize OK — protocolVersion {init['result'].get('protocolVersion')}")
-        print(f"    serverInfo: {init['result'].get('serverInfo')}")
+        server_info = init["result"].get("serverInfo")
+        print(f"    serverInfo: {server_info}")
+        version_error = _server_version_error(server_info)
+        if version_error:
+            print(f"FALHOU: {version_error}")
+            return 1
 
         client.send_json({"jsonrpc": "2.0", "method": "notifications/initialized"})
 
@@ -159,26 +213,32 @@ def main() -> int:
                     print(f"      [{r.get('score', 0):.3f}] {r.get('source')} — {r.get('content', '')[:70]}...")
                 if not data.get("results"):
                     print("    [WARN] 0 resultados — verifique se documents/ tem arquivos indexados")
-    except (TimeoutError, RuntimeError) as e:
+    except (TimeoutError, RuntimeError, BrokenPipeError, OSError) as e:
         print(f"FALHOU: {e}")
-
-        stderr = b"".join(proc.stderr.readlines()).decode("utf-8", "replace")
         print("--- stderr (últimas 40 linhas) ---")
-        print("\n".join(stderr.splitlines()[-40:]))
+        print("".join(stderr_lines[-40:]), end="")
         return 1
     finally:
-        proc.terminate()
+        try:
+            if proc.poll() is None:
+                proc.terminate()
+        except (OSError, ValueError):
+            pass
         try:
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
-            proc.kill()
-        except Exception:
+            try:
+                proc.kill()
+            except (OSError, ValueError):
+                pass
+        except (OSError, ValueError):
             pass
         try:
             proc.stderr.close()
             proc.stdout.close()
-        except Exception:
+        except (OSError, ValueError):
             pass
+        drip.join(timeout=1)
 
     return 0
 

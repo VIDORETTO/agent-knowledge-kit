@@ -250,3 +250,24 @@ def test_wired_stack_lets_the_correct_token_through(monkeypatch):
     messages = _drive(wired_app, _http_scope([(b"authorization", f"Bearer {TOKEN}".encode())]))
     assert _status(messages) == 200
     assert len(downstream.hits) == 1
+
+
+def test_wired_stack_rejects_a_wrong_token(monkeypatch):
+    """The exact app uvicorn would boot must reject stale credentials."""
+    from mcp_server import server as server_module
+
+    monkeypatch.setattr(server_module.config, "auth_bearer_token", TOKEN)
+    monkeypatch.setattr(server_module.mcp, "streamable_http_app", lambda **kwargs: _RecordingApp())
+    monkeypatch.setattr(server_module.mcp, "run", lambda **kw: pytest.fail("must not use the unguarded path"))
+
+    served: Dict[str, Any] = {}
+    monkeypatch.setattr("uvicorn.run", lambda app, **kwargs: served.update(app=app))
+    server_module._run_transport("streamable-http")
+
+    wired_app = served["app"]
+    bearer = wired_app.app
+    downstream = bearer.app
+
+    messages = _drive(wired_app, _http_scope([(b"authorization", b"Bearer wrong-token")]))
+    assert _status(messages) == 401
+    assert downstream.hits == []

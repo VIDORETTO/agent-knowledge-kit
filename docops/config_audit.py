@@ -38,8 +38,36 @@ def _error(errors: list[dict[str, str]], code: str, message: str) -> None:
     errors.append({"code": code, "message": message})
 
 
+def _strip_inline_comment(value: str) -> str:
+    """Remove a YAML comment without touching ``#`` inside quoted values.
+
+    The fallback parser intentionally handles only the small configuration
+    subset needed by ``doctor``. It still needs to accept the repository's
+    checked-in example, which uses inline comments after scalar values.
+    """
+
+    quote: str | None = None
+    escaped = False
+    for index, character in enumerate(value):
+        if quote is not None:
+            if character == "\\" and quote == '"' and not escaped:
+                escaped = True
+                continue
+            if character == quote and not escaped:
+                quote = None
+            escaped = False
+            continue
+        if character in {'"', "'"}:
+            quote = character
+        elif character == "#" and (index == 0 or value[index - 1].isspace()):
+            return value[:index].strip()
+    return value.strip()
+
+
 def _parse_scalar(value: str) -> Any:
-    stripped = value.strip().strip('"\'')
+    stripped = _strip_inline_comment(value)
+    if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in {'"', "'"}:
+        stripped = stripped[1:-1]
     if stripped.casefold() in {"true", "yes", "on"}:
         return True
     if stripped.casefold() in {"false", "no", "off"}:

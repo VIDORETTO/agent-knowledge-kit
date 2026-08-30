@@ -73,7 +73,9 @@ python -m docops config-audit config/network.yaml --json
 ```
 
 O auditor exige autenticação, rate limit, métricas e logging JSON para `sse` e
-`streamable-http`. Não coloque esse arquivo no Git.
+`streamable-http`, e o servidor recusa iniciar se o bearer token estiver
+ausente. Não coloque esse arquivo no Git. O perfil RAG usa `PersistentClient`
+local e o cache de modelos fica em `models_cache/`, que é ignorado.
 
 ## Avaliação
 
@@ -86,3 +88,16 @@ python scripts/evaluate_golden.py --cases golden-set/test-cases.json
 O avaliador lexical local exige `reviewed: true`; a avaliação real do backend
 MCP continua sendo feita por `evaluate_retrieval`. Toda resposta factual do
 harness deve citar `path#secao` ou `path:linha`.
+
+## Auditoria de dependências
+
+Em cada release, execute no ambiente usado pelo RAG:
+
+```text
+python scripts/audit_dependencies.py --requirements requirements.lock --local --strict
+```
+
+O comando falha para qualquer advisory fora do residual explicitamente
+documentado em [SECURITY.md](../SECURITY.md). Trocar o perfil de embedding
+exige `reindex_documents(full_rebuild=True)`; não reutilize um índice com
+dimensão ou modelo diferentes.

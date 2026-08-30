@@ -10,41 +10,43 @@ rápidos não iniciam MCP nem baixam modelos; a integração real é opt-in.
 | DOCOPS-003/004 | `WebAcquirer`, fixtures HTTP, sitemap/robots, SSRF e limites em `tests/test_web_acquirer.py` |
 | DOCOPS-005/006 | `RepositoryAcquirer` e `SourceResolver`, testes de tag/árvore/catálogo |
 | DOCOPS-007 | `StateStore`, `CheckpointStore`, escritas atômicas e teste de repetição |
-| DOCOPS-008 | `evaluate_package`, Golden revisado obrigatório e métricas Recall@5/MRR@5 |
+| DOCOPS-008 | `evaluate_package`, Golden revisado obrigatório e métricas dinâmicas `Recall@k`/`MRR@k` |
 | DOCOPS-009 | `config-audit`, `release_audit`, prompt-injection/SSRF/OCR/auth tests |
-| DOCOPS-010 | workflows CI/integration, schemas, tutorial sintético e checklist de RC |
+| DOCOPS-010 | workflows CI/integration, schemas, tutorial sintético e checklist de release |
 
 ## Comandos locais
 
 ```text
 python -m pytest -q
 python -m ruff check docops tests scripts
-python scripts/audit_release.py --json
+python scripts/audit_release.py --tracked-only --json
 python scripts/verify_clean_clone.py
+python scripts/audit_dependencies.py --requirements requirements.lock --local --strict
 ```
 
 O último comando cria um diretório temporário fora do checkout, copia somente o
 material distribuível e roda doctor, auditoria e testes. Use `--keep` para
-inspecionar o clone temporário.
-
-Na validação desta implementação, a suíte passou com **91 testes** (com dois
-testes de symlink pulados quando o host Windows não permite criar links), o Ruff
-não encontrou problemas, o wheel foi instalado em alvo isolado e a auditoria
-de um clone limpo passou sem findings. O fluxo `docops run` → `validate` →
-`evaluate` também passou com fixture sintética; a integração real
-`docops run --index-rag`, smoke MCP e reindexação concorrente permanecem no
-workflow opt-in porque exigem o perfil `knowledge-rag` e seus modelos.
+inspecionar o clone temporário. A auditoria `--tracked-only` é a forma correta
+de auditar o conteúdo publicável enquanto caches e ambientes locais existem no
+checkout de trabalho.
 
 ## Integração opcional
 
-Com `python scripts/bootstrap.py --dev --rag`, o workflow manual/semana executa
-o servidor real, `scripts/mcp_smoke.py` e
-`scripts/test_reindex_concurrency.py`. Uma execução com rede/configuração de
-produção deve também passar `config-audit`; nenhuma etapa publica ou faz commit.
+Com `python scripts/bootstrap.py --dev --rag`, a execução de release também
+deve passar pelo servidor real, `scripts/mcp_smoke.py`,
+`scripts/test_reindex_concurrency.py` e pelo fluxo sintético
+`docops run` → `validate` → `evaluate`. Uma execução com rede/configuração de
+produção deve também passar `config-audit`; nenhuma etapa publica ou faz
+commit automaticamente.
 
 ## Harnesses
 
-O contrato comum é validado por `harness.json`. A última etapa de conformidade
-em OpenCode, Claude Code e Codex requer cada host instalado pelo mantenedor e
-não pode ser simulada por este repositório; [HARNESSES.md](HARNESSES.md)
-descreve a sessão manual sem transferir controle do modelo para o operador.
+OpenCode 1.18.25 e Codex CLI 0.151.0 foram exercitados em sessões somente
+leitura no host Windows e validaram versão 1.0.0, comando `python -m
+mcp_server.server`, transporte `stdio` e o manifesto contra o schema. Claude
+Code não está instalado e não é anunciado pela release. Detalhes e limitações
+estão em [HARNESSES.md](HARNESSES.md).
+
+Os números e hashes da execução final — incluindo a quantidade exata de testes,
+o resultado do CI público, a tag e a release — ficam registrados em
+`tasks/todo.md`, que é a checklist operacional da publicação.

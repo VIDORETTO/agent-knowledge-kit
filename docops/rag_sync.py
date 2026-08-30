@@ -137,7 +137,8 @@ class RagSynchronizer:
             return RagSyncResult(False, error={"code": "rag_python_missing", "message": str(executable)})
         client = None
         try:
-            client = start_mcp_server(executable, root, env=runtime_environment(root))
+            reviewed_vendor = self.runtime_root / "skills" / "vendor" / "knowledge-rag" if self.runtime_root else None
+            client = start_mcp_server(executable, root, env=runtime_environment(root, vendor_root=reviewed_vendor))
             arguments = {"full_rebuild": True} if full_rebuild else {"force": True}
             response = client.call("tools/call", name="reindex_documents", arguments=arguments, timeout=self.timeout_seconds)
             reindex = _response_payload(response, "reindex_documents")

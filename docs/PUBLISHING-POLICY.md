@@ -22,5 +22,10 @@ confirme licença, autorização e necessidade de incluir o conteúdo.
 
 Uma release deve conter código, testes, schemas, templates e fixtures
 distribuíveis; nunca `documents/` adquirido, `.rag_state.json`, `data/`,
-`models_cache/`, `.venv*`, tokens ou logs de usuário. Rode
-`python scripts/audit_release.py --json` em uma cópia limpa antes de publicar.
+`models_cache/`, `.venv*`, tokens ou logs de usuário.
+
+Em uma cópia limpa, rode `python scripts/audit_release.py --json` antes de
+publicar. Em um checkout de trabalho que contenha ambientes ou caches
+ignorados, use `python scripts/audit_release.py --tracked-only --json`; essa
+forma audita exatamente o conteúdo que entrará no Git, sem transformar o
+ambiente local em artefato de release.

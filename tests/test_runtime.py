@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from docops.runtime import discover_rag_python, runtime_environment
@@ -21,3 +22,20 @@ def test_runtime_environment_does_not_embed_the_author_machine_path(tmp_path: Pa
     assert environment["KNOWLEDGE_RAG_DIR"] == str(tmp_path.resolve())
     assert environment["KNOWLEDGE_RAG_WATCHER_DISABLED"] == "1"
     assert "Documents\\Sistemas\\consulta-documentacao" not in environment["KNOWLEDGE_RAG_DIR"]
+
+
+def test_runtime_environment_prefers_the_reviewed_vendor_server() -> None:
+    root = Path(__file__).parents[1].resolve()
+    environment = runtime_environment(root, environ={"PYTHONPATH": "inherited"})
+
+    pythonpath = environment["PYTHONPATH"].split(os.pathsep)
+    assert pythonpath[0] == str(root / "skills" / "vendor" / "knowledge-rag")
+    assert pythonpath[1] == "inherited"
+
+
+def test_runtime_environment_can_use_the_repo_vendor_for_a_generated_package(tmp_path: Path) -> None:
+    root = Path(__file__).parents[1].resolve()
+    vendor = root / "skills" / "vendor" / "knowledge-rag"
+    environment = runtime_environment(tmp_path, vendor_root=vendor)
+
+    assert environment["PYTHONPATH"].split(os.pathsep)[0] == str(root / "skills" / "vendor" / "knowledge-rag")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import socket
 import threading
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -93,6 +94,22 @@ def test_network_policy_reports_malformed_ports_as_structured_errors() -> None:
         policy.validate("https://docs.example.test:bad/docs")
 
     assert caught.value.code == "invalid_url"
+
+
+def test_fetch_rechecks_dns_and_rejects_a_rebinding_to_private_address(monkeypatch) -> None:
+    answers = iter(("93.184.216.34", "127.0.0.1"))
+
+    def fake_getaddrinfo(*_args, **_kwargs):
+        address = next(answers)
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (address, 80))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr(socket, "create_connection", lambda *_args, **_kwargs: pytest.fail("private address must be rejected before connect"))
+
+    with pytest.raises(NetworkPolicyError) as caught:
+        WebAcquirer(policy=FetchPolicy(retries=0)).fetch("http://docs.example.test/")
+
+    assert caught.value.code == "ssrf_blocked"
 
 
 def test_fetches_one_html_page_and_preserves_canonical_origin() -> None:

@@ -2,7 +2,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from docops.config_audit import audit_config, audit_config_file
+from docops.config_audit import _minimal_yaml_config, audit_config, audit_config_file
+
+
+def test_minimal_yaml_fallback_accepts_inline_comments_and_quoted_hashes() -> None:
+    config = _minimal_yaml_config(
+        'server:\n'
+        '  transport: "stdio"  # stdio is the safe default\n'
+        '  host: "docs.example/#anchor"  # the hash is part of the value\n'
+    )
+
+    assert config["server"]["transport"] == "stdio"
+    assert config["server"]["host"] == "docs.example/#anchor"
 
 
 def test_stdio_config_does_not_require_network_credentials() -> None:

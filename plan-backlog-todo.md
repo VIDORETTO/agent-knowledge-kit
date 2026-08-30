@@ -4,16 +4,16 @@
 | Campo | Valor |
 |---|---|
 | **Documento** | SPEC-001 — Doc-to-Skill + RAG Híbrido (MCP) |
-| **Status** | Release 1.0.0 implementada e validada localmente; publicação e perfil RAG seguem opt-in |
+| **Status** | Release pública 1.0.0 implementada, auditada e publicada; perfil RAG segue opt-in |
 | **Versão** | 1.0 |
 | **Última atualização** | 2026-08-29 |
-| **Autor** | Assistente (Claude), a pedido do usuário |
+| **Autor** | Assistente, a pedido do usuário |
 
 ---
 
 ## 1. Sumário Executivo
 
-O objetivo é transformar a documentação de um framework, pipeline ou aplicação (site de docs, pasta de markdown, PDFs, OpenAPI/Swagger, changelogs, etc.) em uma **skill inteligente para agentes de IA** (Claude Code, Claude Desktop, Cursor, etc.) que:
+O objetivo é transformar a documentação de um framework, pipeline ou aplicação (site de docs, pasta de markdown, PDFs, OpenAPI/Swagger, changelogs, etc.) em uma **skill inteligente para agentes de IA** usada pelo harness do usuário que:
 
 1. Carrega **mental models, convenções e fluxos de decisão** do framework sob demanda, com baixo custo de tokens (via `SKILL.md` + arquivos por tópico) — resolvido pela ferramenta **`book-to-skill`**;
 2. Consegue responder perguntas pontuais e literais sobre **qualquer trecho da documentação**, mesmo em corpora grandes, versionados e que mudam com frequência (algo que uma skill estática sozinha não cobre bem) — resolvido por um **servidor MCP de RAG híbrido** (`knowledge-rag`), que expõe busca semântica + lexical (BM25) com reranking;
@@ -52,8 +52,8 @@ Ou seja: **Skill = cérebro procedural, RAG = memória factual, MCP = fio que co
 
 | Camada | Ferramenta escolhida | Por quê |
 |---|---|---|
-| **Extração → Skill estruturada** | [`virgiliojr94/book-to-skill`](https://github.com/virgiliojr94/book-to-skill) (MIT, ~26k★) | Converte qualquer prosa estruturada (não só livros: `docs/` inteiro, RFCs, specs, changelogs) em `SKILL.md` + capítulos sob demanda + `glossary.md` + `patterns.md` + `cheatsheet.md`. Suporta atualização incremental ("fold-in") quando a doc-fonte muda. Padrão aberto Agent Skills — funciona em Claude Code, Copilot CLI e Amp. |
-| **RAG híbrido via MCP** | [`lyonzin/knowledge-rag`](https://github.com/lyonzin/knowledge-rag) (MIT, ativo, v4.8.x) | Busca híbrida semântica (FastEmbed ONNX, embeddings 384D) + lexical (BM25 com índice invertido, 128× mais rápido que baseline) fundidas por Reciprocal Rank Fusion, com **reranking por cross-encoder**. 13 tools MCP (`search_knowledge`, `get_document`, `search_similar`, `add_from_url`, `reindex_documents`, etc.). 20 formatos de arquivo nativos (md, pdf, docx, código-fonte, etc.). 100% local (zero cloud, zero custo de API), roda via stdio (Claude Code) ou SSE/HTTP (time inteiro). Inclui 10 skills prontas (`rag-check-first`, `rag-cite-sources`, `rag-deep-dive`...) que ensinam o agente a *usar* o RAG antes de responder. |
+| **Extração → Skill estruturada** | [`virgiliojr94/book-to-skill`](https://github.com/virgiliojr94/book-to-skill) (MIT, ~26k★) | Converte qualquer prosa estruturada (não só livros: `docs/` inteiro, RFCs, specs, changelogs) em `SKILL.md` + capítulos sob demanda + `glossary.md` + `patterns.md` + `cheatsheet.md`. Suporta atualização incremental ("fold-in") quando a doc-fonte muda. Padrão aberto Agent Skills para harnesses compatíveis. |
+| **RAG híbrido via MCP** | [`lyonzin/knowledge-rag`](https://github.com/lyonzin/knowledge-rag) (MIT, ativo, v4.8.x) | Busca híbrida semântica (FastEmbed ONNX, embeddings 384D) + lexical (BM25 com índice invertido, 128× mais rápido que baseline) fundidas por Reciprocal Rank Fusion, com **reranking por cross-encoder**. 13 tools MCP (`search_knowledge`, `get_document`, `search_similar`, `add_from_url`, `reindex_documents`, etc.). 20 formatos de arquivo nativos (md, pdf, docx, código-fonte, etc.). 100% local (zero cloud, zero custo de API), roda via stdio ou SSE/HTTP conforme o perfil. Inclui 10 skills prontas (`rag-check-first`, `rag-cite-sources`, `rag-deep-dive`...) que ensinam o agente a *usar* o RAG antes de responder. |
 
 **Alternativas avaliadas e descartadas (ou mantidas como plano B):**
 
@@ -138,7 +138,7 @@ Ou seja: **Skill = cérebro procedural, RAG = memória factual, MCP = fio que co
                                                   │
                                                   ▼
                      ┌─────────────────────────────────────────────────────────────────┐
-                     │             AGENTE (Claude Code / Claude Desktop / Cursor)        │
+                     │             AGENTE (harness externo compatível)                 │
                      │             Usuário faz a pergunta em linguagem natural            │
                      └─────────────────────────────────────────────────────────────────┘
 ```
@@ -170,7 +170,7 @@ doc-fonte muda ──► book-to-skill (modo update/fold-in) ──► SKILL.md 
 8. **Step 8** — gera `glossary.md`, `patterns.md`, `cheatsheet.md` (camada de decisão rápida).
 9. **Step 9 / 9.5** — monta `SKILL.md` (core + índice) e os arquivos de capítulo.
 
-**Saída** (instalada em `~/.claude/skills/<slug>/`):
+**Saída** (instalada no diretório de skills do harness, por exemplo `<slug>/`):
 
 | Arquivo | Papel | Custo aprox. |
 |---|---|---|
@@ -221,14 +221,15 @@ query_expansions:
   middleware: ["middleware stack", "outermost", "innermost"]
 
 server:
-  transport: "stdio"        # uso individual via Claude Code
+  transport: "stdio"        # uso individual via MCP local
 ```
 
 > Se mais de uma pessoa do time vai consultar a mesma base, usar o perfil de
 > rede opt-in em `config/network.example.yaml`, substituir o token e executar o
 > auditor — ver Fase 6. O padrão individual continua `stdio`.
 
-**Registro como MCP no cliente (Claude Code):** adicionar o servidor em `~/.claude.json` conforme `docs/INSTALLATION.md` do `knowledge-rag`.
+**Registro como MCP no cliente:** adicionar o servidor na configuração MCP do
+harness escolhido conforme a documentação da versão instalada.
 
 **Tools MCP relevantes para este projeto:**
 
@@ -275,7 +276,7 @@ Sprint alvo: [a definir]
 
 Descrição:
 Como desenvolvedor(a) que usa [FRAMEWORK-ALVO] no dia a dia dentro de agentes de IA
-(Claude Code / Claude Desktop), quero que o agente tenha acesso tanto aos mental
+(um harness externo compatível), quero que o agente tenha acesso tanto aos mental
 models e convenções do framework quanto à capacidade de buscar qualquer trecho
 literal e atualizado da documentação, para que eu não precise abrir o navegador
 nem colar documentação manualmente no contexto.
@@ -345,7 +346,7 @@ Subtarefas: ver Seção 9 (Fases e Tarefas)
 - [x] Copiar/symlinkar a documentação completa para `documents/` — 157 arquivos FastAPI + 3 auxiliares + 3 fixtures sintéticas; `.rag_state.json` mapeia 163
 - [x] Escolher e adaptar preset (`developer.yaml` como base — cópia em `presets/developer.yaml`)
 - [x] Configurar `config.yaml` (embedding `compact`, aliases BM25 FastAPI, reranker desligado por medição, transporte `stdio`, `max_results` 100)
-- [x] Registrar o servidor MCP no cliente do agente — `~/.config/opencode/opencode.json` (`KNOWLEDGE_RAG_DIR` explícito); comandos p/ Claude Code em `docs/USE.md` §2.2
+- [x] Registrar o servidor MCP no cliente do agente — `~/.config/opencode/opencode.json` (`KNOWLEDGE_RAG_DIR` explícito); o contrato genérico para outros clientes está em `docs/HARNESSES.md`
 - [x] Restart do cliente e query de fumaça — `scripts/mcp_smoke.py "background tasks FastAPI"` retornou handshake, tools/list e resultado híbrido
 - [x] Confirmar modelo e índice — `status`: bge-small-en-v1.5, 5.122 chunks; state local reconciliado em 163 arquivos e servidor com 245 entradas históricas
 - [x] Avaliar `add_from_url` — não necessário neste piloto: a fonte oficial local já cobre o escopo; tool permanece disponível para gaps futuros
@@ -374,7 +375,7 @@ Subtarefas: ver Seção 9 (Fases e Tarefas)
 ### Fase 6 — Escala (opcional, fast follow)
 - [x] Disponibilizar perfil opt-in `sse`/`streamable-http` — `config/network.example.yaml` e `docs/USE.md`; o padrão continua `stdio`
 - [x] Exigir `bearer_token`, `rate_limit`, `metrics` (Prometheus) e `logging.format: json` — `python -m docops config-audit`; NÃO expor sem bearer token
-- [x] Documentar configuração de cliente MCP para OpenCode, Claude Code, Codex e harnesses compatíveis — `docs/HARNESSES.md`
+- [x] Documentar configuração de cliente MCP para OpenCode, Codex e harnesses compatíveis — `docs/HARNESSES.md`; Claude Code não é anunciado sem sessão verificável
 - [x] Testar reindexação zero-downtime sob carga concorrente — `scripts/test_reindex_concurrency.py` com MCP real e fixture sintética
 
 ---
@@ -438,7 +439,8 @@ Subtarefas: ver Seção 9 (Fases e Tarefas)
 3. Considerar nuclear rebuild para remover registros históricos do índice, se a contagem de entradas do servidor precisar coincidir com os 163 arquivos lógicos do state.
 4. Usar a Fase 6 somente quando houver necessidade real de uso multiusuário; copiar o perfil de rede, substituir o bearer token e passar pelo `config-audit` antes de expor o MCP.
 
-> Estado 2026-08-29: Fases 0–6 implementadas e validadas no produto; o perfil de
-> rede permanece opt-in e a publicação/commit não foram executados. A única
-> observação operacional do piloto é a presença de registros históricos no
-> contador do servidor, sem perda de cobertura dos 163 arquivos lógicos.
+> Estado 2026-08-29: Fases 0–6 implementadas, auditadas e publicadas; o perfil
+> de rede permanece opt-in. A única observação operacional do piloto é a
+> presença de registros históricos no contador do servidor, sem perda de
+> cobertura dos 163 arquivos lógicos. Hashes, workflows e release estão em
+> `tasks/todo.md`.

@@ -128,13 +128,17 @@ def evaluate_package(
     """Evaluate lexical retrieval while keeping the quality gate reviewable."""
 
     root = Path(package_root).resolve()
+    valid_top_k = isinstance(top_k, int) and not isinstance(top_k, bool) and 1 <= top_k <= 100
+    metric_top_k = top_k if valid_top_k else 5
+    recall_key = f"recall_at_{metric_top_k}"
+    mrr_key = f"mrr_at_{metric_top_k}"
     if isinstance(cases, (Path, str)):
         try:
             payload = json.loads(Path(cases).read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             return EvaluationResult(
                 False,
-                {"recall_at_5": 0.0, "mrr_at_5": 0.0},
+                {recall_key: 0.0, mrr_key: 0.0},
                 [],
                 [{"code": "golden_unreadable", "message": str(exc)}],
             )
@@ -154,7 +158,6 @@ def evaluate_package(
     evaluated: list[dict[str, Any]] = []
     reciprocal_ranks: list[float] = []
     hits = 0
-    valid_top_k = isinstance(top_k, int) and not isinstance(top_k, bool) and 1 <= top_k <= 100
     if not valid_top_k:
         errors.append({"code": "top_k_out_of_range", "message": "top_k must be an integer from 1 through 100"})
     ranked_top_k = top_k if valid_top_k else 1
@@ -187,10 +190,10 @@ def evaluate_package(
         )
     total = len(case_list)
     metrics = {
-        "recall_at_5": hits / total if total else 0.0,
-        "mrr_at_5": sum(reciprocal_ranks) / total if total else 0.0,
+        recall_key: hits / total if total else 0.0,
+        mrr_key: sum(reciprocal_ranks) / total if total else 0.0,
     }
-    required = {"recall_at_5": 0.85, "mrr_at_5": 0.7}
+    required = {recall_key: 0.85, mrr_key: 0.7}
     if thresholds:
         for key, value in thresholds.items():
             if key not in required:
@@ -204,10 +207,10 @@ def evaluate_package(
                 errors.append({"code": "threshold_out_of_range", "message": f"{key} must be a finite number from 0 through 1"})
                 continue
             required[key] = numeric
-    if total and metrics["recall_at_5"] < required["recall_at_5"]:
-        errors.append({"code": "recall_below_threshold", "message": f"Recall@5 {metrics['recall_at_5']:.4f} < {required['recall_at_5']:.4f}"})
-    if total and metrics["mrr_at_5"] < required["mrr_at_5"]:
-        errors.append({"code": "mrr_below_threshold", "message": f"MRR@5 {metrics['mrr_at_5']:.4f} < {required['mrr_at_5']:.4f}"})
+    if total and metrics[recall_key] < required[recall_key]:
+        errors.append({"code": "recall_below_threshold", "message": f"Recall@{metric_top_k} {metrics[recall_key]:.4f} < {required[recall_key]:.4f}"})
+    if total and metrics[mrr_key] < required[mrr_key]:
+        errors.append({"code": "mrr_below_threshold", "message": f"MRR@{metric_top_k} {metrics[mrr_key]:.4f} < {required[mrr_key]:.4f}"})
     diagnostics: list[str] = []
     if validation.ok:
         manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))

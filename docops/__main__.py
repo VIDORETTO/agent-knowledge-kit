@@ -109,10 +109,11 @@ def _dispatch(args: argparse.Namespace) -> int:
         print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False, sort_keys=True))
         return 0 if result.ok else 1
     if args.command == "evaluate":
+        metric_top_k = args.top_k if 1 <= args.top_k <= 100 else 5
         result = evaluate_package(
             args.package,
             args.cases,
-            thresholds={"recall_at_5": args.recall_threshold, "mrr_at_5": args.mrr_threshold},
+            thresholds={f"recall_at_{metric_top_k}": args.recall_threshold, f"mrr_at_{metric_top_k}": args.mrr_threshold},
             top_k=args.top_k,
         )
         print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False, sort_keys=True))

@@ -31,7 +31,7 @@ def main() -> int:
     errors: list[str] = []
     reindex: dict[str, object] = {}
     try:
-        environment = runtime_environment(package)
+        environment = runtime_environment(package, vendor_root=ROOT)
         primary = start_mcp_server(executable, package, env=environment)
         load = start_mcp_server(executable, package, env=environment)
         reindex_response = primary.call("tools/call", name="reindex_documents", arguments={"force": True}, timeout=120)

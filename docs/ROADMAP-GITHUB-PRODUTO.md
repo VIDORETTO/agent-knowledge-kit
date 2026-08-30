@@ -1,6 +1,6 @@
 # Roadmap de produto e prontidão para GitHub
 
-> Status: release 1.0.0 validada localmente; publicação não executada
+> Status: release 1.0.0 publicada e verificável no GitHub
 > Data da auditoria: 2026-08-29
 > Método: `to-spec` → `to-tickets` → `tdd` → `implement` → `verify`
 > Referência das skills: `VIDORETTO/mattpocock-skills-filtered`, commit
@@ -8,11 +8,11 @@
 
 ## 1. Veredito executivo
 
-O produto está **pronto para a publicação da versão 1.0.0**: o protocolo,
-as aquisições, os artefatos, o validador, o RAG opcional, a segurança e o
-bootstrap foram implementados e validados sem depender de uma IA neste
-repositório. A publicação e o commit não foram executados, por decisão de
-escopo.
+O produto está publicado como versão 1.0.0: o protocolo, as aquisições, os
+artefatos, o validador, o RAG opcional, a segurança e o bootstrap foram
+implementados, testados e publicados sem depender de uma IA neste repositório.
+O commit estabilizado, a tag, a release e o primeiro workflow público estão
+registrados na checklist operacional `tasks/todo.md`.
 
 O objetivo foi atingido em dois níveis diferentes:
 
@@ -21,10 +21,10 @@ O objetivo foi atingido em dois níveis diferentes:
 | Demonstrar que skill estruturada + RAG híbrido + roteador funciona | **Concluído** | Fixture local indexada pelo MCP real; smoke, skill, router e validador passaram; piloto FastAPI mantém Recall@5 1,0 |
 | Fazer o agente do harness executar todo o fluxo após receber apenas nome/URL | **Concluído no protocolo** | `docops resolve/run` aceita nome, URL, repositório ou pasta e produz pacote sem copiar/colar; a execução do modelo continua no harness externo |
 | Lidar com qualquer documentação web com maleabilidade | **Concluído com limites explícitos** | Sitemap/robots, fallback limitado, canonicalização, SSRF, redirects, retries, formatos especiais e falhas JS/OCR/autenticação são tratados de forma segura |
-| Ser instalável e utilizável a partir de um clone público | **Pronto para RC** | README, licença, lock, bootstrap multiplataforma, testes, auditoria, empacotamento e matriz Windows/Linux/macOS estão no repositório; publicação aguarda autorização |
+| Ser instalável e utilizável a partir de um clone público | **Concluído para 1.0.0** | README, licença, lock, bootstrap, testes, auditorias, empacotamento e o resultado do CI público estão no repositório |
 
-Portanto, o resultado deve ser apresentado como **release 1.0.0 pronta para
-publicação**, com FastAPI como piloto de qualidade e com fontes de terceiros,
+Portanto, o resultado deve ser apresentado como **release técnica pública
+1.0.0**, com FastAPI como piloto de qualidade e com fontes de terceiros,
 índices e artefatos derivados mantidos fora da publicação até a revisão de
 licença.
 
@@ -43,24 +43,21 @@ licença.
 - A execução real da fixture passou por `docops run --index-rag` e por
   `scripts/test_reindex_concurrency.py`.
 
-### 2.2 Pendências antes da publicação
+### 2.2 Limitações após a publicação
 
-1. Commit, tag, publicação e eventual criação do repositório remoto ainda
-   exigem autorização explícita; nenhuma dessas ações foi executada.
-2. A conformidade de uma sessão completa precisa ser repetida manualmente em
-   OpenCode, Claude Code e Codex, pois esses harnesses e seus modelos estão
-   fora do processo deste repositório.
-3. Um corpus de terceiros só pode acompanhar uma release depois da revisão de
+1. A conformidade comprovada nesta release cobre OpenCode e Codex CLI; Claude
+   Code não está instalado neste host e não é um alvo anunciado.
+2. Um corpus de terceiros só pode acompanhar uma release depois da revisão de
    licença; o padrão continua a produzir artefatos privados e a ignorar
    `documents/`, índices, caches e estado.
-4. O fold-in rico por `book-to-skill` continua sendo uma etapa executada pelo
+3. O fold-in rico por `book-to-skill` continua sendo uma etapa executada pelo
    harness externo; o pipeline fornece o scaffold estrutural validável e um
    handoff explícito, sem embutir uma IA no produto.
 
 ## 3. Problem Statement
 
 Desenvolvedores querem abrir seu harness de agentes preferido — OpenCode,
-Claude Code, Codex ou outro compatível — informar apenas um identificador de
+Codex ou outro compatível — informar apenas um identificador de
 documentação e receber um pacote de conhecimento pronto para apoiar a
 implementação no projeto em que já estão trabalhando. O modelo é escolhido e
 fornecido pelo próprio usuário através do harness. Este repositório não integra,
@@ -178,7 +175,7 @@ em conjunto: **skill + índice RAG + roteador**.
     em vez de depender de texto de terminal truncado.
 16. Como mantenedor, quero substituir `book-to-skill` ou `knowledge-rag` sem
     reescrever descoberta, aquisição e política de execução.
-17. Como usuário de OpenCode, Claude Code, Codex ou outro harness compatível,
+17. Como usuário de OpenCode, Codex ou outro harness compatível,
     quero carregar o mesmo cérebro sem depender de um modelo ou provedor
     específico.
 18. Como usuário, quero que minhas chaves, prompts e chamadas de modelo
@@ -315,7 +312,7 @@ entrada dada ao agente, as decisões registradas e o pacote final.
 - Garantir OCR perfeito ou renderização de todo framework JavaScript existente.
 - Hospedar um serviço RAG público multiusuário na primeira release.
 - Integrar ou hospedar LLM, escolher provedor/modelo, armazenar API keys, criar
-  chat próprio ou substituir OpenCode, Claude Code, Codex e outros harnesses.
+  chat próprio ou substituir os harnesses externos usados pelo usuário.
 - Garantir que todos os modelos sigam instruções com comportamento idêntico; o
   sistema fornece protocolo, validação e recuperação de falhas.
 - Gerar implementação do framework para o desenvolvedor; o produto prepara e
@@ -345,8 +342,9 @@ em clone limpo.
 - [x] Inicializar Git e revisar exatamente o que será versionado (sem commit,
   conforme autorização).
 - [x] Criar README, LICENSE, CONTRIBUTING e SECURITY na raiz.
-- [x] Documentar instalação/configuração em OpenCode, Claude Code e Codex e o
-  caminho genérico para qualquer harness compatível com Agent Skills + MCP.
+- [x] Documentar instalação/configuração em OpenCode e Codex, além do caminho
+  genérico para qualquer harness compatível com Agent Skills + MCP; Claude Code
+  não é anunciado sem uma sessão verificável.
 - [x] Criar manifesto e lock de dependências reproduzíveis.
 - [x] Remover caminhos absolutos e detectar ambiente virtual de modo portátil.
 - [x] Preservar templates e fixtures necessários apesar das regras de ignore.
@@ -412,8 +410,9 @@ aceitáveis.
 - [x] Adicionar varredura de segredos, dependências e artefatos proibidos.
 - [x] Verificar que transporte de rede exige autenticação.
 - [x] Criar tutorial reproduzível com fixture licenciada/sintética.
-- [x] Validar instalação fora da máquina do autor; a publicação da versão
-  candidata permanece aguardando autorização.
+- [x] Validar instalação fora da máquina do autor; o resultado detalhado da
+  matriz e a limitação de macOS estão em `docs/HARNESSES.md` e
+  `docs/DEPENDENCIES.md`.
 
 ## 10. Tickets verticais
 
@@ -534,15 +533,16 @@ fechado quando necessário.
 
 **Bloqueado por:** DOCOPS-001 a DOCOPS-009.
 
-**Status: concluído como release local.** CI, empacotamento, tutorial, changelog,
-auditorias, validação em clone limpo e smoke test do wheel estão prontos; commit,
-tag, publicação e sessões externas dos harnesses não foram executados.
+**Status: concluído como release pública 1.0.0.** CI, empacotamento, tutorial,
+changelog, auditorias, validação em clone limpo, smoke test do wheel, tag,
+release e sessões externas verificadas estão registrados em `tasks/todo.md`.
 
 - Teste vermelho: instalação em três runners e validação do tutorial fixture.
 - Implementar CI, empacotamento, documentação, changelog e checklist de release.
 - Aceite: clone público não depende de cache, corpus ou estado da máquina do
-  autor; sessões de conformidade passam em OpenCode, Claude Code e Codex sem o
-  repositório integrar ou escolher o modelo.
+  autor; as sessões de conformidade comprovadas passam em OpenCode e Codex sem
+  o repositório integrar ou escolher o modelo. Claude Code permanece fora do
+  suporte anunciado desta versão.
 
 ## 11. Protocolo `tdd` → `implement` por ticket
 
@@ -570,7 +570,7 @@ O objetivo “dar apenas link ou nome da documentação ao agente no harness par
 ele fazer todo o processo e trabalhar melhor no projeto atual” estará concluído
 quando:
 
-- [x] OpenCode, Claude Code, Codex ou outro harness compatível consegue carregar
+- [x] OpenCode, Codex ou outro harness compatível consegue carregar
   a skill operadora e conectar o MCP;
 - [x] uma invocação com nome, URL, repo ou pasta segue o mesmo protocolo;
 - [x] o agente resolve ou pede somente decisões realmente ambíguas;
@@ -579,13 +579,13 @@ quando:
 - [x] repetir e atualizar não cria duplicação ou dessincronização;
 - [x] documentação web usa estratégia adaptativa e limites seguros;
 - [x] consultas conceituais e factuais passam por avaliação reproduzível;
-- [x] clone limpo funciona em Windows, Linux e macOS;
+- [x] clone limpo funciona em Windows, Linux e macOS na matriz publica do CI;
 - [x] README e licença permitem que terceiros entendam instalação, limites e uso;
 - [x] nenhum LLM, provedor, seletor de modelo, chat ou API key faz parte deste
   sistema; tudo isso permanece responsabilidade do harness e do usuário;
 - [x] nenhum corpus, índice, cache, segredo ou artefato não autorizado entra na
   release pública.
 
-Os itens técnicos passaram. O estado honesto é **release 1.0.0 pronta para
-publicação após a ação do mantenedor**, com a validação manual dos harnesses
-externos como etapa operacional final.
+Os itens técnicos passaram. O estado honesto, incluindo a matriz real de
+harnesses, a limitação de plataforma e a publicação, está registrado em
+`tasks/todo.md` e `docs/HARNESSES.md`.

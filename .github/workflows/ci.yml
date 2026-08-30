@@ -23,8 +23,12 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
+      - name: Pin installer
+        run: python -m pip install --disable-pip-version-check --upgrade "pip==26.2.1"
       - name: Install operator and test profile
         run: python -m pip install --disable-pip-version-check -e ".[dev,formats]"
+      - name: Dependency audit
+        run: python scripts/audit_dependencies.py --requirements requirements.lock --local --strict
       - name: Unit and contract tests
         run: python -m pytest -q
       - name: Lint
@@ -58,5 +62,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+      - name: Pin installer
+        run: python -m pip install --disable-pip-version-check --upgrade "pip==26.2.1"
       - name: Build and smoke-test wheel
         run: python scripts/verify_wheel.py

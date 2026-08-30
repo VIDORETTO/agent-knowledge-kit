@@ -80,10 +80,14 @@ class RepositoryAcquirer:
         clone_root: Path | str | None = None,
         git_timeout: float = 120.0,
         allow_private_network: bool = False,
+        max_clone_bytes: int = 500 * 1024 * 1024,
     ) -> None:
         self.clone_root = Path(clone_root).resolve() if clone_root else None
         self.git_timeout = git_timeout
         self.network_policy = NetworkPolicy(allow_private=allow_private_network)
+        if isinstance(max_clone_bytes, bool) or not isinstance(max_clone_bytes, int) or max_clone_bytes < 1:
+            raise ValueError("max_clone_bytes must be a positive integer")
+        self.max_clone_bytes = max_clone_bytes
 
     def acquire(
         self,
@@ -231,27 +235,83 @@ class RepositoryAcquirer:
             path = Path(raw_path).resolve()
             return path, False
         if candidate.repo_url and urlsplit(candidate.repo_url).scheme in {"http", "https"}:
-            self.network_policy.validate(candidate.repo_url)
+            parsed_repo_url = urlsplit(candidate.repo_url)
+            canonical_repo_url = self.network_policy.validate(candidate.repo_url)
+            if parsed_repo_url.scheme != "https":
+                raise RepositoryAcquisitionError("remote repository URLs must use HTTPS")
+            addresses = self.network_policy.resolve_addresses(canonical_repo_url)
             target = Path(destination).resolve() if destination else (
                 self.clone_root / candidate.slug if self.clone_root else Path(tempfile.mkdtemp(prefix=f"docops-{candidate.slug}-"))
             )
             if target.is_symlink():
                 raise RepositoryAcquisitionError(f"clone destination must not be a symbolic link: {target}")
-            if target.exists() and any(target.iterdir()):
-                raise RepositoryAcquisitionError(f"clone destination is not empty: {target}")
             target.parent.mkdir(parents=True, exist_ok=True)
-            command = ["git", "clone", "--depth", "1"]
+            target.mkdir(exist_ok=True)
+            if target.is_symlink():
+                raise RepositoryAcquisitionError(f"clone destination must not be a symbolic link: {target}")
+            if any(target.iterdir()):
+                raise RepositoryAcquisitionError(f"clone destination is not empty: {target}")
+            command = [
+                "git",
+                "-c",
+                "http.followRedirects=false",
+                "-c",
+                "protocol.file.allow=never",
+            ]
+            for address in addresses:
+                if address.casefold() == (parsed_repo_url.hostname or "").casefold():
+                    continue
+                pinned_address = f"[{address}]" if ":" in address and not address.startswith("[") else address
+                command.extend(["-c", f"http.curloptResolve={parsed_repo_url.hostname}:{parsed_repo_url.port or 443}:{pinned_address}"])
+            command.extend([
+                "clone",
+                "--depth",
+                "1",
+                "--no-tags",
+                "--single-branch",
+                "--no-recurse-submodules",
+                "--filter=blob:none",
+            ])
             if version:
                 command.extend(["--branch", version])
-            command.extend([candidate.repo_url, str(target)])
+            command.extend([canonical_repo_url, str(target)])
+            environment = os.environ.copy()
+            environment["GIT_TERMINAL_PROMPT"] = "0"
+            environment["GIT_OPTIONAL_LOCKS"] = "0"
             try:
-                subprocess.run(command, check=True, capture_output=True, text=True, timeout=self.git_timeout)
+                subprocess.run(
+                    command,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=self.git_timeout,
+                    env=environment,
+                )
+                if self._directory_size(target) > self.max_clone_bytes:
+                    raise RepositoryAcquisitionError(
+                        f"repository clone exceeds the {self.max_clone_bytes} byte safety limit"
+                    )
             except (OSError, subprocess.SubprocessError):
+                if destination is None and self.clone_root is None:
+                    shutil.rmtree(target, ignore_errors=True)
+                raise
+            except RepositoryAcquisitionError:
                 if destination is None and self.clone_root is None:
                     shutil.rmtree(target, ignore_errors=True)
                 raise
             return target, True
         raise RepositoryAcquisitionError("repository candidate has no cloneable URL")
+
+    def _directory_size(self, root: Path) -> int:
+        """Return a bounded clone size, ignoring symlink targets."""
+        total = 0
+        for path in root.rglob("*"):
+            if path.is_symlink() or not path.is_file():
+                continue
+            total += path.stat().st_size
+            if total > self.max_clone_bytes:
+                return total
+        return total
 
     @staticmethod
     def _find_docs(root: Path, scope: str | None, language: str | None = None) -> Path | None:

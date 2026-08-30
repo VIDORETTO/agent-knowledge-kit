@@ -33,6 +33,26 @@ def test_evaluator_requires_reviewed_cases_and_reports_recall_and_mrr(tmp_path: 
     assert result.thresholds == {"recall_at_5": 0.85, "mrr_at_5": 0.7}
 
 
+def test_evaluator_metric_names_follow_the_requested_top_k(tmp_path: Path) -> None:
+    package = _package(tmp_path)
+    cases = {
+        "schema_version": 1,
+        "reviewed": True,
+        "cases": [{"query": "Authentication", "expected_filepath": "guide.md", "reviewed": True}],
+    }
+
+    result = evaluate_package(
+        package,
+        cases,
+        top_k=1,
+        thresholds={"recall_at_1": 1.0, "mrr_at_1": 1.0},
+    )
+
+    assert result.ok, result.errors
+    assert result.metrics == {"recall_at_1": 1.0, "mrr_at_1": 1.0}
+    assert result.thresholds == {"recall_at_1": 1.0, "mrr_at_1": 1.0}
+
+
 def test_unreviewed_golden_candidates_cannot_be_used_as_a_quality_gate(tmp_path: Path) -> None:
     package = _package(tmp_path)
     candidates = generate_golden_candidates(package)

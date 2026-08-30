@@ -3,7 +3,9 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from docops.repository_acquirer import RepositoryAcquirer, RepositoryAcquisitionResult
+import pytest
+
+from docops.repository_acquirer import RepositoryAcquirer, RepositoryAcquisitionError, RepositoryAcquisitionResult
 from docops.source_resolver import SourceCandidate
 
 
@@ -62,6 +64,73 @@ def test_remote_repository_acquisition_blocks_private_network_targets() -> None:
 
     assert not result.ok
     assert result.errors[0]["code"] == "ssrf_blocked"
+
+
+def test_remote_repository_requires_https(monkeypatch) -> None:
+    candidate = SourceCandidate(
+        kind="repository",
+        slug="insecure",
+        canonical="http://docs.example.test/repo",
+        repo_url="http://docs.example.test/repo",
+    )
+
+    acquirer = RepositoryAcquirer()
+    monkeypatch.setattr(acquirer.network_policy, "validate", lambda url: url)
+    result = acquirer.acquire(candidate)
+
+    assert not result.ok
+    assert "HTTPS" in result.errors[0]["message"]
+
+
+def test_remote_clone_disables_redirects_interactive_credentials_and_submodules(tmp_path: Path, monkeypatch) -> None:
+    candidate = SourceCandidate(
+        kind="repository",
+        slug="public",
+        canonical="https://docs.example.test/repo",
+        repo_url="https://docs.example.test/repo",
+    )
+    seen: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        seen["command"] = command
+        seen["env"] = kwargs["env"]
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    acquirer = RepositoryAcquirer()
+    monkeypatch.setattr(acquirer.network_policy, "validate", lambda url: url)
+    monkeypatch.setattr(acquirer.network_policy, "resolve_addresses", lambda url: ("93.184.216.34",))
+    root, cloned = acquirer._obtain_root(candidate, destination=tmp_path / "clone", version=None)
+
+    assert cloned
+    assert root.is_dir()
+    command = seen["command"]
+    assert "http.followRedirects=false" in command
+    assert "http.curloptResolve=docs.example.test:443:93.184.216.34" in command
+    assert "protocol.file.allow=never" in command
+    assert "--no-recurse-submodules" in command
+    assert "--filter=blob:none" in command
+    assert seen["env"]["GIT_TERMINAL_PROMPT"] == "0"
+
+
+def test_remote_clone_enforces_a_size_limit(tmp_path: Path, monkeypatch) -> None:
+    candidate = SourceCandidate(
+        kind="repository",
+        slug="large",
+        canonical="https://docs.example.test/repo",
+        repo_url="https://docs.example.test/repo",
+    )
+
+    def fake_run(command, **kwargs):
+        destination = Path(command[-1])
+        (destination / "large.md").write_bytes(b"too large")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    acquirer = RepositoryAcquirer(max_clone_bytes=1)
+    monkeypatch.setattr(acquirer.network_policy, "validate", lambda url: url)
+    monkeypatch.setattr(acquirer.network_policy, "resolve_addresses", lambda url: ("93.184.216.34",))
+
+    with pytest.raises(RepositoryAcquisitionError, match="safety limit"):
+        acquirer._obtain_root(candidate, destination=tmp_path / "clone", version=None)
 
 
 def test_temporary_repository_result_can_clean_up_only_its_owned_root(tmp_path: Path) -> None:

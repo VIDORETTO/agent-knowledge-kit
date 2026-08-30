@@ -10,7 +10,7 @@ idioma, licença e escopo no próprio `manifest.json`.
 | Slug do piloto | `fastapi` |
 | Corpus derivado | `documents/fastapi-docs/` (privado/ignorado) |
 | Transporte padrão | MCP stdio local |
-| Estado do produto | protocolo genérico implementado; release 1.0.0 validada localmente, publicação depende do mantenedor |
+| Estado do produto | protocolo genérico implementado; release técnica pública 1.0.0, com FastAPI como piloto |
 
 ## Decisões preservadas
 

@@ -15,6 +15,8 @@ import sys
 import venv
 from pathlib import Path
 
+BOOTSTRAP_PIP_VERSION = "26.2.1"
+
 
 def venv_python(root: Path) -> Path:
     relative = (Path("Scripts") / "python.exe") if sys.platform == "win32" else (Path("bin") / "python")
@@ -31,8 +33,20 @@ def install_command(python: Path, root: Path, *, rag: bool, formats: bool, dev: 
     elif formats:
         command.extend(["PyYAML==6.0.3", "pypdf==6.16.2", "python-docx==1.2.0"])
     if dev:
-        command.extend(["pytest==8.4.1", "ruff==0.12.7"])
+        command.extend(["pytest==9.1.1", "ruff==0.12.7", "pip-audit==2.10.1"])
     return command
+
+
+def pip_upgrade_command(python: Path) -> list[str]:
+    """Return the pinned installer upgrade used before project packages."""
+    return [
+        str(python),
+        "-m",
+        "pip",
+        "install",
+        "--disable-pip-version-check",
+        f"pip=={BOOTSTRAP_PIP_VERSION}",
+    ]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -55,6 +69,9 @@ def main(argv: list[str] | None = None) -> int:
         venv.EnvBuilder(with_pip=True, clear=False).create(root / ".venv")
     command = install_command(python, root, rag=args.rag, formats=args.formats, dev=args.dev)
     if not args.no_install:
+        upgraded = subprocess.run(pip_upgrade_command(python), cwd=root, check=False)
+        if upgraded.returncode:
+            return upgraded.returncode
         completed = subprocess.run(command, cwd=root, check=False)
         if completed.returncode:
             return completed.returncode

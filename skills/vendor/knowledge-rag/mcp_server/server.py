@@ -60,6 +60,7 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 # Local imports
+from . import __version__
 from .config import config
 from .fts5_index import Fts5LexicalIndex, Fts5NotReadyError
 from .ingestion import Document, DocumentParser
@@ -3961,7 +3962,7 @@ class KnowledgeOrchestrator:
 
 mcp = MCPServer(
     "knowledge-rag",
-    version="4.6.0",
+    version=__version__,
 )
 
 _orchestrator: Optional[KnowledgeOrchestrator] = None
@@ -4645,13 +4646,12 @@ def _run_transport(transport: str) -> None:
 
     * ``stdio`` — the pipe carries no HTTP metadata; auth is not applicable
       and the middleware is not installed.
-    * HTTP transports (``sse``, ``streamable-http``) — when
-      ``config.auth_bearer_token`` is set, the FastMCP ASGI app is wrapped
-      in :class:`BearerAuthMiddleware` and served through uvicorn so no
-      unauthenticated request can reach the MCP dispatcher. When the token
-      is unset we print a one-line warning and fall back to ``mcp.run``
-      so the current, unauth open-port behaviour is preserved for
-      backwards compatibility.
+    * HTTP transports (``sse``, ``streamable-http``) — require
+      ``config.auth_bearer_token``. The FastMCP ASGI app is wrapped in
+      :class:`BearerAuthMiddleware` and served through uvicorn so no
+      unauthenticated request can reach the MCP dispatcher. A missing token
+      is rejected before binding a port; there is no unauthenticated HTTP
+      compatibility mode.
     * Anything else is refused loudly rather than silently starting an
       unguarded server.
     """
@@ -4676,22 +4676,20 @@ def _run_transport(transport: str) -> None:
     app = app_factory(host=config.server_host)
 
     if not token:
-        print(
-            f"[WARN] Bearer auth disabled on {transport} transport — "
-            "set server.auth.bearer_token in config.yaml to require credentials.",
-            file=sys.stderr,
+        raise RuntimeError(
+            f"{transport} transport requires server.auth.bearer_token; "
+            "refusing to start without authentication"
         )
-        served = HealthMiddleware(app, get_orchestrator)
-    else:
-        guarded = BearerAuthMiddleware(app, token)
-        # HealthMiddleware wraps the bearer app so /health probes bypass auth
-        # (matches BearerAuthMiddleware.exempt_paths). Order matters: health
-        # first, then bearer — a probe never reaches the auth layer.
-        served = HealthMiddleware(guarded, get_orchestrator)
-        print(
-            f"[SECURITY] Bearer auth enforced on {transport} transport ({config.server_host}:{config.server_port})",
-            file=sys.stderr,
-        )
+
+    guarded = BearerAuthMiddleware(app, token)
+    # HealthMiddleware wraps the bearer app so /health probes bypass auth
+    # (matches BearerAuthMiddleware.exempt_paths). Order matters: health
+    # first, then bearer — a probe never reaches the auth layer.
+    served = HealthMiddleware(guarded, get_orchestrator)
+    print(
+        f"[SECURITY] Bearer auth enforced on {transport} transport ({config.server_host}:{config.server_port})",
+        file=sys.stderr,
+    )
 
     print(
         f"[HEALTH] Probe endpoint at http://{config.server_host}:{config.server_port}/health",

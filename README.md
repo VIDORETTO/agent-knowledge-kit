@@ -6,9 +6,10 @@ fonte, adquire e normaliza documentos, gera uma skill e um roteador, prepara o
 corpus para `knowledge-rag` e registra tudo em um manifesto retomável.
 
 O projeto não contém nem escolhe um LLM, provedor, modelo, chat ou chave de
-API. OpenCode, Claude Code, Codex ou outro harness compatível executa a skill e
-decide o modelo. O MCP é uma ferramenta local opcional para recuperação; o
-operador continua utilizável sem o servidor RAG instalado.
+API. OpenCode e Codex foram validados na matriz da release; qualquer outro
+harness precisa implementar Agent Skills e MCP stdio. O MCP é uma ferramenta
+local opcional para recuperação; o operador continua utilizável sem o servidor
+RAG instalado. Claude Code não é um alvo de suporte testado na versão 1.0.0.
 
 ## Começo rápido
 
@@ -29,7 +30,10 @@ python scripts/mcp_smoke.py "retry policy"
 
 No Windows, `scripts/bootstrap.ps1` é equivalente; no Linux/macOS, use
 `sh scripts/bootstrap.sh`. Os scripts detectam `bin/python` e
-`Scripts/python.exe`, e não dependem de um caminho da máquina do autor.
+`Scripts/python.exe`, e não dependem de um caminho da máquina do autor. A
+execução manual desta release foi comprovada no Windows; Linux/macOS ficam
+exercitados pela matriz do CI e não são apresentados como validação manual
+local.
 
 ## Um fluxo completo
 
