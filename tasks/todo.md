@@ -15,8 +15,8 @@
 - **Suporte verificado:** OpenCode 1.18.25 e Codex CLI 0.151.0 no Windows.
   Claude Code não está instalado e não é anunciado nesta versão.
 - **Plataformas:** Windows comprovado manualmente; Linux/macOS cobertos pela
-  matriz pública do CI quando os workflows finais passarem. Não há alegação de
-  bootstrap manual local nesses dois sistemas.
+  matriz pública do CI final verde `33320817617`. Não há alegação de bootstrap
+  manual local nesses dois sistemas.
 
 ## Fase 0 — contrato, escopo e política
 
@@ -174,16 +174,27 @@
 
 ## Fase 6 — publicação pública e prova remota
 
-- [ ] Criar a tag imutável `v1.0.0` somente no commit final validado; aceitar
-  apenas quando `git show`, `git ls-remote --tags` e a release apontarem para o
-  mesmo SHA.
-- [ ] Publicar a release GitHub `v1.0.0` com notas de changelog e link para os
-  gates; confirmar página/API acessíveis anonimamente.
-- [ ] Fazer push do commit final e da tag para `origin`; confirmar branch,
-  tag, release, settings de segurança e ausência de artefatos proibidos.
-- [ ] Aguardar os workflows públicos do commit final: CI completo (9 jobs
-  rápidos, 3 clones limpos e wheel), integração RAG e reindexação manual;
-  registrar IDs, SHA, status e URLs aqui.
+- [x] Criar a tag anotada e imutável `v1.0.0` somente no commit validado
+  `e8083ade7f9533cb220b3cf3288ed3b54a6e79c9`; `git show` confirmou a tag e o
+  commit, enquanto `git ls-remote --tags origin` confirmou o objeto anotado
+  `bfc89d2e69e27fa75d90c2c4c2d33020dbc02d1f` e o peeled SHA esperado.
+- [x] Publicar a release GitHub `v1.0.0` com notas e links para changelog,
+  release, aceitação, segurança e evidências; a API reportou `isDraft=false`,
+  `isPrerelease=false`, e a página pública retornou HTTP 200:
+  https://github.com/VIDORETTO/agent-knowledge-kit/releases/tag/v1.0.0.
+- [x] Fazer push do commit e da tag para `origin`; `origin/main` e a tag
+  apontam para `e8083ade7f9533cb220b3cf3288ed3b54a6e79c9`. A API pública confirmou
+  `isPrivate=false`, `visibility=PUBLIC`, Dependabot alerts/security updates,
+  secret scanning e push protection ativos; `git ls-files` não encontrou
+  `.venv-rag/`, `data/`, `models_cache/`, `.rag_state.json` ou artefatos gerados.
+- [x] Aguardar os workflows públicos do commit final e registrar a prova:
+  CI completo `33320817617` (12 jobs verdes: 9 combinações rápidas, 3 clones
+  limpos e wheel), integração RAG `33320989219` e docs-reindex
+  `33320989436`; todos no SHA `e8083ade7f9533cb220b3cf3288ed3b54a6e79c9`, com
+  status `success` e URLs públicas:
+  https://github.com/VIDORETTO/agent-knowledge-kit/actions/runs/33320817617,
+  https://github.com/VIDORETTO/agent-knowledge-kit/actions/runs/33320989219,
+  https://github.com/VIDORETTO/agent-knowledge-kit/actions/runs/33320989436.
 
 ## Revisão de segurança
 
@@ -198,6 +209,7 @@
 
 ## Veredito e registro final
 
-Os gates locais e as decisões de suporte estão concluídos. O checklist só pode
-ser marcado como totalmente concluído depois de a tag, a release, o push e os
-workflows públicos serem observados e registrados nos quatro itens da Fase 6.
+Os gates locais, as decisões de suporte, a tag, a release, o push e os
+workflows públicos foram observados e registrados. O residual de Chroma e as
+revisões manuais descritas acima continuam sendo limitações conhecidas, não
+falhas silenciosas do gate.
