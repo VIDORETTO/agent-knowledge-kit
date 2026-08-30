@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,6 +12,7 @@ from typing import Any, Iterable, Mapping
 from .package_validator import validate_package
 
 _TOKEN = re.compile(r"[\wÀ-ÿ][\wÀ-ÿ./:-]*", re.UNICODE)
+_WINDOWS_ABSOLUTE = re.compile(r"^[A-Za-z]:[/\\]")
 
 
 @dataclass
@@ -40,18 +42,42 @@ def _tokens(value: str) -> set[str]:
     return {token.casefold() for token in _TOKEN.findall(value)}
 
 
-def _case_payload(cases: Mapping[str, Any] | Iterable[Mapping[str, Any]]) -> tuple[bool, list[Mapping[str, Any]]]:
+def _case_payload(
+    cases: Mapping[str, Any] | Iterable[Mapping[str, Any]],
+) -> tuple[bool, list[Mapping[str, Any]], list[dict[str, str]]]:
+    errors: list[dict[str, str]] = []
     if isinstance(cases, Mapping):
         reviewed = cases.get("reviewed") is True
+        if cases.get("schema_version") != 1 or type(cases.get("schema_version")) is not int:
+            errors.append({"code": "golden_schema", "message": "golden set schema_version must be 1"})
+        if "cases" not in cases:
+            errors.append({"code": "golden_cases", "message": "golden set cases must be a list"})
         raw_cases = cases.get("cases", [])
     else:
         reviewed = False
         raw_cases = cases
+        errors.append({"code": "golden_schema", "message": "golden set must be an object with schema_version and cases"})
     if not isinstance(raw_cases, list):
-        return reviewed, []
+        return reviewed, [], [{"code": "golden_cases", "message": "golden set cases must be a list"}]
     case_list = [case for case in raw_cases if isinstance(case, Mapping)]
-    reviewed = reviewed or bool(case_list) and all(case.get("reviewed") is True for case in case_list)
-    return reviewed, case_list
+    if len(case_list) != len(raw_cases):
+        errors.append({"code": "golden_case_shape", "message": "every golden case must be an object"})
+    for index, case in enumerate(case_list, 1):
+        query = case.get("query")
+        expected_filepath = case.get("expected_filepath")
+        if not isinstance(query, str) or not query.strip() or not isinstance(expected_filepath, str) or not expected_filepath.strip():
+            errors.append({"code": "golden_case_fields", "message": f"golden case {index} needs query and expected_filepath"})
+        if isinstance(expected_filepath, str):
+            relative = Path(expected_filepath.replace("\\", "/"))
+            if relative.is_absolute() or _WINDOWS_ABSOLUTE.match(expected_filepath) or ".." in relative.parts:
+                errors.append({"code": "golden_case_path", "message": f"golden case {index} has an unsafe expected_filepath"})
+        kind = case.get("kind", "factual")
+        if not isinstance(kind, str) or kind not in {"conceptual", "factual"}:
+            errors.append({"code": "golden_case_kind", "message": f"golden case {index} has an unsupported kind"})
+        if case.get("reviewed") is not True:
+            errors.append({"code": "golden_case_not_reviewed", "message": f"golden case {index} requires reviewed=true"})
+    reviewed = reviewed and bool(case_list) and not errors
+    return reviewed, case_list, errors
 
 
 def _expected_relative(value: str, documents_dir: Path) -> str:
@@ -83,7 +109,11 @@ def _score(query: str, path: str, content: str) -> float:
 def _corpus(documents_dir: Path) -> list[tuple[str, str]]:
     result: list[tuple[str, str]] = []
     for path in sorted(documents_dir.rglob("*")):
-        if path.is_file() and path.suffix.casefold() in {".md", ".markdown", ".txt", ".rst", ".adoc", ".json", ".yaml", ".yml", ".html"}:
+        if not path.is_symlink() and path.is_file() and path.suffix.casefold() in {
+            ".md", ".markdown", ".txt", ".rst", ".adoc", ".json", ".yaml", ".yml",
+            ".html", ".htm", ".xml", ".csv", ".py", ".c", ".h", ".cpp", ".js",
+            ".jsx", ".ts", ".tsx", ".ipynb", ".xlsx", ".pptx",
+        }:
             result.append((path.relative_to(documents_dir).as_posix(), path.read_text(encoding="utf-8", errors="replace")))
     return result
 
@@ -99,11 +129,19 @@ def evaluate_package(
 
     root = Path(package_root).resolve()
     if isinstance(cases, (Path, str)):
-        payload: Any = json.loads(Path(cases).read_text(encoding="utf-8"))
+        try:
+            payload = json.loads(Path(cases).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            return EvaluationResult(
+                False,
+                {"recall_at_5": 0.0, "mrr_at_5": 0.0},
+                [],
+                [{"code": "golden_unreadable", "message": str(exc)}],
+            )
     else:
         payload = cases
-    reviewed, case_list = _case_payload(payload)
-    errors: list[dict[str, str]] = []
+    reviewed, case_list, payload_errors = _case_payload(payload)
+    errors: list[dict[str, str]] = list(payload_errors)
     if not reviewed:
         errors.append({"code": "golden_not_reviewed", "message": "golden cases require explicit review before evaluation"})
     if not case_list:
@@ -116,13 +154,17 @@ def evaluate_package(
     evaluated: list[dict[str, Any]] = []
     reciprocal_ranks: list[float] = []
     hits = 0
+    valid_top_k = isinstance(top_k, int) and not isinstance(top_k, bool) and 1 <= top_k <= 100
+    if not valid_top_k:
+        errors.append({"code": "top_k_out_of_range", "message": "top_k must be an integer from 1 through 100"})
+    ranked_top_k = top_k if valid_top_k else 1
     for case in case_list:
         query = str(case.get("query") or "")
         expected = _expected_relative(str(case.get("expected_filepath") or ""), documents_dir)
         ranked = sorted(
             ((score, path) for path, content in corpus for score in [_score(query, path, content)]),
             key=lambda item: (-item[0], item[1]),
-        )[: max(1, top_k)]
+        )[:ranked_top_k]
         paths = [path for _, path in ranked]
         try:
             rank = paths.index(expected) + 1
@@ -150,7 +192,18 @@ def evaluate_package(
     }
     required = {"recall_at_5": 0.85, "mrr_at_5": 0.7}
     if thresholds:
-        required.update({key: float(value) for key, value in thresholds.items() if key in required})
+        for key, value in thresholds.items():
+            if key not in required:
+                continue
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError, OverflowError):
+                errors.append({"code": "threshold_invalid", "message": f"{key} must be a finite number from 0 through 1"})
+                continue
+            if not math.isfinite(numeric) or not 0 <= numeric <= 1:
+                errors.append({"code": "threshold_out_of_range", "message": f"{key} must be a finite number from 0 through 1"})
+                continue
+            required[key] = numeric
     if total and metrics["recall_at_5"] < required["recall_at_5"]:
         errors.append({"code": "recall_below_threshold", "message": f"Recall@5 {metrics['recall_at_5']:.4f} < {required['recall_at_5']:.4f}"})
     if total and metrics["mrr_at_5"] < required["mrr_at_5"]:
@@ -166,6 +219,8 @@ def evaluate_package(
 def generate_golden_candidates(package_root: Path | str, *, limit: int = 20) -> list[dict[str, Any]]:
     """Generate review-required candidates from headings; never marks them approved."""
 
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 1000:
+        raise ValueError("limit must be an integer from 1 through 1000")
     documents_dir = Path(package_root).resolve() / "rag" / "documents"
     candidates: list[dict[str, Any]] = []
     for relative, content in _corpus(documents_dir):

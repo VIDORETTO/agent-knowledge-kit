@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
@@ -19,7 +20,11 @@ class RepositoryAcquisitionError(RuntimeError):
     """Raised for a repository that cannot be safely inspected or cloned."""
 
 
-_DOC_SUFFIXES = {".md", ".markdown", ".rst", ".adoc", ".txt", ".html", ".htm", ".pdf", ".json", ".yaml", ".yml"}
+_DOC_SUFFIXES = {
+    ".md", ".markdown", ".rst", ".adoc", ".txt", ".html", ".htm", ".pdf", ".docx",
+    ".json", ".yaml", ".yml", ".xml", ".csv", ".py", ".c", ".h", ".cpp", ".js",
+    ".jsx", ".ts", ".tsx", ".ipynb", ".xlsx", ".pptx",
+}
 _IGNORED_DIRS = {".git", ".hg", ".svn", "node_modules", "dist", "build", "__pycache__", "img", "images", "assets"}
 
 
@@ -36,6 +41,19 @@ class RepositoryAcquisitionResult:
     source: dict[str, Any] = field(default_factory=dict)
     errors: list[dict[str, str]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    temporary: bool = False
+
+    def cleanup(self) -> None:
+        """Remove a clone created in the private temporary workspace."""
+
+        if not self.temporary or self.root is None:
+            return
+        root = self.root
+        self.temporary = False
+        try:
+            shutil.rmtree(root)
+        except OSError as exc:
+            self.warnings.append(f"temporary repository cleanup failed: {exc}")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -87,11 +105,30 @@ class RepositoryAcquirer:
             return RepositoryAcquisitionResult(False, errors=[{"code": exc.code, "message": str(exc)}], source=candidate.to_dict())
         except (OSError, RepositoryAcquisitionError, subprocess.SubprocessError) as exc:
             return RepositoryAcquisitionResult(False, errors=[{"code": "repository_unavailable", "message": str(exc)}], source=candidate.to_dict())
+        temporary = cloned and destination is None and self.clone_root is None
 
-        if not (root / ".git").exists():
-            return RepositoryAcquisitionResult(False, root=root, errors=[{"code": "not_repository", "message": f"no .git directory at {root}"}], source=candidate.to_dict())
+        if not (root / ".git").is_dir() or (root / ".git").is_symlink():
+            return RepositoryAcquisitionResult(
+                False,
+                root=root,
+                errors=[{"code": "not_repository", "message": f"no .git directory at {root}"}],
+                source=candidate.to_dict(),
+                temporary=temporary,
+            )
         commit = self._git_output(root, "rev-parse", "HEAD")
-        docs_path = self._find_docs(root, candidate.scope, candidate.language)
+        try:
+            docs_path = self._find_docs(root, candidate.scope, candidate.language)
+        except (OSError, RepositoryAcquisitionError) as exc:
+            return RepositoryAcquisitionResult(
+                False,
+                root=root,
+                commit=commit,
+                version=requested_version or "local",
+                license=self._license(root),
+                source=candidate.to_dict(),
+                errors=[{"code": "docs_tree_not_found", "message": str(exc)}],
+                temporary=temporary,
+            )
         if docs_path is None:
             return RepositoryAcquisitionResult(
                 False,
@@ -101,6 +138,7 @@ class RepositoryAcquirer:
                 license=self._license(root),
                 source=candidate.to_dict(),
                 errors=[{"code": "docs_tree_not_found", "message": "could not detect a supported documentation directory"}],
+                temporary=temporary,
             )
 
         files = self._scan_files(root, docs_path)
@@ -119,6 +157,7 @@ class RepositoryAcquirer:
             license=self._license(root),
             source=candidate.to_dict(),
             warnings=warnings,
+            temporary=temporary,
         )
 
     @staticmethod
@@ -196,6 +235,8 @@ class RepositoryAcquirer:
             target = Path(destination).resolve() if destination else (
                 self.clone_root / candidate.slug if self.clone_root else Path(tempfile.mkdtemp(prefix=f"docops-{candidate.slug}-"))
             )
+            if target.is_symlink():
+                raise RepositoryAcquisitionError(f"clone destination must not be a symbolic link: {target}")
             if target.exists() and any(target.iterdir()):
                 raise RepositoryAcquisitionError(f"clone destination is not empty: {target}")
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -203,14 +244,22 @@ class RepositoryAcquirer:
             if version:
                 command.extend(["--branch", version])
             command.extend([candidate.repo_url, str(target)])
-            subprocess.run(command, check=True, capture_output=True, text=True, timeout=self.git_timeout)
+            try:
+                subprocess.run(command, check=True, capture_output=True, text=True, timeout=self.git_timeout)
+            except (OSError, subprocess.SubprocessError):
+                if destination is None and self.clone_root is None:
+                    shutil.rmtree(target, ignore_errors=True)
+                raise
             return target, True
         raise RepositoryAcquisitionError("repository candidate has no cloneable URL")
 
     @staticmethod
     def _find_docs(root: Path, scope: str | None, language: str | None = None) -> Path | None:
         if scope:
-            candidate = (root / scope).resolve()
+            raw_candidate = root / scope
+            if raw_candidate.is_symlink():
+                return None
+            candidate = raw_candidate.resolve()
             try:
                 candidate.relative_to(root.resolve())
             except ValueError as exc:
@@ -235,15 +284,17 @@ class RepositoryAcquirer:
         )
         for relative in candidates:
             candidate = root / relative
-            if candidate.is_dir() and RepositoryAcquirer._scan_files(root, candidate):
+            if not candidate.is_symlink() and candidate.is_dir() and RepositoryAcquirer._scan_files(root, candidate):
                 return candidate
         return None
 
     @staticmethod
     def _scan_files(root: Path, docs_path: Path) -> list[str]:
+        if docs_path.is_symlink():
+            return []
         files: list[str] = []
         for path in sorted(docs_path.rglob("*")):
-            if not path.is_file() or path.suffix.casefold() not in _DOC_SUFFIXES:
+            if path.is_symlink() or not path.is_file() or path.suffix.casefold() not in _DOC_SUFFIXES:
                 continue
             relative_parts = path.relative_to(root).parts
             if any(part in _IGNORED_DIRS for part in relative_parts):
@@ -264,7 +315,7 @@ class RepositoryAcquirer:
     def _license(root: Path) -> dict[str, Any]:
         for name in ("LICENSE", "LICENSE.md", "LICENSE.txt", "COPYING"):
             path = root / name
-            if path.is_file():
+            if not path.is_symlink() and path.is_file():
                 text = path.read_text(encoding="utf-8", errors="replace")[:1000]
                 identifier = "MIT" if "mit license" in text.casefold() or "permission is hereby granted" in text.casefold() else "declared"
                 return {"status": "declared", "file": name, "identifier": identifier}

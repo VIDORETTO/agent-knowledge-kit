@@ -5,17 +5,20 @@ from __future__ import annotations
 import fnmatch
 import hashlib
 import ipaddress
+import math
 import re
 import socket
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
+from io import BytesIO
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qsl, urljoin, urlsplit, urlunsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 from urllib.robotparser import RobotFileParser
 
+from . import __version__
 from .source_resolver import canonicalize_url
 
 _SENSITIVE_QUERY_KEYS = {
@@ -56,7 +59,7 @@ class FetchPolicy:
     max_redirects: int = 5
     retries: int = 2
     allow_private: bool = False
-    user_agent: str = "docops/0.1 (+documentation acquisition)"
+    user_agent: str = f"docops/{__version__} (+documentation acquisition)"
     allowed_content_types: tuple[str, ...] = (
         "text/html",
         "application/xhtml+xml",
@@ -69,11 +72,11 @@ class FetchPolicy:
     )
 
     def __post_init__(self) -> None:
-        if self.timeout_seconds <= 0:
+        if not isinstance(self.timeout_seconds, (int, float)) or isinstance(self.timeout_seconds, bool) or not math.isfinite(self.timeout_seconds) or self.timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
-        if self.max_bytes < 1:
+        if isinstance(self.max_bytes, bool) or not isinstance(self.max_bytes, int) or self.max_bytes < 1:
             raise ValueError("max_bytes must be positive")
-        if self.max_redirects < 0 or self.retries < 0:
+        if any(isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in (self.max_redirects, self.retries)):
             raise ValueError("max_redirects and retries cannot be negative")
 
 
@@ -88,9 +91,9 @@ class CrawlOptions:
     follow_links_without_sitemap: bool = True
 
     def __post_init__(self) -> None:
-        if self.max_pages < 1:
+        if isinstance(self.max_pages, bool) or not isinstance(self.max_pages, int) or self.max_pages < 1:
             raise ValueError("max_pages must be positive")
-        if self.max_depth < 0:
+        if isinstance(self.max_depth, bool) or not isinstance(self.max_depth, int) or self.max_depth < 0:
             raise ValueError("max_depth cannot be negative")
 
 
@@ -181,7 +184,10 @@ class NetworkPolicy:
         self.allow_private = allow_private
 
     def validate(self, url: str) -> str:
-        parsed = urlsplit(url)
+        try:
+            parsed = urlsplit(url)
+        except ValueError as exc:
+            raise NetworkPolicyError("invalid_url", "URL is malformed", url=url) from exc
         if parsed.scheme not in {"http", "https"} or not parsed.hostname:
             raise NetworkPolicyError("invalid_url", "only http and https URLs are supported", url=url)
         if parsed.username is not None or parsed.password is not None or "@" in parsed.netloc:
@@ -245,7 +251,9 @@ class _DocumentHTMLParser(HTMLParser):
         if tag == "link" and "canonical" in attributes.get("rel", "").casefold().split():
             href = attributes.get("href")
             if href:
-                self.canonical = canonicalize_url(urljoin(self.base_url, href))
+                canonical = _safe_http_url(urljoin(self.base_url, href))
+                if canonical:
+                    self.canonical = canonical
         if tag == "title":
             return
         if tag in {"h1", "h2", "h3", "h4", "h5", "h6"}:
@@ -266,9 +274,11 @@ class _DocumentHTMLParser(HTMLParser):
         elif tag == "a":
             href = attributes.get("href")
             if href:
-                self._anchor = urljoin(self.base_url, href)
-                self.links.append(canonicalize_url(self._anchor))
-                self.parts.append("[")
+                anchor = _safe_http_url(urljoin(self.base_url, href))
+                if anchor:
+                    self._anchor = anchor
+                    self.links.append(anchor)
+                    self.parts.append("[")
 
     def handle_endtag(self, tag: str) -> None:
         tag = tag.casefold()
@@ -286,7 +296,7 @@ class _DocumentHTMLParser(HTMLParser):
         if tag == "title":
             return
         if tag == "a" and self._anchor:
-            self.parts.append(f"]({canonicalize_url(self._anchor)})")
+            self.parts.append(f"]({self._anchor})")
             self._anchor = None
         elif tag == "pre" and self._pre_depth:
             self._pre_depth -= 1
@@ -326,6 +336,35 @@ def normalize_html(body: bytes, url: str, *, content_type: str = "text/html") ->
         content_type=content_type,
         browser_required=browser_required,
     )
+
+
+def _extract_pdf_bytes(body: bytes) -> str:
+    """Extract text from a fetched PDF without treating its bytes as UTF-8."""
+
+    try:
+        from pypdf import PdfReader  # type: ignore[import-not-found]
+    except ImportError as exc:
+        raise AcquisitionError("dependency_missing", "pypdf is required to normalize fetched PDFs") from exc
+    try:
+        reader = PdfReader(BytesIO(body))
+        content = "\n\n".join(page.extract_text() or "" for page in reader.pages).strip()
+    except Exception as exc:
+        raise AcquisitionError("ocr_required", "fetched PDF has no safely extractable text") from exc
+    if not content:
+        raise AcquisitionError("ocr_required", "fetched PDF has no safely extractable text")
+    return content
+
+
+def _safe_http_url(value: str) -> str | None:
+    """Return a canonical HTTP(S) URL or ignore malformed/untrusted links."""
+
+    try:
+        parsed = urlsplit(value)
+        if parsed.scheme not in {"http", "https"}:
+            return None
+        return canonicalize_url(value)
+    except ValueError:
+        return None
 
 
 def _is_asset(url: str) -> bool:
@@ -395,7 +434,10 @@ class WebAcquirer:
         self._opener = build_opener(_NoRedirect)
 
     def fetch(self, url: str) -> FetchedResponse:
-        requested = canonicalize_url(url)
+        try:
+            requested = canonicalize_url(url)
+        except ValueError as exc:
+            raise NetworkPolicyError("invalid_url", "URL is malformed", url=url) from exc
         current = requested
         redirects: list[str] = []
         for redirect_number in range(self.policy.max_redirects + 1):
@@ -424,21 +466,26 @@ class WebAcquirer:
                     raise AcquisitionError("network_error", f"could not fetch {current}: {exc}", url=current) from exc
                 else:
                     try:
-                        content_type = response.headers.get_content_type().casefold()
-                        if content_type not in self.policy.allowed_content_types:
-                            raise AcquisitionError("unsupported_content_type", f"content type is not supported: {content_type}", url=current)
-                        content_length = response.headers.get("Content-Length")
-                        if content_length and content_length.isdigit() and int(content_length) > self.policy.max_bytes:
-                            raise AcquisitionError("payload_too_large", f"response exceeds {self.policy.max_bytes} bytes", url=current)
-                        body = bytearray()
-                        while True:
-                            block = response.read(min(64 * 1024, self.policy.max_bytes - len(body) + 1))
-                            if not block:
-                                break
-                            body.extend(block)
-                            if len(body) > self.policy.max_bytes:
+                        try:
+                            content_type = response.headers.get_content_type().casefold()
+                            if content_type not in self.policy.allowed_content_types:
+                                raise AcquisitionError("unsupported_content_type", f"content type is not supported: {content_type}", url=current)
+                            content_length = response.headers.get("Content-Length")
+                            if content_length and content_length.isdigit() and int(content_length) > self.policy.max_bytes:
                                 raise AcquisitionError("payload_too_large", f"response exceeds {self.policy.max_bytes} bytes", url=current)
-                        return FetchedResponse(requested, current, getattr(response, "status", 200), content_type, bytes(body), tuple(redirects))
+                            body = bytearray()
+                            while True:
+                                block = response.read(min(64 * 1024, self.policy.max_bytes - len(body) + 1))
+                                if not block:
+                                    break
+                                body.extend(block)
+                                if len(body) > self.policy.max_bytes:
+                                    raise AcquisitionError("payload_too_large", f"response exceeds {self.policy.max_bytes} bytes", url=current)
+                            return FetchedResponse(requested, current, getattr(response, "status", 200), content_type, bytes(body), tuple(redirects))
+                        except AcquisitionError:
+                            raise
+                        except (OSError, ValueError, UnicodeError) as exc:
+                            raise AcquisitionError("network_error", f"could not read {current}: {exc}", url=current) from exc
                     finally:
                         response.close()
             else:
@@ -453,7 +500,17 @@ class WebAcquirer:
     def acquire(self, start_url: str, *, options: CrawlOptions | None = None) -> WebAcquisitionResult:
         options = options or CrawlOptions()
         result = WebAcquisitionResult()
-        start = canonicalize_url(start_url)
+        try:
+            start = canonicalize_url(start_url)
+        except ValueError as exc:
+            result.entries.append({
+                "source": start_url,
+                "canonical": str(start_url),
+                "status": "error",
+                "code": "invalid_url",
+                "reason": str(exc),
+            })
+            return result
         robots, sitemap_origins = self._read_robots(start)
         candidates: list[str] = []
         sitemap_used = False
@@ -471,7 +528,17 @@ class WebAcquirer:
         fetched_pages = 0
         while queue and fetched_pages < max(1, options.max_pages):
             candidate, depth = queue.pop(0)
-            canonical_candidate = canonicalize_url(candidate)
+            try:
+                canonical_candidate = canonicalize_url(candidate)
+            except ValueError as exc:
+                result.entries.append({
+                    "source": candidate,
+                    "canonical": str(candidate),
+                    "status": "error",
+                    "code": "invalid_url",
+                    "reason": str(exc),
+                })
+                continue
             if canonical_candidate in seen:
                 continue
             seen.add(canonical_candidate)
@@ -490,6 +557,25 @@ class WebAcquirer:
                 response = self.fetch(candidate)
                 if response.content_type in {"text/html", "application/xhtml+xml"}:
                     document = normalize_html(response.body, response.final_url, content_type=response.content_type)
+                elif response.content_type == "application/pdf":
+                    try:
+                        content = _extract_pdf_bytes(response.body)
+                    except AcquisitionError as exc:
+                        result.entries.append({
+                            "source": candidate,
+                            "canonical": canonical_candidate,
+                            "status": "error",
+                            "code": exc.code,
+                            "reason": str(exc),
+                        })
+                        continue
+                    document = NormalizedDocument(
+                        content=content,
+                        canonical=canonicalize_url(response.final_url),
+                        title=None,
+                        links=(),
+                        content_type=response.content_type,
+                    )
                 else:
                     document = NormalizedDocument(
                         content=response.body.decode("utf-8", errors="replace"),
@@ -570,8 +656,11 @@ class WebAcquirer:
         urls: list[str] = []
         visited: set[str] = set()
         pending = origins
-        while pending and len(urls) < 1000:
-            location = canonicalize_url(pending.pop(0))
+        while pending and len(urls) < 1000 and len(visited) < 1000:
+            try:
+                location = canonicalize_url(pending.pop(0))
+            except ValueError:
+                continue
             if location in visited:
                 continue
             visited.add(location)
@@ -582,8 +671,9 @@ class WebAcquirer:
             if response.content_type not in {"application/xml", "text/xml"} and not location.endswith(".xml"):
                 continue
             page_urls, nested = _parse_sitemap(response.body)
-            pending.extend(nested)
-            urls.extend(page_urls)
+            remaining = 1000 - len(urls)
+            urls.extend(page_urls[:remaining])
+            pending.extend(nested[: max(0, 1000 - len(visited) - len(pending))])
         return list(dict.fromkeys(urls))
 
     @staticmethod
@@ -595,6 +685,8 @@ class WebAcquirer:
         robots: RobotFileParser | None = None,
         user_agent: str = "*",
     ) -> str | None:
+        if urlsplit(url).scheme not in {"http", "https"}:
+            return "non-http-url"
         if _is_asset(url):
             return "asset"
         if robots is not None and not robots.can_fetch(user_agent, url):
@@ -621,7 +713,9 @@ def _parse_sitemap(body: bytes) -> tuple[list[str], list[str]]:
         tag = element.tag.rsplit("}", 1)[-1].casefold()
         if tag != "loc" or not element.text:
             continue
-        value = canonicalize_url(element.text.strip())
+        value = _safe_http_url(element.text.strip())
+        if not value:
+            continue
         # ElementTree in the stdlib has no parent pointers. The document kind
         # is inferred from the root, which is sufficient for sitemap indexes.
         if root.tag.rsplit("}", 1)[-1].casefold() == "sitemapindex":

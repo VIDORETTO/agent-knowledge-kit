@@ -7,6 +7,8 @@ from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+import pytest
+
 from docops.package_validator import validate_package
 from docops.pipeline import PipelineOptions, run_pipeline
 
@@ -64,7 +66,10 @@ def test_local_folder_produces_valid_skill_router_rag_and_manifest(tmp_path: Pat
     assert (output / "skill" / "SKILL.md").is_file()
     assert (output / "router" / "SKILL.md").is_file()
     assert (output / "harness.json").is_file()
+    assert (output / "config.yaml").is_file()
     assert (output / "rag" / "documents" / "guide.md").is_file()
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["artifacts"]["config"] == "config.yaml"
 
 
 def test_repeating_the_same_local_run_is_idempotent(tmp_path: Path) -> None:
@@ -82,6 +87,22 @@ def test_repeating_the_same_local_run_is_idempotent(tmp_path: Path) -> None:
     assert second.state_diff["updated"] == 0
     assert second.state_diff["removed"] == 0
     assert second.written_files == 0
+
+
+def test_pipeline_preserves_an_existing_package_rag_configuration(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "guide.md").write_text("# Guide\nStable content.", encoding="utf-8")
+    output = tmp_path / "package"
+    first = run_pipeline(source, options=PipelineOptions(output_dir=output, slug="guide", license="MIT"))
+    assert first.ok, first.errors
+
+    custom_config = "server:\n  transport: stdio\n# custom package setting\n"
+    (output / "config.yaml").write_text(custom_config, encoding="utf-8")
+    second = run_pipeline(source, options=PipelineOptions(output_dir=output, slug="guide", license="MIT", mode="update"))
+
+    assert second.ok, second.errors
+    assert (output / "config.yaml").read_text(encoding="utf-8") == custom_config
 
 
 def test_absolute_source_paths_do_not_enter_package_checkpoints(tmp_path: Path) -> None:
@@ -174,3 +195,144 @@ def test_public_redistribution_fails_closed_when_license_is_unknown(tmp_path: Pa
 
     assert not result.ok
     assert any(error["code"] == "license_required" for error in result.errors)
+
+
+def test_update_removes_a_previous_destination_when_source_format_changes(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    original = source / "guide.html"
+    original.write_text("<html><body><h1>Guide</h1><p>HTML version.</p></body></html>", encoding="utf-8")
+    output = tmp_path / "package"
+
+    first = run_pipeline(source, options=PipelineOptions(output_dir=output, slug="guide", license="MIT"))
+    assert first.ok, first.errors
+    assert (output / "rag" / "documents" / "guide.md").is_file()
+
+    original.unlink()
+    (source / "guide.md").write_text("# Guide\nMarkdown version.", encoding="utf-8")
+    second = run_pipeline(source, options=PipelineOptions(output_dir=output, slug="guide", license="MIT", mode="update"))
+
+    assert second.ok, second.errors
+    assert (output / "rag" / "documents" / "guide.md").read_text(encoding="utf-8").endswith("Markdown version.\n")
+    assert second.state_diff["removed"] == 0
+    assert validate_package(output).ok
+
+
+def test_local_documents_with_colliding_normalized_names_are_kept_separately(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "guide.html").write_text("<html><body><h1>HTML Guide</h1><p>HTML.</p></body></html>", encoding="utf-8")
+    (source / "guide.md").write_text("# Markdown Guide\nMarkdown.", encoding="utf-8")
+    output = tmp_path / "package"
+
+    result = run_pipeline(source, options=PipelineOptions(output_dir=output, slug="guide", license="MIT"))
+
+    assert result.ok, result.errors
+    documents = [path for path in (output / "rag" / "documents").rglob("*") if path.is_file()]
+    assert len(documents) == 2
+    assert len({path.name for path in documents}) == 2
+    assert validate_package(output).ok
+
+
+def test_pipeline_rejects_an_output_directory_inside_the_source(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    guide = source / "guide.md"
+    guide.write_text("# Guide\n", encoding="utf-8")
+    output = source / "generated"
+
+    result = run_pipeline(source, options=PipelineOptions(output_dir=output, slug="guide", license="MIT"))
+
+    assert not result.ok
+    assert any(error["code"] == "output_inside_source" for error in result.errors)
+    assert not output.exists()
+    assert guide.read_text(encoding="utf-8") == "# Guide\n"
+
+
+def test_pipeline_rejects_an_output_path_equal_to_the_source_file(tmp_path: Path) -> None:
+    source = tmp_path / "guide.md"
+    source.write_text("# Guide\n", encoding="utf-8")
+
+    result = run_pipeline(source, options=PipelineOptions(output_dir=source, slug="guide", license="MIT"))
+
+    assert not result.ok
+    assert any(error["code"] == "output_inside_source" for error in result.errors)
+    assert source.read_text(encoding="utf-8") == "# Guide\n"
+
+
+def test_symlinked_documents_are_not_ingested_from_outside_the_source(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    outside = tmp_path / "outside.md"
+    outside.write_text("# Outside secret\n", encoding="utf-8")
+    link = source / "linked.md"
+    try:
+        link.symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation is unavailable on this host")
+
+    output = tmp_path / "package"
+    result = run_pipeline(source, options=PipelineOptions(output_dir=output, slug="guide", license="MIT"))
+
+    assert not result.ok
+    assert any(error["code"] == "no_accepted_documents" for error in result.errors)
+    documents = output / "rag" / "documents"
+    assert not documents.is_file()
+    assert not list(documents.rglob("*")) if documents.is_dir() else True
+
+
+def test_update_keeps_new_content_when_old_source_has_the_same_destination(tmp_path: Path) -> None:
+    first_source = tmp_path / "first"
+    second_source = tmp_path / "second"
+    first_source.mkdir()
+    second_source.mkdir()
+    (first_source / "guide.md").write_text("# First\n", encoding="utf-8")
+    (second_source / "guide.md").write_text("# Second\n", encoding="utf-8")
+    output = tmp_path / "package"
+
+    first = run_pipeline(first_source, options=PipelineOptions(output_dir=output, slug="guide", license="MIT"))
+    assert first.ok, first.errors
+    second = run_pipeline(second_source, options=PipelineOptions(output_dir=output, slug="guide", license="MIT", mode="update"))
+
+    assert second.ok, second.errors
+    assert (output / "rag" / "documents" / "guide.md").read_text(encoding="utf-8") == "# Second\n"
+
+
+def test_update_removes_generated_chapters_for_deleted_sources(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "one.md").write_text("# One\n", encoding="utf-8")
+    (source / "two.md").write_text("# Two\n", encoding="utf-8")
+    output = tmp_path / "package"
+
+    first = run_pipeline(source, options=PipelineOptions(output_dir=output, slug="guide", license="MIT"))
+    assert first.ok, first.errors
+    generated = sorted((output / "skill" / "chapters").glob("*.md"))
+    assert len(generated) == 2
+
+    (source / "two.md").unlink()
+    second = run_pipeline(source, options=PipelineOptions(output_dir=output, slug="guide", license="MIT", mode="update"))
+
+    assert second.ok, second.errors
+    remaining = sorted((output / "skill" / "chapters").glob("*.md"))
+    assert len(remaining) == 1
+    assert generated[1] not in remaining
+
+
+def test_failed_normalization_does_not_delete_an_existing_package(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    guide = source / "guide.md"
+    guide.write_text("# Guide\nKeep this version.", encoding="utf-8")
+    output = tmp_path / "package"
+
+    first = run_pipeline(source, options=PipelineOptions(output_dir=output, slug="guide", license="MIT"))
+    assert first.ok, first.errors
+    previous = (output / "rag" / "documents" / "guide.md").read_text(encoding="utf-8")
+
+    (source / "broken.xlsx").write_bytes(b"not an OOXML workbook")
+    second = run_pipeline(source, options=PipelineOptions(output_dir=output, slug="guide", license="MIT", mode="update"))
+
+    assert not second.ok
+    assert any(error["code"] == "invalid_document" for error in second.errors)
+    assert (output / "rag" / "documents" / "guide.md").read_text(encoding="utf-8") == previous

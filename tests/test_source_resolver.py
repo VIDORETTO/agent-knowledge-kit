@@ -28,6 +28,7 @@ def test_classifies_github_tree_url_and_keeps_version_and_scope() -> None:
     assert result.selected.version == "v2.4"
     assert result.selected.scope == "docs/reference"
     assert result.selected.canonical == "https://github.com/acme/project"
+    assert result.selected.official is None
 
 
 def test_catalog_resolution_preserves_requested_language_and_version() -> None:
@@ -113,3 +114,12 @@ def test_malformed_url_returns_a_structured_resolution_error() -> None:
     assert result.selected is None
     assert result.error is not None
     assert result.error["code"] == "invalid_url"
+
+
+def test_serialized_resolution_redacts_sensitive_url_values() -> None:
+    result = SourceResolver().resolve("https://docs.example.test/guide?api_key=super-secret-value")
+
+    serialized = json.dumps(result.to_dict())
+
+    assert "super-secret-value" not in serialized
+    assert "REDACTED" in serialized

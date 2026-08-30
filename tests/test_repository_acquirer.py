@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from docops.repository_acquirer import RepositoryAcquirer
+from docops.repository_acquirer import RepositoryAcquirer, RepositoryAcquisitionResult
 from docops.source_resolver import SourceCandidate
 
 
@@ -62,3 +62,15 @@ def test_remote_repository_acquisition_blocks_private_network_targets() -> None:
 
     assert not result.ok
     assert result.errors[0]["code"] == "ssrf_blocked"
+
+
+def test_temporary_repository_result_can_clean_up_only_its_owned_root(tmp_path: Path) -> None:
+    temporary_root = tmp_path / "docops-owned-clone"
+    temporary_root.mkdir()
+    (temporary_root / "marker").write_text("temporary", encoding="utf-8")
+    result = RepositoryAcquisitionResult(True, root=temporary_root, temporary=True)
+
+    result.cleanup()
+
+    assert not temporary_root.exists()
+    assert not result.temporary

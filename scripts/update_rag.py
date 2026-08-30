@@ -31,12 +31,14 @@ MUTATION_TIMEOUT_SECONDS = 2400.0
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from docops import __version__  # noqa: E402
 from docops.runtime import discover_rag_python, runtime_environment  # noqa: E402
 from docops.storage import write_json_atomic  # noqa: E402
 
 _SUPPORTED_SUFFIXES = {
-    ".md", ".txt", ".pdf", ".docx", ".py", ".c", ".h", ".cpp", ".js", ".jsx",
-    ".ts", ".tsx", ".json", ".xml", ".csv", ".ipynb", ".xlsx", ".pptx",
+    ".md", ".markdown", ".txt", ".rst", ".adoc", ".pdf", ".docx", ".py", ".c",
+    ".h", ".cpp", ".js", ".jsx", ".ts", ".tsx", ".json", ".yaml", ".yml",
+    ".xml", ".csv", ".ipynb", ".xlsx", ".pptx",
 }
 
 
@@ -144,7 +146,7 @@ def connect() -> McpClient:
         "initialize",
         protocolVersion="2024-11-05",
         capabilities={},
-        clientInfo={"name": "update_rag", "version": "1.0"},
+        clientInfo={"name": "update_rag", "version": __version__},
     )
     if resp.get("error"):
         sys.exit(f"initialize falhou: {resp['error']}")
@@ -167,7 +169,7 @@ def scan() -> dict[str, str]:
     if not DOCUMENTS_DIR.exists():
         return current
     for path in sorted(DOCUMENTS_DIR.rglob("*")):
-        if path.is_file() and path.suffix.lower() in _SUPPORTED_SUFFIXES:
+        if not path.is_symlink() and path.is_file() and path.suffix.lower() in _SUPPORTED_SUFFIXES:
             current[str(path.relative_to(DOCUMENTS_DIR)).replace("\\", "/")] = sha256(path)
     return current
 

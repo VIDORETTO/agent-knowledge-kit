@@ -11,6 +11,8 @@ from pathlib import Path
 from queue import Empty, Queue
 from typing import Any, Mapping
 
+from . import __version__
+
 
 class JsonRpcMcpClient:
     """MCP client with a reader queue so timeouts work on Windows pipes."""
@@ -114,7 +116,7 @@ def start_mcp_server(python: Path | str, root: Path | str, *, env: Mapping[str, 
             "initialize",
             protocolVersion="2024-11-05",
             capabilities={},
-            clientInfo={"name": "docops", "version": "0.1.0"},
+            clientInfo={"name": "docops", "version": __version__},
         )
     except Exception:
         client.close()

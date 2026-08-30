@@ -15,7 +15,7 @@ from .harness import build_harness_manifest
 from .manifest import build_manifest, redact_entry, redact_metadata, redact_url, write_manifest
 from .normalizer import NormalizationResult, normalize_file
 from .package_validator import ValidationResult, validate_package
-from .rag_sync import RagSynchronizer
+from .rag_sync import RagSynchronizer, package_rag_config_text
 from .repository_acquirer import RepositoryAcquirer
 from .source_resolver import SourceResolution, SourceResolver, canonicalize_url
 from .state import CheckpointStore, SourceRecord, StateStore
@@ -47,7 +47,14 @@ class PipelineOptions:
             raise ValueError("mode must be create, update or dry-run")
         if self.redistribution not in {"private-only", "internal", "public"}:
             raise ValueError("redistribution must be private-only, internal or public")
-        if self.max_pages < 1 or self.max_depth < 0:
+        if (
+            isinstance(self.max_pages, bool)
+            or not isinstance(self.max_pages, int)
+            or isinstance(self.max_depth, bool)
+            or not isinstance(self.max_depth, int)
+            or self.max_pages < 1
+            or self.max_depth < 0
+        ):
             raise ValueError("max_pages must be positive and max_depth cannot be negative")
 
 
@@ -76,7 +83,11 @@ class PipelineResult:
 
 
 def _safe_relpath(value: str) -> Path:
-    parts = [part for part in value.replace("\\", "/").split("/") if part not in {"", "."}]
+    normalized = value.replace("\\", "/")
+    candidate = Path(normalized)
+    if candidate.is_absolute() or re.match(r"^[A-Za-z]:", normalized):
+        raise ValueError(f"unsafe relative path: {value!r}")
+    parts = [part for part in normalized.split("/") if part not in {"", "."}]
     if not parts or any(part == ".." for part in parts):
         raise ValueError(f"unsafe relative path: {value!r}")
     return Path(*parts)
@@ -99,11 +110,27 @@ def _local_input(value: str) -> Path:
     return path.resolve()
 
 
+def _output_inside_source(source: Path, output_dir: Path) -> bool:
+    """Return whether generating the package could mutate the local source."""
+
+    source_resolved = source.resolve()
+    output_resolved = output_dir.resolve()
+    if output_resolved == source_resolved:
+        return True
+    try:
+        output_resolved.relative_to(source_resolved)
+    except ValueError:
+        return False
+    return True
+
+
 def _source_files(root: Path, output_dir: Path) -> list[Path]:
     output_resolved = output_dir.resolve()
     files: list[Path] = []
     iterator = [root] if root.is_file() else sorted(root.rglob("*"))
     for path in iterator:
+        if path.is_symlink():
+            continue
         if not path.is_file():
             continue
         try:
@@ -113,7 +140,15 @@ def _source_files(root: Path, output_dir: Path) -> list[Path]:
             pass
         else:
             continue
-        if any(part in {".git", ".venv", ".venv-rag", "node_modules", "__pycache__", "data", "models_cache"} for part in path.parts):
+        relative_parts = path.relative_to(root).parts if root.is_dir() else path.parts
+        ignored_parts = {
+            ".git", ".venv", ".venv-rag", "node_modules", "__pycache__",
+            "data", "models_cache", ".docops", "artifacts", "build", "dist",
+        }
+        if any(
+            part.casefold() in ignored_parts
+            for part in relative_parts
+        ):
             continue
         files.append(path)
     return files
@@ -122,7 +157,7 @@ def _source_files(root: Path, output_dir: Path) -> list[Path]:
 def _destination_for_file(path: Path, base: Path, normalized: NormalizationResult) -> str:
     relative = path.name if base.is_file() else path.relative_to(base).as_posix()
     safe = _safe_relpath(relative)
-    if normalized.format in {"html", "pdf", "docx", "openapi"}:
+    if normalized.format in {"html", "pdf", "docx", "openapi", "ipynb", "xlsx", "pptx"}:
         safe = safe.with_suffix(".md")
     return safe.as_posix()
 
@@ -135,6 +170,20 @@ def _write_if_changed(path: Path, content: str) -> bool:
         except (OSError, UnicodeError):
             pass
     write_text_atomic(path, content)
+    return True
+
+
+def _write_json_if_changed(path: Path, payload: Any) -> bool:
+    """Persist JSON only when its serialized representation changed."""
+
+    content = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    if path.is_file():
+        try:
+            if path.read_text(encoding="utf-8") == content:
+                return False
+        except (OSError, UnicodeError):
+            pass
+    write_json_atomic(path, payload)
     return True
 
 
@@ -154,10 +203,14 @@ def _skill_name(slug: str) -> str:
 def _skill_artifacts(slug: str, entries: list[dict[str, Any]], source: dict[str, Any]) -> tuple[str, dict[str, str]]:
     chapter_lines: list[str] = []
     chapter_files: list[tuple[str, str]] = []
+    used_chapter_names: set[str] = set()
     for index, entry in enumerate(entries, 1):
         title = str(entry.get("title") or Path(str(entry.get("destination") or f"source-{index}")).stem)
         destination = str(entry.get("destination") or f"source-{index}.md")
         chapter_name = f"{index:02d}-{re.sub(r'[^a-z0-9]+', '-', title.casefold()).strip('-') or 'source'}.md"
+        if chapter_name in used_chapter_names:
+            chapter_name = f"{Path(chapter_name).stem}--{index}.md"
+        used_chapter_names.add(chapter_name)
         headings = [line.strip() for line in str(entry.get("content", "")).splitlines() if line.lstrip().startswith("#")]
         source_value = entry.get("canonical", entry.get("source", "unknown"))
         chapter = [f"# {title}", "", f"Source: `{redact_url(str(source_value))}`", "", "Use this chapter when the question concerns this source.", ""]
@@ -210,12 +263,40 @@ def _router_artifact(slug: str) -> str:
 
 def _write_skill(output_dir: Path, slug: str, accepted: list[dict[str, Any]], source: dict[str, Any]) -> int:
     skill_dir = output_dir / "skill"
+    chapters_dir = skill_dir / "chapters"
     skill_dir.mkdir(parents=True, exist_ok=True)
-    (skill_dir / "chapters").mkdir(parents=True, exist_ok=True)
+    chapters_dir.mkdir(parents=True, exist_ok=True)
     skill, chapters = _skill_artifacts(slug, accepted, source)
     written = int(_write_if_changed(skill_dir / "SKILL.md", skill))
     for name, content in chapters.items():
-        written += int(_write_if_changed(skill_dir / "chapters" / name, content))
+        written += int(_write_if_changed(chapters_dir / name, content))
+    sidecar = output_dir / ".docops" / "generated-skill.json"
+    previous_chapters: set[str] = set()
+    if sidecar.is_file():
+        try:
+            raw = json.loads(sidecar.read_text(encoding="utf-8"))
+            if isinstance(raw, dict) and raw.get("schema_version") == 1 and isinstance(raw.get("chapters"), list):
+                previous_chapters = {str(name) for name in raw["chapters"] if isinstance(name, str)}
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            previous_chapters = set()
+    current_chapters = set(chapters)
+    for name in previous_chapters - current_chapters:
+        try:
+            relative = _safe_relpath(name)
+        except ValueError:
+            continue
+        if len(relative.parts) != 1 or relative.suffix != ".md":
+            continue
+        stale = chapters_dir / relative
+        if stale.is_file() and not stale.is_symlink():
+            stale.unlink()
+            written += 1
+    written += int(
+        _write_json_if_changed(
+            sidecar,
+            {"schema_version": 1, "chapters": sorted(current_chapters)},
+        )
+    )
     glossary = "# Glossary\n\nTerms are discovered from the source headings by the external skill generator.\n"
     patterns = "# Patterns\n\nUse the source chapters for patterns and anti-patterns.\n"
     cheatsheet = "# Cheatsheet\n\n- Concepts → generated skill\n- Literal facts → knowledge-rag with citation\n"
@@ -238,6 +319,24 @@ def _local_record_canonical(source_root: str, destination: str) -> str:
     source_id = hashlib.sha256(source_root.encode("utf-8")).hexdigest()[:16]
     normalized_destination = destination.replace("\\", "/")
     return f"file://local/{source_id}/{normalized_destination}"
+
+
+def _unique_destination(candidate: str, source_path: Path | str, used: set[str]) -> str:
+    """Keep normalized files distinct when different inputs share a basename."""
+
+    if candidate not in used:
+        return candidate
+    path = Path(candidate)
+    source_value = source_path.as_posix() if isinstance(source_path, Path) else str(source_path)
+    digest = hashlib.sha256(source_value.encode("utf-8")).hexdigest()[:10]
+    stem = path.stem or "source"
+    suffix = path.suffix
+    alternative = f"{stem}--{digest}{suffix}"
+    counter = 2
+    while alternative in used:
+        alternative = f"{stem}--{digest}-{counter}{suffix}"
+        counter += 1
+    return alternative
 
 
 def _resolution_with_slug(
@@ -277,7 +376,7 @@ def run_pipeline(source: str | Path, *, options: PipelineOptions) -> PipelineRes
             resolution,
             entries=[],
             provenance={"license": options.license or "unknown", "redistribution": options.redistribution},
-            artifacts={"skill": "skill", "router": "router", "rag": "rag", "harness": "harness.json"},
+            artifacts={"skill": "skill", "router": "router", "rag": "rag", "harness": "harness.json", "config": "config.yaml"},
             errors=[resolution.error or {"code": "source_unresolved", "message": "source could not be resolved"}],
         )
         return PipelineResult(False, options.output_dir, manifest, errors=manifest["errors"])
@@ -286,13 +385,60 @@ def run_pipeline(source: str | Path, *, options: PipelineOptions) -> PipelineRes
             resolution,
             entries=[],
             provenance={"license": options.license or "unknown", "redistribution": options.redistribution},
-            artifacts={"skill": "skill", "router": "router", "rag": "rag", "harness": "harness.json"},
+            artifacts={"skill": "skill", "router": "router", "rag": "rag", "harness": "harness.json", "config": "config.yaml"},
             warnings=["dry-run: no artifacts were written"],
         )
         return PipelineResult(True, options.output_dir, manifest, warnings=manifest["warnings"])
 
+    if resolution.kind == "local":
+        local_source = _path_from_file_uri(resolution.selected.canonical)
+        if _output_inside_source(local_source, options.output_dir):
+            error = {
+                "code": "output_inside_source",
+                "message": "output directory must be outside the local source",
+            }
+            manifest = build_manifest(
+                resolution,
+                entries=[],
+                provenance={"license": options.license or "unknown", "redistribution": options.redistribution},
+                artifacts={"skill": "skill", "router": "router", "rag": "rag", "harness": "harness.json", "config": "config.yaml"},
+                errors=[error],
+            )
+            return PipelineResult(False, options.output_dir, manifest, errors=[error])
+
     output_dir = options.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
+    metadata_dir = output_dir / ".docops"
+    if metadata_dir.is_symlink():
+        error = {
+            "code": "unsafe_metadata_path",
+            "message": "package metadata directory must not be a symbolic link",
+        }
+        manifest = build_manifest(
+            resolution,
+            entries=[],
+            provenance={"license": options.license or "unknown", "redistribution": options.redistribution},
+            artifacts={"skill": "skill", "router": "router", "rag": "rag", "harness": "harness.json", "config": "config.yaml"},
+            errors=[error],
+        )
+        return PipelineResult(False, output_dir, manifest, errors=[error])
+    config_path = output_dir / "config.yaml"
+    if config_path.is_symlink():
+        error = {
+            "code": "unsafe_config_path",
+            "message": "package config.yaml must not be a symbolic link",
+        }
+        manifest = build_manifest(
+            resolution,
+            entries=[],
+            provenance={"license": options.license or "unknown", "redistribution": options.redistribution},
+            artifacts={"skill": "skill", "router": "router", "rag": "rag", "harness": "harness.json", "config": "config.yaml"},
+            errors=[error],
+        )
+        return PipelineResult(False, output_dir, manifest, errors=[error])
+    written = 0
+    if not config_path.exists():
+        written = int(_write_if_changed(config_path, package_rag_config_text()))
     checkpoint = CheckpointStore(output_dir / ".docops" / "checkpoints.json")
     state = StateStore(output_dir / ".docops" / "state.json")
     checkpoint.save("resolution", {"status": "completed", "source": redact_metadata(resolution.to_dict())})
@@ -301,11 +447,12 @@ def run_pipeline(source: str | Path, *, options: PipelineOptions) -> PipelineRes
     warnings: list[str] = []
     errors: list[dict[str, str]] = []
     repository_metadata: dict[str, Any] = {}
+    repo_result = None
 
     local_path: Path | None = None
     if resolution.kind == "local":
         local_path = _path_from_file_uri(resolution.selected.canonical)
-        if local_path.is_dir() and (local_path / ".git").is_dir():
+        if local_path.is_dir() and (local_path / ".git").exists():
             repo_result = RepositoryAcquirer(allow_private_network=options.allow_private_network).acquire(
                 local_path, version=options.version, scope=options.scope, language=options.language
             )
@@ -315,10 +462,11 @@ def run_pipeline(source: str | Path, *, options: PipelineOptions) -> PipelineRes
                     resolution,
                     entries=[],
                     provenance={"license": options.license or "unknown", "redistribution": options.redistribution},
-                    artifacts={"skill": "skill", "router": "router", "rag": "rag", "harness": "harness.json"},
+                    artifacts={"skill": "skill", "router": "router", "rag": "rag", "harness": "harness.json", "config": "config.yaml"},
                     errors=errors,
                 )
                 write_manifest(output_dir / "manifest.json", manifest)
+                repo_result.cleanup()
                 return PipelineResult(False, output_dir, manifest, errors=errors)
             local_path = repo_result.docs_path
             if not options.license:
@@ -344,10 +492,11 @@ def run_pipeline(source: str | Path, *, options: PipelineOptions) -> PipelineRes
                 resolution,
                 entries=[],
                 provenance={"license": options.license or "unknown", "redistribution": options.redistribution},
-                artifacts={"skill": "skill", "router": "router", "rag": "rag", "harness": "harness.json"},
+                artifacts={"skill": "skill", "router": "router", "rag": "rag", "harness": "harness.json", "config": "config.yaml"},
                 errors=errors,
             )
             write_manifest(output_dir / "manifest.json", manifest)
+            repo_result.cleanup()
             return PipelineResult(False, output_dir, manifest, errors=errors)
         local_path = repo_result.docs_path
         if not options.license:
@@ -366,9 +515,16 @@ def run_pipeline(source: str | Path, *, options: PipelineOptions) -> PipelineRes
     if local_path is not None:
         base = local_path if local_path.is_dir() else local_path.parent
         files = [local_path] if local_path.is_file() else _source_files(local_path, output_dir)
+        used_destinations: set[str] = set()
         for file_path in files:
             normalized = normalize_file(file_path)
-            relative_destination = _destination_for_file(file_path, base, normalized) if normalized.status == "accepted" else None
+            relative_destination = (
+                _unique_destination(_destination_for_file(file_path, base, normalized), file_path, used_destinations)
+                if normalized.status == "accepted"
+                else None
+            )
+            if relative_destination:
+                used_destinations.add(relative_destination)
             entry: dict[str, Any] = {
                 "source": normalized.origin,
                 "canonical": canonicalize_url(normalized.origin),
@@ -402,21 +558,54 @@ def run_pipeline(source: str | Path, *, options: PipelineOptions) -> PipelineRes
         )
         entries = web_result.entries
         warnings.extend(web_result.warnings)
+        used_destinations: set[str] = set()
         for entry in entries:
             if entry.get("status") == "accepted":
-                records.append(SourceRecord(str(entry["canonical"]), options.version or resolution.selected.version, str(entry["content_hash"]), str(entry["destination"])))
+                destination = _unique_destination(str(entry["destination"]), str(entry["canonical"]), used_destinations)
+                entry["destination"] = destination
+                used_destinations.add(destination)
+                records.append(SourceRecord(str(entry["canonical"]), options.version or resolution.selected.version, str(entry["content_hash"]), destination))
             elif entry.get("status") in {"error", "failed"}:
                 errors.append({"code": str(entry.get("code") or "acquisition_failed"), "message": str(entry.get("reason") or "acquisition failed")})
 
+    if repo_result is not None:
+        repo_result.cleanup()
     checkpoint.save("acquisition", {"status": "completed", "accepted": sum(1 for entry in entries if entry.get("status") == "accepted"), "errors": len(errors)})
     if not records:
         errors.append({"code": "no_accepted_documents", "message": "source produced no supported, non-empty documentation"})
+    if errors:
+        manifest = build_manifest(
+            resolution,
+            entries=_manifest_entries(entries),
+            provenance={"license": options.license or "unknown", "redistribution": options.redistribution},
+            artifacts={"skill": "skill", "router": "router", "rag": "rag", "harness": "harness.json", "config": "config.yaml"},
+            checkpoints=checkpoint.all(),
+            warnings=warnings,
+            errors=errors,
+        )
+        return PipelineResult(False, output_dir, manifest, written_files=written, errors=errors, warnings=warnings)
     desired: dict[str, SourceRecord] = {}
     for record in records:
         desired.setdefault(record.logical_key, record)
+    for record in [*desired.values(), *state.records()]:
+        try:
+            _safe_relpath(record.destination)
+        except ValueError:
+            errors.append({"code": "unsafe_state_path", "message": record.destination})
+    if errors:
+        manifest = build_manifest(
+            resolution,
+            entries=_manifest_entries(entries),
+            provenance={"license": options.license or "unknown", "redistribution": options.redistribution},
+            artifacts={"skill": "skill", "router": "router", "rag": "rag", "harness": "harness.json", "config": "config.yaml"},
+            checkpoints=checkpoint.all(),
+            warnings=warnings,
+            errors=errors,
+        )
+        return PipelineResult(False, output_dir, manifest, written_files=written, errors=errors, warnings=warnings)
     diff = state.plan(desired.values())
     state_diff = {"added": len(diff.added), "updated": len(diff.updated), "removed": len(diff.removed)}
-    written = 0
+    desired_destinations = {record.destination for record in desired.values()}
     rag_documents = output_dir / "rag" / "documents"
     rag_documents.mkdir(parents=True, exist_ok=True)
     for record in desired.values():
@@ -436,17 +625,19 @@ def run_pipeline(source: str | Path, *, options: PipelineOptions) -> PipelineRes
         destination.parent.mkdir(parents=True, exist_ok=True)
         if _write_if_changed(destination, str(entry["content"]) + "\n"):
             written += 1
-        state.commit_record(record)
-    for old in diff.removed:
+    stale_records = [
+        *diff.removed,
+        *(old for old, new in diff.updated if old.destination != new.destination),
+    ]
+    for old in stale_records:
         stale = (rag_documents / _safe_relpath(old.destination)).resolve()
         try:
             stale.relative_to(rag_documents.resolve())
         except ValueError:
             errors.append({"code": "unsafe_state_path", "message": old.destination})
         else:
-            if stale.is_file():
+            if old.destination not in desired_destinations and stale.is_file():
                 stale.unlink()
-            state.remove_record(old)
 
     source_payload_entries: list[dict[str, Any]] = []
     for entry in entries:
@@ -507,7 +698,7 @@ def run_pipeline(source: str | Path, *, options: PipelineOptions) -> PipelineRes
         resolution,
         entries=_manifest_entries(entries),
         provenance=provenance,
-        artifacts={"skill": "skill", "router": "router", "rag": "rag", "harness": "harness.json"},
+        artifacts={"skill": "skill", "router": "router", "rag": "rag", "harness": "harness.json", "config": "config.yaml"},
         checkpoints=checkpoint.all(),
         warnings=warnings,
         errors=errors,
@@ -515,6 +706,8 @@ def run_pipeline(source: str | Path, *, options: PipelineOptions) -> PipelineRes
     )
     write_manifest(output_dir / "manifest.json", manifest)
     validation = validate_package(output_dir)
+    if validation.ok and not errors:
+        state.commit(desired.values())
     manifest["validation"] = validation.to_dict()
     if validation.warnings:
         manifest["warnings"] = [*manifest.get("warnings", []), *(warning["message"] for warning in validation.warnings)]

@@ -77,6 +77,8 @@ class StateStore:
         self._load()
 
     def _load(self) -> None:
+        if self.path.is_symlink():
+            raise ValueError(f"state path must not be a symbolic link: {self.path}")
         if not self.path.exists():
             return
         raw = json.loads(self.path.read_text(encoding="utf-8"))
@@ -141,6 +143,8 @@ class CheckpointStore:
         self.path = Path(path)
 
     def _read(self) -> dict[str, Any]:
+        if self.path.is_symlink():
+            raise ValueError(f"checkpoint path must not be a symbolic link: {self.path}")
         if not self.path.exists():
             return {"schema_version": 1, "phases": {}}
         raw = json.loads(self.path.read_text(encoding="utf-8"))

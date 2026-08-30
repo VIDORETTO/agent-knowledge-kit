@@ -10,6 +10,7 @@ from pathlib import Path
 from .config_audit import audit_config_file
 from .doctor import run_doctor
 from .evaluator import evaluate_package, generate_golden_candidates
+from .manifest import redact_metadata
 from .package_validator import validate_package
 from .pipeline import PipelineOptions, run_pipeline
 from .source_resolver import SourceResolver
@@ -67,8 +68,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+def _dispatch(args: argparse.Namespace) -> int:
     if args.command == "doctor":
         report = run_doctor(args.root)
         if args.json:
@@ -79,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "resolve":
         resolver = SourceResolver.from_catalog_file(args.catalog, root=args.root) if args.catalog else SourceResolver(root=args.root)
         resolution = resolver.resolve(args.source, version=args.version, scope=args.scope, language=args.language)
-        print(json.dumps(resolution.to_dict(), indent=2, ensure_ascii=False, sort_keys=True))
+        print(json.dumps(redact_metadata(resolution.to_dict()), indent=2, ensure_ascii=False, sort_keys=True))
         return 0 if resolution.selected is not None and not resolution.requires_decision else 2
     if args.command == "run":
         result = run_pipeline(
@@ -129,6 +129,25 @@ def main(argv: list[str] | None = None) -> int:
         print(result.to_json())
         return 0 if result.ok else 1
     return 2
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    try:
+        return _dispatch(args)
+    except (OSError, TypeError, UnicodeError, ValueError) as exc:
+        print(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "ok": False,
+                    "errors": [{"code": "invalid_request", "message": str(exc)}],
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
+        )
+        return 1
 
 
 if __name__ == "__main__":

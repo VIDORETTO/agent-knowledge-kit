@@ -1,14 +1,14 @@
 # Roadmap de produto e prontidão para GitHub
 
-> Status: implementação concluída; release candidate validada sem publicação
-> Data da auditoria: 2026-08-28
+> Status: release 1.0.0 validada localmente; publicação não executada
+> Data da auditoria: 2026-08-29
 > Método: `to-spec` → `to-tickets` → `tdd` → `implement` → `verify`
 > Referência das skills: `VIDORETTO/mattpocock-skills-filtered`, commit
 > `efdb6f8cb1f715755c1a0743edf26e8dbdf6acf1`
 
 ## 1. Veredito executivo
 
-O produto está **pronto para uma release candidate autorizada**: o protocolo,
+O produto está **pronto para a publicação da versão 1.0.0**: o protocolo,
 as aquisições, os artefatos, o validador, o RAG opcional, a segurança e o
 bootstrap foram implementados e validados sem depender de uma IA neste
 repositório. A publicação e o commit não foram executados, por decisão de
@@ -23,8 +23,8 @@ O objetivo foi atingido em dois níveis diferentes:
 | Lidar com qualquer documentação web com maleabilidade | **Concluído com limites explícitos** | Sitemap/robots, fallback limitado, canonicalização, SSRF, redirects, retries, formatos especiais e falhas JS/OCR/autenticação são tratados de forma segura |
 | Ser instalável e utilizável a partir de um clone público | **Pronto para RC** | README, licença, lock, bootstrap multiplataforma, testes, auditoria, empacotamento e matriz Windows/Linux/macOS estão no repositório; publicação aguarda autorização |
 
-Portanto, o resultado deve ser apresentado como **produto em release candidate
-privada**, com FastAPI como piloto de qualidade e com fontes de terceiros,
+Portanto, o resultado deve ser apresentado como **release 1.0.0 pronta para
+publicação**, com FastAPI como piloto de qualidade e com fontes de terceiros,
 índices e artefatos derivados mantidos fora da publicação até a revisão de
 licença.
 
@@ -534,9 +534,9 @@ fechado quando necessário.
 
 **Bloqueado por:** DOCOPS-001 a DOCOPS-009.
 
-**Status: concluído como RC privada.** CI, empacotamento, tutorial, changelog,
-auditorias e validação em clone limpo estão prontos; commit, publicação e
-sessões externas dos harnesses não foram executados sem autorização.
+**Status: concluído como release local.** CI, empacotamento, tutorial, changelog,
+auditorias, validação em clone limpo e smoke test do wheel estão prontos; commit,
+tag, publicação e sessões externas dos harnesses não foram executados.
 
 - Teste vermelho: instalação em três runners e validação do tutorial fixture.
 - Implementar CI, empacotamento, documentação, changelog e checklist de release.
@@ -586,6 +586,6 @@ quando:
 - [x] nenhum corpus, índice, cache, segredo ou artefato não autorizado entra na
   release pública.
 
-Os itens técnicos passaram. O estado honesto é **release candidate privada,
-pronta para publicação após autorização**, com a validação manual dos harnesses
+Os itens técnicos passaram. O estado honesto é **release 1.0.0 pronta para
+publicação após a ação do mantenedor**, com a validação manual dos harnesses
 externos como etapa operacional final.

@@ -23,14 +23,16 @@ def venv_python(root: Path) -> Path:
 
 def install_command(python: Path, root: Path, *, rag: bool, formats: bool, dev: bool) -> list[str]:
     command = [str(python), "-m", "pip", "install", "--editable", str(root)]
-    requirements: list[str] = []
     if rag:
-        requirements.append(str(root / "requirements.txt"))
-    if formats:
-        requirements.extend(["PyYAML==6.0.3", "pypdf==6.16.2", "python-docx==1.2.0"])
+        # requirements.txt already contains the optional format helpers. Keep
+        # the requirements file as one argument; passing it again as a
+        # positional package makes pip treat the filename as a distribution.
+        command.extend(["--requirement", str(root / "requirements.txt")])
+    elif formats:
+        command.extend(["PyYAML==6.0.3", "pypdf==6.16.2", "python-docx==1.2.0"])
     if dev:
-        requirements.extend(["pytest==8.4.1", "ruff==0.12.7"])
-    return command + (["--requirement", str(root / "requirements.txt")] if rag else []) + requirements
+        command.extend(["pytest==8.4.1", "ruff==0.12.7"])
+    return command
 
 
 def main(argv: list[str] | None = None) -> int:

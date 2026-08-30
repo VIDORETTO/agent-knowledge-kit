@@ -21,7 +21,7 @@ def test_evaluator_requires_reviewed_cases_and_reports_recall_and_mrr(tmp_path: 
     cases = {
         "schema_version": 1,
         "reviewed": True,
-        "cases": [{"query": "Authentication token validation", "expected_filepath": "guide.md", "kind": "factual"}],
+        "cases": [{"query": "Authentication token validation", "expected_filepath": "guide.md", "kind": "factual", "reviewed": True}],
     }
 
     result = evaluate_package(package, cases)
@@ -40,3 +40,87 @@ def test_unreviewed_golden_candidates_cannot_be_used_as_a_quality_gate(tmp_path:
 
     assert not result.ok
     assert any(error["code"] == "golden_not_reviewed" for error in result.errors)
+
+
+def test_each_golden_case_must_be_reviewed_even_when_the_envelope_is_reviewed(tmp_path: Path) -> None:
+    package = _package(tmp_path)
+    result = evaluate_package(
+        package,
+        {
+            "schema_version": 1,
+            "reviewed": True,
+            "cases": [{"query": "Authentication", "expected_filepath": "guide.md", "reviewed": False}],
+        },
+    )
+
+    assert not result.ok
+    assert any(error["code"] == "golden_not_reviewed" for error in result.errors)
+
+
+def test_evaluator_includes_normalized_code_documents(tmp_path: Path) -> None:
+    from docops.pipeline import PipelineOptions
+
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "client.py").write_text("# Client\nBearer token validation.", encoding="utf-8")
+    package = tmp_path / "package"
+    assert run_pipeline(source, options=PipelineOptions(output_dir=package, slug="code", license="MIT")).ok
+
+    result = evaluate_package(
+        package,
+        {
+            "schema_version": 1,
+            "reviewed": True,
+            "cases": [{"query": "Bearer token validation", "expected_filepath": "client.py", "reviewed": True}],
+        },
+    )
+
+    assert result.ok, result.errors
+
+
+def test_evaluator_rejects_invalid_quality_gate_parameters(tmp_path: Path) -> None:
+    package = _package(tmp_path)
+    cases = {
+        "schema_version": 1,
+        "reviewed": True,
+        "cases": [
+            {
+                "query": "guide",
+                "expected_filepath": "guide.md",
+                "kind": "factual",
+                "reviewed": True,
+            }
+        ],
+    }
+
+    result = evaluate_package(
+        package,
+        cases,
+        thresholds={"recall_at_5": 1.1, "mrr_at_5": float("nan")},
+        top_k=0,
+    )
+
+    assert not result.ok
+    codes = {error["code"] for error in result.errors}
+    assert {"top_k_out_of_range", "threshold_out_of_range"} <= codes
+
+
+def test_evaluator_rejects_windows_absolute_golden_paths(tmp_path: Path) -> None:
+    package = _package(tmp_path)
+    result = evaluate_package(
+        package,
+        {
+            "schema_version": 1,
+            "reviewed": True,
+            "cases": [
+                {
+                    "query": "Authentication",
+                    "expected_filepath": "C:\\outside\\guide.md",
+                    "reviewed": True,
+                }
+            ],
+        },
+    )
+
+    assert not result.ok
+    assert any(error["code"] == "golden_case_path" for error in result.errors)

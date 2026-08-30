@@ -40,6 +40,8 @@ documents:
     - .xml
     - .csv
     - .ipynb
+    - .xlsx
+    - .pptx
   exclude_patterns:
     - "node_modules"
     - ".venv"

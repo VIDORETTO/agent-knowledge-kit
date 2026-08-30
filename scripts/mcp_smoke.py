@@ -23,6 +23,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from docops import __version__  # noqa: E402
 from docops.runtime import discover_rag_python, runtime_environment  # noqa: E402
 
 PROTOCOL_VERSION = "2024-11-05"
@@ -116,7 +117,7 @@ def main() -> int:
             "initialize",
             protocolVersion=PROTOCOL_VERSION,
             capabilities={},
-            clientInfo={"name": "smoke", "version": "1.0"},
+            clientInfo={"name": "smoke", "version": __version__},
         )
         if init.get("error"):
             print(f"FALHOU initialize: {init['error']}")

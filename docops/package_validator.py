@@ -40,8 +40,11 @@ def _safe_relative(root: Path, raw: Any, errors: list[dict[str, str]], code: str
         _error(errors, code, "artifact path must be a non-empty relative string")
         return None
     candidate = Path(raw.replace("\\", "/"))
-    if candidate.is_absolute() or ".." in candidate.parts:
+    if candidate.is_absolute() or re.match(r"^[A-Za-z]:", raw.replace("\\", "/")) or ".." in candidate.parts:
         _error(errors, code, f"artifact path must remain inside package: {raw!r}")
+        return None
+    if (root / candidate).is_symlink():
+        _error(errors, "symlink_artifact", f"artifact path must be a regular package path: {raw!r}")
         return None
     resolved = (root / candidate).resolve()
     try:
@@ -50,6 +53,20 @@ def _safe_relative(root: Path, raw: Any, errors: list[dict[str, str]], code: str
         _error(errors, code, f"artifact path escapes package: {raw!r}")
         return None
     return resolved
+
+
+def _reject_nested_symlinks(root: Path, directory: Path, errors: list[dict[str, str]]) -> None:
+    """Reject links anywhere inside a package artifact directory."""
+
+    if not directory.is_dir() or directory.is_symlink():
+        return
+    for path in directory.rglob("*"):
+        if path.is_symlink():
+            _error(
+                errors,
+                "symlink_artifact",
+                f"package artifact must be a regular file or directory: {path.relative_to(root).as_posix()}",
+            )
 
 
 def _frontmatter(path: Path) -> dict[str, str]:
@@ -81,7 +98,9 @@ def validate_package(package_root: Path | str) -> ValidationResult:
     manifest_path = root / "manifest.json"
     manifest: dict[str, Any] = {}
 
-    if not manifest_path.is_file():
+    if manifest_path.is_symlink():
+        _error(errors, "symlink_artifact", "manifest.json must be a regular file")
+    elif not manifest_path.is_file():
         _error(errors, "missing_manifest", "manifest.json is required")
     else:
         try:
@@ -118,7 +137,10 @@ def validate_package(package_root: Path | str) -> ValidationResult:
         path = _safe_relative(root, artifacts.get(name), errors, f"{name}_path")
         if path is not None:
             paths[name] = path
+            _reject_nested_symlinks(root, path, errors)
 
+    harness_config_target: Path | None = None
+    config_targets: list[Path] = []
     if "harness" in artifacts:
         harness_path = _safe_relative(root, artifacts.get("harness"), errors, "harness_path")
         if harness_path is not None and not harness_path.is_file():
@@ -133,10 +155,28 @@ def validate_package(package_root: Path | str) -> ValidationResult:
                     _error(errors, "harness_schema", "harness manifest schema_version must be 1")
                 elif harness.get("package_root") != "." or not isinstance(harness.get("mcp"), dict) or harness["mcp"].get("cwd") != ".":
                     _error(errors, "harness_paths", "harness manifest must use relative package paths")
+                else:
+                    harness_config_target = _safe_relative(
+                        root, harness["mcp"].get("config"), errors, "harness_config_path"
+                    )
+                    if harness_config_target is not None and not harness_config_target.is_file():
+                        _error(errors, "missing_config", "harness MCP config does not exist in the package")
+                    elif harness_config_target is not None:
+                        config_targets.append(harness_config_target)
+
+    config_artifact = artifacts.get("config")
+    if config_artifact is not None:
+        config_target = _safe_relative(root, config_artifact, errors, "config_path")
+        if config_target is not None and not config_target.is_file():
+            _error(errors, "missing_config", "manifest config artifact does not exist")
+        elif config_target is not None:
+            config_targets.append(config_target)
 
     skill_dir = paths.get("skill")
     skill_file = skill_dir / "SKILL.md" if skill_dir else None
-    if not skill_file or not skill_file.is_file():
+    if skill_file and skill_file.is_symlink():
+        pass
+    elif not skill_file or not skill_file.is_file():
         _error(errors, "missing_skill", "skill/SKILL.md (or the manifest skill path) is required")
     else:
         fields = _frontmatter(skill_file)
@@ -146,7 +186,9 @@ def validate_package(package_root: Path | str) -> ValidationResult:
 
     router_dir = paths.get("router")
     router_file = router_dir / "SKILL.md" if router_dir else None
-    if not router_file or not router_file.is_file():
+    if router_file and router_file.is_symlink():
+        pass
+    elif not router_file or not router_file.is_file():
         _error(errors, "missing_router", "router/SKILL.md (or the manifest router path) is required")
     else:
         router_text = router_file.read_text(encoding="utf-8", errors="replace")
@@ -165,8 +207,12 @@ def validate_package(package_root: Path | str) -> ValidationResult:
     rag_index = rag_dir / "index.json" if rag_dir else None
     if not rag_dir or not rag_dir.is_dir():
         _error(errors, "missing_rag", "rag artifact directory is required")
+    elif rag_docs and rag_docs.is_symlink():
+        pass
     elif not rag_docs or not rag_docs.is_dir():
         _error(errors, "missing_rag_documents", "rag/documents directory is required")
+    elif rag_index and rag_index.is_symlink():
+        pass
     elif not rag_index or not rag_index.is_file():
         _error(errors, "missing_rag_index", "rag/index.json readiness metadata is required")
     else:
@@ -179,7 +225,10 @@ def validate_package(package_root: Path | str) -> ValidationResult:
                 _error(errors, "rag_not_ready", "rag/index.json must have status=ready")
             else:
                 docs = list(rag_docs.rglob("*"))
-                file_count = sum(1 for path in docs if path.is_file())
+                symlinks = [path for path in docs if path.is_symlink()]
+                for path in symlinks:
+                    _error(errors, "symlink_artifact", f"RAG document must be a regular file: {path.relative_to(root).as_posix()}")
+                file_count = sum(1 for path in docs if path.is_file() and not path.is_symlink())
                 if file_count < 1:
                     _error(errors, "empty_rag", "rag/documents must contain at least one source")
                 checks["rag"] = {
@@ -209,13 +258,32 @@ def validate_package(package_root: Path | str) -> ValidationResult:
                 _error(errors, "manifest_document_count", "accepted manifest entries do not match rag/documents")
 
     checks["manifest"] = {"ok": not any(error["code"].startswith("manifest") for error in errors)}
-    config_path = root / "config.yaml"
-    if config_path.is_file():
-        config_result = audit_config_file(config_path)
-        checks["config"] = config_result.to_dict()
-        for error in config_result.errors:
-            _error(errors, error["code"], error["message"])
+    if not config_targets:
+        config_targets = [root / "config.yaml"]
+    unique_config_targets = list(dict.fromkeys(config_targets))
+    config_results: list[tuple[Path, Any]] = []
+    for config_path in unique_config_targets:
+        if config_path.is_symlink():
+            _error(errors, "symlink_artifact", "referenced MCP config must be a regular file")
+        elif config_path.is_file():
+            config_result = audit_config_file(config_path)
+            config_results.append((config_path, config_result))
+            for error in config_result.errors:
+                _error(errors, error["code"], error["message"])
+    if config_results:
+        if len(config_results) == 1:
+            checks["config"] = config_results[0][1].to_dict()
+        else:
+            checks["config"] = {
+                "schema_version": 1,
+                "ok": all(result.ok for _, result in config_results),
+                "transport": "multiple",
+                "errors": [error for _, result in config_results for error in result.errors],
+                "warnings": [warning for _, result in config_results for warning in result.warnings],
+                "paths": [path.relative_to(root).as_posix() for path, _ in config_results],
+            }
     divergence = inspect_package_divergence(root)
     checks["synchronization"] = divergence.to_dict()
-    warnings.extend(divergence.warnings)
+    for warning in divergence.warnings:
+        _error(errors, warning["code"], warning["message"])
     return ValidationResult(not errors, errors, warnings, checks)

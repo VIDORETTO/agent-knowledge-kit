@@ -86,6 +86,15 @@ def test_network_policy_rejects_credentials_and_cloud_metadata() -> None:
     assert query_credentials.value.code == "credentials_in_url"
 
 
+def test_network_policy_reports_malformed_ports_as_structured_errors() -> None:
+    policy = WebAcquirer().network_policy
+
+    with pytest.raises(NetworkPolicyError) as caught:
+        policy.validate("https://docs.example.test:bad/docs")
+
+    assert caught.value.code == "invalid_url"
+
+
 def test_fetches_one_html_page_and_preserves_canonical_origin() -> None:
     with fixture_server() as base:
         result = WebAcquirer(policy=FetchPolicy(allow_private=True)).acquire(
@@ -166,3 +175,53 @@ def test_link_crawl_deduplicates_pages_by_declared_canonical_url() -> None:
     accepted = [entry for entry in result.entries if entry["status"] == "accepted"]
     assert len({entry["canonical"] for entry in accepted}) == len(accepted)
     assert any(entry.get("reason") == "duplicate-canonical" for entry in result.entries)
+
+
+def test_html_normalization_does_not_emit_non_http_links() -> None:
+    from docops.web_acquirer import normalize_html
+
+    document = normalize_html(
+        b"<html><body><a href='javascript:alert(1)'>bad</a><a href='mailto:x@example.test'>mail</a><a href='/guide'>good</a></body></html>",
+        "https://docs.example.test/",
+    )
+
+    assert document.links == ("https://docs.example.test/guide",)
+    assert "javascript:" not in document.content
+    assert "mailto:" not in document.content
+
+
+def test_malformed_sitemap_locations_are_ignored() -> None:
+    from docops.web_acquirer import _parse_sitemap
+
+    urls, nested = _parse_sitemap(
+        b"<urlset><url><loc>https://docs.example.test:bad/guide</loc></url>"
+        b"<url><loc>https://docs.example.test/good</loc></url></urlset>"
+    )
+
+    assert urls == ["https://docs.example.test/good"]
+    assert nested == []
+
+
+def test_fetched_pdf_is_not_accepted_as_raw_binary_text(monkeypatch) -> None:
+    from docops.web_acquirer import FetchedResponse
+
+    acquirer = WebAcquirer(policy=FetchPolicy(allow_private=True))
+    monkeypatch.setattr(
+        acquirer,
+        "fetch",
+        lambda _url: FetchedResponse(
+            requested_url="https://docs.example.test/guide.pdf",
+            final_url="https://docs.example.test/guide.pdf",
+            status=200,
+            content_type="application/pdf",
+            body=b"not a pdf",
+        ),
+    )
+
+    result = acquirer.acquire(
+        "https://docs.example.test/guide.pdf",
+        options=CrawlOptions(use_sitemap=False, max_pages=1),
+    )
+
+    assert result.entries[0]["status"] == "error"
+    assert result.entries[0]["code"] in {"dependency_missing", "ocr_required"}

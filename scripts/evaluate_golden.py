@@ -3,9 +3,10 @@
 Uso:
     python scripts/evaluate_golden.py [--cases golden-set/test-cases.json]
 
-Entrada: lista de [{"query": ..., "expected_filepath": ...}, ...] (JSON),
-os mesmos casos usados em golden-set/questions.md. Imprime MRR@5, Recall@5
-e o breakdown por pergunta; a versão atual do servidor não expõe Precision@5.
+Entrada: envelope revisado {"schema_version": 1, "reviewed": true,
+"cases": [{"query": ..., "expected_filepath": ..., "reviewed": true}, ...]}
+(JSON). Imprime MRR@5, Recall@5 e o breakdown por pergunta; a versão atual do
+servidor não expõe Precision@5.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ DEFAULT_CASES = PROJECT_ROOT / "golden-set" / "test-cases.json"
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from docops import __version__  # noqa: E402
 from docops.runtime import discover_rag_python, runtime_environment  # noqa: E402
 
 
@@ -73,13 +75,20 @@ def main() -> int:
     parser.add_argument("--cases", default=str(DEFAULT_CASES))
     args = parser.parse_args()
 
-    cases = json.loads(Path(args.cases).read_text(encoding="utf-8"))
-    if not cases:
-        sys.exit("golden set vazio")
+    payload = json.loads(Path(args.cases).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or payload.get("schema_version") != 1 or payload.get("reviewed") is not True:
+        sys.exit("golden set deve ser um envelope schema_version=1 com reviewed=true")
+    cases = payload.get("cases")
+    if not isinstance(cases, list) or not cases:
+        sys.exit("golden set vazio ou inválido")
 
     # O server compara expected_filepath com o campo `source` literal (path
     # absoluto). Normaliza "relativos a PROJECT_ROOT" para caminho absoluto.
     for case in cases:
+        if not isinstance(case, dict):
+            sys.exit("golden set contém um caso inválido")
+        if case.get("reviewed") is not True:
+            sys.exit("todos os casos do golden set precisam de reviewed=true")
         exp = case.get("expected_filepath", "")
         if exp and not exp.startswith(str(PROJECT_ROOT)):
             case["expected_filepath"] = str((PROJECT_ROOT / exp).resolve())
@@ -102,7 +111,7 @@ def main() -> int:
         threading.Thread(target=drain, args=(proc,), daemon=True).start()
         client = McpClient(proc)
         init = client.call("initialize", protocolVersion="2024-11-05", capabilities={},
-                           clientInfo={"name": "evaluate_golden", "version": "1.0"})
+                           clientInfo={"name": "evaluate_golden", "version": __version__})
         if init.get("error"):
             sys.exit(f"initialize falhou: {init['error']}")
         client.send_json({"jsonrpc": "2.0", "method": "notifications/initialized"})

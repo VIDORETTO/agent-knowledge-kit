@@ -18,6 +18,7 @@ _SKIP_DIRS = {
     "data",
     "models_cache",
     "artifacts",
+    ".docops",
     "build",
     "dist",
 }
@@ -61,7 +62,7 @@ def _contains_generic_path_part(value: str) -> bool:
 
 
 def _tracked_paths(root: Path) -> set[Path] | None:
-    if not (root / ".git").is_dir():
+    if not (root / ".git").exists():
         return None
     try:
         completed = subprocess.run(
@@ -88,15 +89,17 @@ def audit_release(root: Path | str, *, tracked_only: bool = False) -> ReleaseAud
     project_root = Path(root).expanduser().resolve()
     findings: list[dict[str, str]] = []
     tracked = _tracked_paths(project_root) if tracked_only else None
+    if tracked_only and tracked is None:
+        _finding(findings, "git_index_unavailable", ".git", "tracked-only audit requires a readable Git index")
     if not tracked_only:
         for directory in sorted(_SKIP_DIRS - {".git", "__pycache__", ".pytest_cache"}):
             candidate = project_root / directory
             if candidate.is_dir():
                 _finding(findings, "prohibited_artifact", directory, "runtime directory is not a release artifact")
-    if tracked_only and (project_root / ".git").is_dir():
+    if tracked_only and tracked is not None:
         candidates = sorted(tracked or set())
     else:
-        candidates = sorted(path for path in project_root.rglob("*") if path.is_file())
+        candidates = sorted(path for path in project_root.rglob("*") if path.is_file() or path.is_symlink())
     scanned = 0
     nested_git_reported = False
     for path in candidates:
@@ -105,6 +108,9 @@ def audit_release(root: Path | str, *, tracked_only: bool = False) -> ReleaseAud
         except ValueError:
             continue
         parts = relative.parts
+        if path.is_symlink():
+            _finding(findings, "symlink_artifact", relative.as_posix(), "symbolic links are not portable release artifacts")
+            continue
         if ".git" in parts:
             if parts[0] != ".git" and not nested_git_reported:
                 _finding(findings, "nested_git", relative.as_posix(), "nested Git metadata must not be shipped")

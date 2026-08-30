@@ -27,10 +27,13 @@ O último comando cria um diretório temporário fora do checkout, copia somente
 material distribuível e roda doctor, auditoria e testes. Use `--keep` para
 inspecionar o clone temporário.
 
-Na validação desta implementação, a suíte passou com **59 testes**, o Ruff não
-encontrou problemas e a auditoria de um clone limpo passou sem findings. O
-fluxo real `docops run --index-rag` também passou com fixture sintética, smoke
-MCP positivo e reindexação concorrente sem erros.
+Na validação desta implementação, a suíte passou com **91 testes** (com dois
+testes de symlink pulados quando o host Windows não permite criar links), o Ruff
+não encontrou problemas, o wheel foi instalado em alvo isolado e a auditoria
+de um clone limpo passou sem findings. O fluxo `docops run` → `validate` →
+`evaluate` também passou com fixture sintética; a integração real
+`docops run --index-rag`, smoke MCP e reindexação concorrente permanecem no
+workflow opt-in porque exigem o perfil `knowledge-rag` e seus modelos.
 
 ## Integração opcional
 

@@ -14,6 +14,20 @@ from .runtime import discover_rag_python, runtime_environment
 from .storage import write_text_atomic
 
 
+def _response_payload(response: dict[str, Any], operation: str) -> dict[str, Any]:
+    """Require a structured MCP tool response before advancing a phase."""
+
+    if response.get("error"):
+        raise RuntimeError(f"{operation} failed: {response['error']}")
+    result = response.get("result")
+    if isinstance(result, dict) and result.get("isError") is True:
+        raise RuntimeError(f"{operation} returned an MCP tool error")
+    payload = first_json_payload(response)
+    if payload is None:
+        raise RuntimeError(f"{operation} returned no JSON payload")
+    return payload
+
+
 def package_rag_config() -> dict[str, Any]:
     """Return a package-local, stdio-only knowledge-rag configuration."""
 
@@ -24,7 +38,11 @@ def package_rag_config() -> dict[str, Any]:
             "models_cache_dir": "./rag/models_cache",
         },
         "documents": {
-            "supported_formats": [".md", ".txt", ".json", ".yaml", ".yml", ".rst", ".adoc"],
+            "supported_formats": [
+                ".md", ".markdown", ".txt", ".rst", ".adoc", ".html", ".htm",
+                ".json", ".yaml", ".yml", ".xml", ".csv", ".py", ".c", ".h",
+                ".cpp", ".js", ".jsx", ".ts", ".tsx", ".ipynb", ".xlsx", ".pptx", ".pdf", ".docx",
+            ],
             "exclude_patterns": ["data", "models_cache", ".venv", ".git"],
             "chunking": {"chunk_size": 1000, "chunk_overlap": 200},
         },
@@ -78,6 +96,12 @@ def _render_yaml(value: Any, indent: int = 0) -> list[str]:
     return lines
 
 
+def package_rag_config_text() -> str:
+    """Render the portable stdio configuration shipped with each package."""
+
+    return "\n".join(_render_yaml(package_rag_config())) + "\n"
+
+
 @dataclass
 class RagSyncResult:
     ok: bool
@@ -101,8 +125,10 @@ class RagSynchronizer:
     def sync(self, package_root: Path | str, *, full_rebuild: bool = False) -> RagSyncResult:
         root = Path(package_root).resolve()
         config_path = root / "config.yaml"
+        if config_path.is_symlink():
+            return RagSyncResult(False, error={"code": "unsafe_rag_config", "message": "package config.yaml must not be a symbolic link"})
         if not config_path.exists():
-            write_text_atomic(config_path, "\n".join(_render_yaml(package_rag_config())) + "\n")
+            write_text_atomic(config_path, package_rag_config_text())
         config_audit = audit_config_file(config_path)
         if not config_audit.ok:
             return RagSyncResult(False, error={"code": "unsafe_rag_config", "message": "; ".join(error["message"] for error in config_audit.errors)})
@@ -114,13 +140,11 @@ class RagSynchronizer:
             client = start_mcp_server(executable, root, env=runtime_environment(root))
             arguments = {"full_rebuild": True} if full_rebuild else {"force": True}
             response = client.call("tools/call", name="reindex_documents", arguments=arguments, timeout=self.timeout_seconds)
-            if response.get("error"):
-                return RagSyncResult(False, error={"code": "rag_reindex_failed", "message": str(response["error"])})
-            reindex = first_json_payload(response) or {}
+            reindex = _response_payload(response, "reindex_documents")
             deadline = time.monotonic() + self.timeout_seconds
             while time.monotonic() < deadline:
                 status_response = client.call("tools/call", name="get_reindex_status", arguments={}, timeout=120)
-                status = first_json_payload(status_response) or {}
+                status = _response_payload(status_response, "get_reindex_status")
                 state = status.get("reindex") if isinstance(status.get("reindex"), dict) else status
                 if not state.get("active", False):
                     reindex = state
@@ -129,7 +153,7 @@ class RagSynchronizer:
             else:
                 return RagSyncResult(False, reindex=reindex, error={"code": "rag_timeout", "message": "reindex timeout"})
             stats_response = client.call("tools/call", name="get_index_stats", arguments={}, timeout=120)
-            stats = first_json_payload(stats_response) or {}
+            stats = _response_payload(stats_response, "get_index_stats")
             if isinstance(stats.get("stats"), dict):
                 stats = stats["stats"]
             smoke_response = client.call(
@@ -138,15 +162,7 @@ class RagSynchronizer:
                 arguments={"query": "documentation", "max_results": 1},
                 timeout=120,
             )
-            smoke = first_json_payload(smoke_response) or {}
-            if smoke_response.get("error"):
-                return RagSyncResult(
-                    False,
-                    stats=stats,
-                    reindex=reindex,
-                    smoke={"ok": False},
-                    error={"code": "rag_smoke_failed", "message": str(smoke_response["error"])},
-                )
+            smoke = _response_payload(smoke_response, "search_knowledge")
             return RagSyncResult(
                 True,
                 stats=stats,

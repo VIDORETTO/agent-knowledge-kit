@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Mapping
 
 from .config_audit import audit_config_file
+from .runtime import _supports_knowledge_rag, discover_rag_python
 
 
 @dataclass(frozen=True)
@@ -134,8 +135,16 @@ def run_doctor(
     }
     config_path = root / "config.yaml"
     if config_path.is_file():
-        config_result = audit_config_file(config_path)
-        checks["config"] = {"ok": config_result.ok, "transport": config_result.transport, "errors": config_result.errors}
+        try:
+            config_result = audit_config_file(config_path)
+        except (OSError, ValueError) as exc:
+            checks["config"] = {
+                "ok": False,
+                "transport": "unknown",
+                "errors": [{"code": "config_unreadable", "message": str(exc)}],
+            }
+        else:
+            checks["config"] = {"ok": config_result.ok, "transport": config_result.transport, "errors": config_result.errors}
 
     skip_rag = env.get("DOCOPS_SKIP_RAG", "").lower() in {"1", "true", "yes"}
     if skip_rag:
@@ -149,11 +158,9 @@ def run_doctor(
         checks["rag"] = {"ok": True, "status": "skipped", "reason": "DOCOPS_SKIP_RAG"}
     else:
         rag_required = env.get("DOCOPS_REQUIRE_RAG", "").lower() in {"1", "true", "yes"}
-        rag_python = next(
-            (candidate for candidate, source in _candidate_paths(root) if candidate.is_file() and source == "rag-venv"),
-            None,
-        )
-        rag_ok = rag_python is not None
+        rag_executable = discover_rag_python(root, environ=env)
+        rag_python = rag_executable.path if rag_executable.exists else None
+        rag_ok = rag_python is not None and rag_executable.source != "missing" and _supports_knowledge_rag(rag_python)
         checks["rag"] = {
             "ok": rag_ok or not rag_required,
             "status": "available" if rag_ok else "missing",
@@ -170,6 +177,8 @@ def run_doctor(
         }
 
     required_names = ["python", "project_metadata", "dependency_lock"]
+    if "config" in checks:
+        required_names.append("config")
     if checks["rag"].get("required") is True:
         required_names.append("rag")
     required_ok = all(checks[name].get("ok", False) is True for name in required_names)

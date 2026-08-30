@@ -24,6 +24,8 @@ def inspect_package_divergence(package_root: Path | str) -> DivergenceReport:
     root = Path(package_root).resolve()
     manifest_path = root / "manifest.json"
     skill_path = root / "skill" / "SKILL.md"
+    if manifest_path.is_symlink() or (root / "skill").is_symlink() or skill_path.is_symlink():
+        return DivergenceReport(False, [{"code": "symlink_artifact", "message": "manifest and skill must not be symbolic links"}])
     if not manifest_path.is_file() or not skill_path.is_file():
         return DivergenceReport(False, [{"code": "divergence_inputs_missing", "message": "manifest and skill are required"}])
     try:
@@ -32,7 +34,10 @@ def inspect_package_divergence(package_root: Path | str) -> DivergenceReport:
         return DivergenceReport(False, [{"code": "divergence_manifest_invalid", "message": "manifest could not be read"}])
     source = manifest.get("source") if isinstance(manifest, dict) else {}
     source_version = source.get("version") if isinstance(source, dict) else None
-    skill_text = skill_path.read_text(encoding="utf-8", errors="replace")
+    try:
+        skill_text = skill_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return DivergenceReport(False, [{"code": "divergence_skill_invalid", "message": "skill could not be read"}])
     match = re.search(r"^- Version: `([^`]*)`$", skill_text, re.MULTILINE)
     skill_version = match.group(1) if match else None
     if source_version and skill_version and str(source_version) != skill_version:

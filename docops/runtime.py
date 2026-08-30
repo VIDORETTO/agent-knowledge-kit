@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
-import sys
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
@@ -44,13 +44,33 @@ def discover_rag_python(project_root: Path | str, *, environ: Mapping[str, str] 
         path = Path(override).expanduser()
         return Executable(path if path.is_absolute() else root / path, "environment")
     for path, source in _venv_candidates(root, (".venv-rag", ".venv")):
-        if path.is_file():
+        if path.is_file() and _supports_knowledge_rag(path):
             return Executable(path, source)
     for command in ("python3", "python"):
         found = shutil.which(command)
-        if found:
+        if found and _supports_knowledge_rag(Path(found)):
             return Executable(Path(found).resolve(), "PATH")
-    return Executable(Path(sys.executable).resolve(), "runtime")
+    missing = root / (Path("Scripts") / "python.exe" if os.name == "nt" else Path("bin") / "python")
+    return Executable(missing, "missing")
+
+
+def _supports_knowledge_rag(python: Path) -> bool:
+    """Check module discoverability without importing or starting the server."""
+
+    try:
+        completed = subprocess.run(
+            [
+                str(python),
+                "-c",
+                "import importlib.util; raise SystemExit(0 if importlib.util.find_spec('mcp_server.server') else 1)",
+            ],
+            check=False,
+            capture_output=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return completed.returncode == 0
 
 
 def runtime_environment(

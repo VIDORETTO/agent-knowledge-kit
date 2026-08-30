@@ -30,6 +30,9 @@ host, páginas, profundidade, payload, timeout e redirects.
 
 Cada execução bem-sucedida cria:
 
+- config.yaml: configuração stdio relativa ao pacote; é criada no primeiro run
+  e preservada quando já existe uma configuração customizada;
+
 - `manifest.json`: versão do contrato, identidade da fonte, candidatos,
   licença/proveniência, entradas aceitas/ignoradas/erro, métricas e checkpoints;
 - `skill/`: `SKILL.md`, capítulos, glossário, padrões e cheatsheet;
@@ -50,6 +53,11 @@ identity. Escritas de JSON e texto são temporárias, sincronizadas e trocadas
 com `os.replace`. `CheckpointStore` grava as fases resolution, acquisition e
 artifacts; repetir a execução reconcilia add/update/remove e retoma após uma
 falha sem duplicar fontes.
+
+O fluxo mutante pressupõe uma execução por pacote por vez. As trocas atômicas
+protegem arquivos contra interrupções, mas não substituem um lock distribuído
+ou uma fila para dois processos concorrentes; em uso automatizado, serialize
+execuções que apontem para o mesmo diretório de saída.
 
 O `knowledge-rag` é iniciado apenas quando `--index-rag` ou um script de
 integração é solicitado. O cliente encerra somente o processo filho que abriu e

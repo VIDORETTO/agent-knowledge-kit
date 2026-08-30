@@ -90,7 +90,11 @@ def load_config(path: Path | str) -> dict[str, Any]:
         loaded = yaml.safe_load(text)
     except yaml.YAMLError as exc:
         raise ValueError(f"invalid YAML: {exc}") from exc
-    return dict(loaded) if isinstance(loaded, Mapping) else {}
+    if loaded is None:
+        return {}
+    if not isinstance(loaded, Mapping):
+        raise ValueError("configuration root must be a mapping")
+    return dict(loaded)
 
 
 def audit_config(config: Mapping[str, Any]) -> ConfigAuditResult:
@@ -102,10 +106,13 @@ def audit_config(config: Mapping[str, Any]) -> ConfigAuditResult:
     are all explicitly enabled.
     """
 
-    server = _mapping(config.get("server"))
-    transport = str(server.get("transport") or "stdio").strip().casefold()
     errors: list[dict[str, str]] = []
     warnings: list[dict[str, str]] = []
+    raw_server = config.get("server")
+    if "server" in config and not isinstance(raw_server, Mapping):
+        _error(errors, "invalid_server", "server configuration must be a mapping")
+    server = _mapping(raw_server)
+    transport = str(server.get("transport") or "stdio").strip().casefold()
     if transport not in {"stdio", "sse", "streamable-http"}:
         _error(errors, "unsupported_transport", f"unsupported server transport: {transport!r}")
     if transport in {"sse", "streamable-http"}:

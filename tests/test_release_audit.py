@@ -45,3 +45,12 @@ def test_release_audit_rejects_json_escaped_windows_author_paths(tmp_path: Path)
 
     assert not result.ok
     assert any(finding["code"] == "author_path" for finding in result.findings)
+
+
+def test_tracked_only_audit_fails_without_a_git_index(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("safe", encoding="utf-8")
+
+    result = audit_release(tmp_path, tracked_only=True)
+
+    assert not result.ok
+    assert any(finding["code"] == "git_index_unavailable" for finding in result.findings)

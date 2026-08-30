@@ -75,3 +75,47 @@ def test_config_audit_command_rejects_an_unauthenticated_http_profile(tmp_path: 
 
     assert completed.returncode == 1
     assert "network_auth_required" in completed.stdout
+
+
+def test_resolve_command_does_not_echo_url_credentials(tmp_path: Path) -> None:
+    completed = subprocess.run(
+        [sys.executable, "-m", "docops", "resolve", "https://docs.example.test/guide?api_key=super-secret-value"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0
+    assert "super-secret-value" not in completed.stdout
+    assert "REDACTED" in completed.stdout
+
+
+def test_cli_returns_structured_json_for_invalid_pipeline_options(tmp_path: Path) -> None:
+    source = tmp_path / "docs"
+    source.mkdir()
+    (source / "guide.md").write_text("# Guide\n", encoding="utf-8")
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "docops",
+            "run",
+            str(source),
+            "--output",
+            str(tmp_path / "package"),
+            "--slug",
+            "Not A Slug",
+            "--json",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 1
+    assert "Traceback" not in completed.stdout
+    assert "Traceback" not in completed.stderr
+    payload = json.loads(completed.stdout)
+    assert payload["ok"] is False
+    assert payload["errors"][0]["code"] == "invalid_request"

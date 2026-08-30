@@ -60,3 +60,10 @@ def test_config_file_audit_is_portable_and_does_not_return_secrets(tmp_path: Pat
 
     assert result.ok, result.errors
     assert "1234567890abcdef" not in result.to_json()
+
+
+def test_config_audit_rejects_a_non_mapping_server() -> None:
+    result = audit_config({"server": "streamable-http"})
+
+    assert not result.ok
+    assert "invalid_server" in {error["code"] for error in result.errors}

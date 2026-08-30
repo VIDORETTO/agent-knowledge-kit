@@ -1,14 +1,14 @@
 [build-system]
-requires = ["setuptools==65.5.0", "wheel==0.45.1"]
+requires = ["setuptools>=77.0.0,<83.0.0", "wheel>=0.45.0,<0.48.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "consulta-documentacao"
-version = "0.1.0"
+version = "1.0.0"
 description = "Portable agent skills, source acquisition, RAG orchestration and package validation"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { file = "LICENSE" }
+license = "MIT"
 authors = [{ name = "consulta-documentacao contributors" }]
 dependencies = []
 
@@ -21,7 +21,7 @@ dev = ["pytest==8.4.1", "ruff==0.12.7"]
 docops = "docops.__main__:main"
 
 [tool.setuptools]
-packages = ["docops"]
+packages = ["docops", "docops.templates"]
 
 [tool.setuptools.package-data]
 docops = ["templates/*.md"]

@@ -1,6 +1,6 @@
 # consulta-documentacao
 
-`consulta-documentacao` é um operador portátil para transformar uma referência
+`consulta-documentacao` 1.0.0 é um operador portátil para transformar uma referência
 de documentação em um pacote de conhecimento para agentes. Ele resolve a
 fonte, adquire e normaliza documentos, gera uma skill e um roteador, prepara o
 corpus para `knowledge-rag` e registra tudo em um manifesto retomável.
@@ -43,8 +43,8 @@ python -m docops validate ./artifacts/acme --json
 python -m docops golden-candidates ./artifacts/acme --json
 ```
 
-O `run` produz `manifest.json`, `harness.json`, `skill/`, `router/` e
-`rag/`. Repetir o comando reconcilia estado por identidade canônica, versão e
+O `run` produz `manifest.json`, `config.yaml`, `harness.json`, `skill/`,
+`router/` e `rag/`. Repetir o comando reconcilia estado por identidade canônica, versão e
 hash; `--index-rag` também executa a sincronização real do MCP. O caminho feliz
 não exige copiar e colar instruções entre ferramentas.
 

@@ -4,9 +4,9 @@
 | Campo | Valor |
 |---|---|
 | **Documento** | SPEC-001 — Doc-to-Skill + RAG Híbrido (MCP) |
-| **Status** | Implementação concluída e validada; Fase 6 segura disponível como opt-in |
+| **Status** | Release 1.0.0 implementada e validada localmente; publicação e perfil RAG seguem opt-in |
 | **Versão** | 1.0 |
-| **Última atualização** | 2026-08-28 |
+| **Última atualização** | 2026-08-29 |
 | **Autor** | Assistente (Claude), a pedido do usuário |
 
 ---
@@ -438,7 +438,7 @@ Subtarefas: ver Seção 9 (Fases e Tarefas)
 3. Considerar nuclear rebuild para remover registros históricos do índice, se a contagem de entradas do servidor precisar coincidir com os 163 arquivos lógicos do state.
 4. Usar a Fase 6 somente quando houver necessidade real de uso multiusuário; copiar o perfil de rede, substituir o bearer token e passar pelo `config-audit` antes de expor o MCP.
 
-> Estado 2026-08-28: Fases 0–6 implementadas e validadas no produto; o perfil de
+> Estado 2026-08-29: Fases 0–6 implementadas e validadas no produto; o perfil de
 > rede permanece opt-in e a publicação/commit não foram executados. A única
 > observação operacional do piloto é a presença de registros históricos no
 > contador do servidor, sem perda de cobertura dos 163 arquivos lógicos.

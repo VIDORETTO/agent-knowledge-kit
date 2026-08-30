@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.0 — 2026-08-29
+
+- Primeira versão estável do protocolo DOCOPS para fontes locais, web e
+  repositórios.
+- Pacotes gerados agora são autossuficientes, com configuração MCP relativa,
+  validação de divergência e smoke test do wheel instalado.
+- Atualizações protegem configuração existente, evitam colisões, removem
+  capítulos obsoletos e falham fechado para saídas dentro da fonte, symlinks,
+  documentos inválidos e golden sets não revisados.
+
 ## Unreleased
 
 - Adicionado o protocolo portátil `docops` para resolução, aquisição,

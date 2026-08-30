@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 import re
+import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from xml.etree import ElementTree
 
 from .web_acquirer import normalize_html
 
@@ -15,6 +17,7 @@ SUPPORTED_SUFFIXES = {
     ".docx", ".py", ".c", ".h", ".cpp", ".js", ".jsx", ".ts", ".tsx",
     ".json", ".yaml", ".yml", ".xml", ".csv", ".ipynb", ".xlsx", ".pptx",
 }
+MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
 
 _INJECTION_PATTERNS = (
     re.compile(r"\bignore\s+(?:all\s+|any\s+|the\s+)?(?:previous|prior|above)\s+instructions?\b", re.I),
@@ -140,16 +143,158 @@ def _extract_pdf(path: Path) -> str:
     return "\n\n".join(part.strip() for part in text_parts if part and part.strip()).strip()
 
 
-def normalize_file(path: Path | str, *, source_url: str | None = None) -> NormalizationResult:
+def _cell_source(value: Any) -> str:
+    if isinstance(value, list):
+        return "".join(str(item) for item in value)
+    return str(value or "")
+
+
+def _notebook_markdown(document: Any, fallback: str) -> str:
+    if not isinstance(document, dict) or not isinstance(document.get("cells"), list):
+        raise ValueError("invalid notebook: cells must be a list")
+    lines = [f"# {fallback}"]
+    for index, cell in enumerate(document["cells"], 1):
+        if not isinstance(cell, dict):
+            continue
+        content = _cell_source(cell.get("source", "")).strip()
+        if not content:
+            continue
+        cell_type = str(cell.get("cell_type") or "raw").casefold()
+        if cell_type == "markdown":
+            lines.append(content)
+        elif cell_type == "code":
+            language = "python"
+            metadata = cell.get("metadata")
+            if isinstance(metadata, dict):
+                language_info = metadata.get("language_info")
+                if isinstance(language_info, dict) and language_info.get("name"):
+                    language = str(language_info["name"])
+            lines.extend([f"{chr(96) * 3}{language}", content, chr(96) * 3])
+        else:
+            lines.extend([f"## Cell {index}", content])
+    return "\n\n".join(lines) + "\n"
+
+
+def _xml_local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def _xml_text(element: ElementTree.Element | None) -> str:
+    return "".join(element.itertext()).strip() if element is not None else ""
+
+
+def _ooxml_text(path: Path, suffix: str) -> str:
+    if not zipfile.is_zipfile(path):
+        raise ValueError(f"invalid {suffix.lstrip('.')} document: expected an OOXML archive")
+    try:
+        archive = zipfile.ZipFile(path)
+    except zipfile.BadZipFile as exc:
+        raise ValueError(f"invalid {suffix.lstrip('.')} document: {exc}") from exc
+    with archive:
+        members = archive.namelist()
+        total_size = sum(info.file_size for info in archive.infolist())
+        if total_size > 100 * 1024 * 1024:
+            raise ValueError("OOXML archive expands beyond the 100 MiB safety limit")
+        if suffix == ".xlsx":
+            return _xlsx_markdown(archive, members, path.stem)
+        return _pptx_markdown(archive, members, path.stem)
+
+
+def _xlsx_markdown(archive: zipfile.ZipFile, members: list[str], fallback: str) -> str:
+    shared_strings: list[str] = []
+    if "xl/sharedStrings.xml" in members:
+        root = ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))
+        for item in root:
+            if _xml_local_name(item.tag) == "si":
+                shared_strings.append(_xml_text(item))
+    worksheets = sorted(
+        (name for name in members if re.fullmatch(r"xl/worksheets/sheet\d+\.xml", name)),
+        key=lambda name: int(re.search(r"sheet(\d+)", name).group(1)),  # type: ignore[union-attr]
+    )
+    if not worksheets:
+        raise ValueError("invalid xlsx document: no worksheets found")
+    lines = [f"# {fallback}"]
+    for index, name in enumerate(worksheets, 1):
+        root = ElementTree.fromstring(archive.read(name))
+        rows: list[str] = []
+        for row in root.iter():
+            if _xml_local_name(row.tag) != "row":
+                continue
+            values: list[str] = []
+            for cell in row:
+                if _xml_local_name(cell.tag) != "c":
+                    continue
+                value_node = next((child for child in cell if _xml_local_name(child.tag) == "v"), None)
+                value = _xml_text(value_node)
+                if cell.attrib.get("t") == "s" and value.isdigit() and int(value) < len(shared_strings):
+                    value = shared_strings[int(value)]
+                elif cell.attrib.get("t") == "inlineStr":
+                    inline = next((child for child in cell if _xml_local_name(child.tag) == "is"), None)
+                    value = _xml_text(inline)
+                formula = next((child for child in cell if _xml_local_name(child.tag) == "f"), None)
+                if not value and formula is not None:
+                    value = f"={_xml_text(formula)}"
+                values.append(value)
+            if values:
+                rows.append("\t".join(values))
+        if rows:
+            lines.extend([f"\n## Sheet {index}", "", *rows])
+    return "\n".join(lines) + "\n"
+
+
+def _pptx_markdown(archive: zipfile.ZipFile, members: list[str], fallback: str) -> str:
+    slides = sorted(
+        (name for name in members if re.fullmatch(r"ppt/slides/slide\d+\.xml", name)),
+        key=lambda name: int(re.search(r"slide(\d+)", name).group(1)),  # type: ignore[union-attr]
+    )
+    if not slides:
+        raise ValueError("invalid pptx document: no slides found")
+    lines = [f"# {fallback}"]
+    for index, name in enumerate(slides, 1):
+        root = ElementTree.fromstring(archive.read(name))
+        text = "\n".join(
+            value
+            for element in root.iter()
+            if _xml_local_name(element.tag) == "t"
+            if (value := _xml_text(element))
+        )
+        if text:
+            lines.extend([f"\n## Slide {index}", "", text])
+    return "\n".join(lines) + "\n"
+
+
+def normalize_file(
+    path: Path | str,
+    *,
+    source_url: str | None = None,
+    max_bytes: int = MAX_DOCUMENT_BYTES,
+) -> NormalizationResult:
     """Normalize one file and return an explicit status for unsupported inputs."""
 
-    file_path = Path(path).expanduser().resolve()
+    input_path = Path(path).expanduser()
+    file_path = input_path.resolve()
     origin = source_url or file_path.as_uri()
     suffix = file_path.suffix.casefold()
+    if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 1:
+        raise ValueError("max_bytes must be a positive integer")
+    if input_path.is_symlink():
+        return NormalizationResult("error", "", origin, suffix.lstrip("."), error_code="symlink_not_allowed", error="symbolic links are not ingested")
     if not file_path.is_file():
         return NormalizationResult("error", "", origin, suffix.lstrip("."), error_code="not_found", error="file does not exist")
     if suffix not in SUPPORTED_SUFFIXES:
         return NormalizationResult("ignored", "", origin, suffix.lstrip("."), error_code="unsupported_format", error="format is not supported")
+    try:
+        if file_path.stat().st_size > max_bytes:
+            return NormalizationResult(
+                "error",
+                "",
+                origin,
+                suffix.lstrip("."),
+                error_code="document_too_large",
+                error=f"document exceeds the {max_bytes} byte limit",
+            )
+    except OSError as exc:
+        return NormalizationResult("error", "", origin, suffix.lstrip("."), error_code="read_failed", error=str(exc))
 
     warnings: list[str] = []
     title: str | None = None
@@ -174,6 +319,19 @@ def normalize_file(path: Path | str, *, source_url: str | None = None) -> Normal
             document = Document(str(file_path))
             content = "\n\n".join(paragraph.text for paragraph in document.paragraphs if paragraph.text.strip())
             title = _title_from_markdown(content, file_path.stem)
+        elif suffix == ".ipynb":
+            try:
+                document = json.loads(file_path.read_text(encoding="utf-8"))
+                content = _notebook_markdown(document, file_path.stem)
+            except (json.JSONDecodeError, UnicodeError, ValueError) as exc:
+                return NormalizationResult("error", "", origin, "ipynb", error_code="invalid_document", error=str(exc))
+            title = _title_from_markdown(content, file_path.stem)
+        elif suffix in {".xlsx", ".pptx"}:
+            try:
+                content = _ooxml_text(file_path, suffix)
+            except (ElementTree.ParseError, OSError, ValueError, zipfile.BadZipFile) as exc:
+                return NormalizationResult("error", "", origin, fmt, error_code="invalid_document", error=str(exc))
+            title = file_path.stem
         elif suffix == ".json":
             raw = file_path.read_text(encoding="utf-8", errors="replace")
             try:

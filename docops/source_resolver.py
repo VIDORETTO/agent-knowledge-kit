@@ -64,6 +64,11 @@ class SourceCandidate:
 
     def to_dict(self) -> dict[str, Any]:
         result = asdict(self)
+        from .manifest import redact_url
+
+        for key in ("canonical", "url", "repo_url", "docs_url"):
+            if isinstance(result.get(key), str):
+                result[key] = redact_url(result[key])
         result["evidence"] = list(self.evidence)
         return result
 
@@ -82,7 +87,7 @@ class SourceResolution:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "input": self.input,
+            "input": _redact_source_value(self.input),
             "kind": self.kind,
             "selected": self.selected.to_dict() if self.selected else None,
             "candidates": [candidate.to_dict() for candidate in self.candidates],
@@ -90,6 +95,12 @@ class SourceResolution:
             "decision_reason": self.decision_reason,
             "error": self.error,
         }
+
+
+def _redact_source_value(value: str) -> str:
+    from .manifest import redact_url
+
+    return redact_url(value)
 
 
 _DEFAULT_CATALOG: tuple[dict[str, Any], ...] = (
@@ -348,7 +359,7 @@ class SourceResolver:
                 version=ref,
                 scope=selected_scope,
                 language=language,
-                official=True if host == "github.com" else None,
+                official=None,
                 confidence=0.9 if host == "github.com" else 0.7,
                 evidence=("repository URL supplied by user",),
                 aliases=(repo,),

@@ -41,3 +41,14 @@ def test_doctor_includes_the_transport_security_audit(tmp_path: Path) -> None:
 
     assert report.checks["config"]["ok"] is True
     assert report.checks["config"]["transport"] == "stdio"
+
+
+def test_doctor_fails_when_the_present_config_is_not_safe(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='docops'\n", encoding="utf-8")
+    (tmp_path / "requirements.lock").write_text("# fixture\n", encoding="utf-8")
+    (tmp_path / "config.yaml").write_text("server:\n  transport: streamable-http\n", encoding="utf-8")
+
+    report = run_doctor(tmp_path, environ={"DOCOPS_SKIP_RAG": "1"})
+
+    assert not report.ok
+    assert report.checks["config"]["ok"] is False

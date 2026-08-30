@@ -36,9 +36,11 @@ quando a confiança é ambígua; uma URL de repositório pode receber `--version
 e `--scope`. Para catálogo próprio, passe `--catalog catalog.json` a `resolve`
 ou `run`.
 
-O `run` gera skill, router, corpus normalizado, `harness.json` e manifesto. Para
-indexar de fato no servidor local, acrescente `--index-rag`; sem essa opção o
-`rag/index.json` fica em modo `corpus-ready`, pronto para o processo MCP.
+O `run` gera skill, router, corpus normalizado, `config.yaml`,
+`harness.json` e manifesto. A configuração padrão é relativa ao pacote e não
+sobrescreve uma configuração existente. Para indexar de fato no servidor local,
+acrescente `--index-rag`; sem essa opção o `rag/index.json` fica em modo
+`corpus-ready`, pronto para o processo MCP.
 
 ## Atualização legada
 
