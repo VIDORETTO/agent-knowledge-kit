@@ -16,6 +16,7 @@ import venv
 from pathlib import Path
 
 BOOTSTRAP_PIP_VERSION = "26.2.1"
+BOOTSTRAP_SETUPTOOLS_VERSION = "84.0.0"
 
 
 def venv_python(root: Path) -> Path:
@@ -33,7 +34,7 @@ def install_command(python: Path, root: Path, *, rag: bool, formats: bool, dev: 
     elif formats:
         command.extend(["PyYAML==6.0.3", "pypdf==6.16.2", "python-docx==1.2.0"])
     if dev:
-        command.extend(["pytest==9.1.1", "ruff==0.12.7", "pip-audit==2.10.1"])
+        command.extend(["pytest==9.1.1", "ruff==0.12.7", "pip-audit==2.10.1", f"setuptools=={BOOTSTRAP_SETUPTOOLS_VERSION}"])
     return command
 
 
@@ -46,6 +47,7 @@ def pip_upgrade_command(python: Path) -> list[str]:
         "install",
         "--disable-pip-version-check",
         f"pip=={BOOTSTRAP_PIP_VERSION}",
+        f"setuptools=={BOOTSTRAP_SETUPTOOLS_VERSION}",
     ]
 
 

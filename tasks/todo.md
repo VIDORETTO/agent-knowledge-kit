@@ -37,8 +37,9 @@
 - [x] Remover caminhos absolutos do produto e preservar configurações já
   existentes; o pacote gerado usa caminhos relativos.
 - [x] Fixar dependências diretas: `knowledge-rag==4.8.5`, `PyYAML==6.0.3`,
-  `pypdf==6.16.2`, `python-docx==1.2.0`, `pytest==9.1.1`, `ruff==0.12.7` e
-  `pip-audit==2.10.1`; bootstrap usa `pip==26.2.1`.
+  `pypdf==6.16.2`, `python-docx==1.2.0`, `pytest==9.1.1`, `ruff==0.12.7`,
+  `pip-audit==2.10.1` e `setuptools==84.0.0`; bootstrap usa
+  `pip==26.2.1`/`setuptools==84.0.0`.
 - [x] Manter o vendor revisado de `knowledge-rag` sem Git aninhado e alinhar
   `serverInfo.version` com `4.8.5`.
 - [x] Configurar `.gitignore` e o auditor para impedir corpus adquirido,

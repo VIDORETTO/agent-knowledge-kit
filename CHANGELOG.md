@@ -13,7 +13,8 @@ No changes yet.
 - Adicionados bootstrap multiplataforma, auditoria de configuração/release,
   fixtures sintéticas e documentação de integração com harnesses externos.
 - Atualizado o conjunto direto de ferramentas para `pytest==9.1.1`,
-  `ruff==0.12.7`, `pip-audit==2.10.1` e bootstrap com `pip==26.2.1`.
+  `ruff==0.12.7`, `pip-audit==2.10.1`, `setuptools==84.0.0` e bootstrap com
+  `pip==26.2.1`/`setuptools==84.0.0`.
 - Adicionada auditoria de dependências com allowlist estreita e documentada
   para os quatro CVEs sem correção conhecida do ChromaDB; outros achados
   permanecem bloqueadores.

@@ -24,7 +24,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - name: Pin installer
-        run: python -m pip install --disable-pip-version-check --upgrade "pip==26.2.1"
+        run: python -m pip install --disable-pip-version-check --upgrade "pip==26.2.1" "setuptools==84.0.0"
       - name: Install operator and test profile
         run: python -m pip install --disable-pip-version-check -e ".[dev,formats]"
       - name: Dependency audit
@@ -50,6 +50,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Pin installer
+        run: python -m pip install --disable-pip-version-check --upgrade "pip==26.2.1" "setuptools==84.0.0"
+      - name: Install clean-clone test profile
+        run: python -m pip install --disable-pip-version-check -e ".[dev,formats]"
       - name: Verify outside checkout state
         run: python scripts/verify_clean_clone.py
 
@@ -63,6 +67,6 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Pin installer
-        run: python -m pip install --disable-pip-version-check --upgrade "pip==26.2.1"
+        run: python -m pip install --disable-pip-version-check --upgrade "pip==26.2.1" "setuptools==84.0.0"
       - name: Build and smoke-test wheel
         run: python scripts/verify_wheel.py

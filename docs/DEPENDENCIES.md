@@ -4,7 +4,8 @@ O núcleo `docops` usa a biblioteca padrão do Python. Os perfis opcionais são:
 
 - `formats`: `PyYAML==6.0.3`, `pypdf==6.16.2` e `python-docx==1.2.0`;
 - `rag`: `knowledge-rag==4.8.5` e suas dependências locais;
-- `dev`: `pytest==9.1.1`, `ruff==0.12.7` e `pip-audit==2.10.1`.
+- `dev`: `pytest==9.1.1`, `ruff==0.12.7`, `pip-audit==2.10.1` e
+  `setuptools==84.0.0`.
 
 As versões diretas são repetidas em `pyproject.toml`,
 `requirements-dev.txt` e `requirements.lock`. O bootstrap atualiza o

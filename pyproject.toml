@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=77.0.0,<83.0.0", "wheel>=0.45.0,<0.48.0"]
+requires = ["setuptools>=84.0.0,<85.0.0", "wheel>=0.45.0,<0.48.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -15,7 +15,7 @@ dependencies = []
 [project.optional-dependencies]
 rag = ["knowledge-rag==4.8.5"]
 formats = ["PyYAML==6.0.3", "pypdf==6.16.2", "python-docx==1.2.0"]
-dev = ["pytest==9.1.1", "ruff==0.12.7", "pip-audit==2.10.1"]
+dev = ["pytest==9.1.1", "ruff==0.12.7", "pip-audit==2.10.1", "setuptools==84.0.0"]
 
 [project.scripts]
 docops = "docops.__main__:main"
