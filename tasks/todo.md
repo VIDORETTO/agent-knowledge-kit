@@ -190,7 +190,7 @@
   push protection ativos; `git ls-files` não encontrou `.venv-rag/`, `data/`,
   `models_cache/`, `.rag_state.json` ou artefatos gerados.
 - [x] Aguardar os workflows públicos do commit final e registrar a prova:
-  CI completo `33320817617` (12 jobs verdes: 9 combinações rápidas, 3 clones
+  CI completo `33320817617` (13 jobs verdes: 9 combinações rápidas, 3 clones
   limpos e wheel), integração RAG `33320989219` e docs-reindex
   `33320989436`; todos no SHA `e8083ade7f9533cb220b3cf3288ed3b54a6e79c9`, com
   status `success` e URLs públicas:
