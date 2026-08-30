@@ -182,11 +182,13 @@
   release, aceitação, segurança e evidências; a API reportou `isDraft=false`,
   `isPrerelease=false`, e a página pública retornou HTTP 200:
   https://github.com/VIDORETTO/agent-knowledge-kit/releases/tag/v1.0.0.
-- [x] Fazer push do commit e da tag para `origin`; `origin/main` e a tag
-  apontam para `e8083ade7f9533cb220b3cf3288ed3b54a6e79c9`. A API pública confirmou
-  `isPrivate=false`, `visibility=PUBLIC`, Dependabot alerts/security updates,
-  secret scanning e push protection ativos; `git ls-files` não encontrou
-  `.venv-rag/`, `data/`, `models_cache/`, `.rag_state.json` ou artefatos gerados.
+- [x] Fazer push do commit e da tag para `origin`; a tag/release apontam para o
+  commit de produto validado `e8083ade7f9533cb220b3cf3288ed3b54a6e79c9`, e
+  `origin/main` recebeu depois o commit documental `73e6aa2216e0f87d0b92eed1364569d69d239eaa`
+  com esta evidência. A API pública confirmou `isPrivate=false`,
+  `visibility=PUBLIC`, Dependabot alerts/security updates, secret scanning e
+  push protection ativos; `git ls-files` não encontrou `.venv-rag/`, `data/`,
+  `models_cache/`, `.rag_state.json` ou artefatos gerados.
 - [x] Aguardar os workflows públicos do commit final e registrar a prova:
   CI completo `33320817617` (12 jobs verdes: 9 combinações rápidas, 3 clones
   limpos e wheel), integração RAG `33320989219` e docs-reindex
