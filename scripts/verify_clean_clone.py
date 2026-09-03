@@ -15,13 +15,18 @@ _IGNORED_DIRS = {
     ".git",
     ".venv",
     ".venv-rag",
+    ".venv-posix",
+    ".venv-windows",
     "data",
     "models_cache",
     ".pytest_cache",
+    ".ruff_cache",
     "__pycache__",
+    ".docops",
     "artifacts",
     "build",
     "dist",
+    ".scratch",
 }
 
 
@@ -59,10 +64,21 @@ def main() -> int:
         commands.append([args.python, "-m", "pytest", "-q"])
     reports: list[dict[str, object]] = []
     for command in commands:
-        completed = subprocess.run(command, cwd=destination, env=environment, check=False, capture_output=True, text=True)
-        reports.append({"command": command, "returncode": completed.returncode, "stdout": completed.stdout[-4000:], "stderr": completed.stderr[-4000:]})
+        completed = subprocess.run(
+            command, cwd=destination, env=environment, check=False, capture_output=True, text=True
+        )
+        reports.append(
+            {
+                "command": command,
+                "returncode": completed.returncode,
+                "stdout": completed.stdout[-4000:],
+                "stderr": completed.stderr[-4000:],
+            }
+        )
         if completed.returncode:
-            print(json.dumps({"ok": False, "clone": str(destination), "reports": reports}, indent=2, ensure_ascii=False))
+            print(
+                json.dumps({"ok": False, "clone": str(destination), "reports": reports}, indent=2, ensure_ascii=False)
+            )
             if not args.keep:
                 shutil.rmtree(Path(temporary), ignore_errors=True)
             return completed.returncode

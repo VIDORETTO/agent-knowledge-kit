@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from .observability import redact_report, redact_text
 from .source_resolver import SourceResolution, canonicalize_url
 from .storage import write_json_atomic
 
@@ -64,16 +65,17 @@ def redact_url(value: str) -> str:
     safe_query = _redact_query(parsed.query)
     if parsed.scheme == "file":
         basename = Path(parsed.path.rstrip("/")).name or "source"
-        return f"file://local/{basename}"
+        return redact_text(f"file://local/{basename}")
     if parsed.scheme not in {"http", "https"} or "@" not in parsed.netloc:
         if re.match(r"^[A-Za-z]:[\\/]", value) or os.path.isabs(value):
             return "<local-path>"
         try:
-            return canonicalize_url(urlunsplit((parsed.scheme, parsed.netloc, parsed.path, safe_query, "")))
+            canonical = canonicalize_url(urlunsplit((parsed.scheme, parsed.netloc, parsed.path, safe_query, "")))
+            return redact_text(canonical)
         except ValueError:
             return "<invalid-url>"
     host = parsed.netloc.rsplit("@", 1)[-1]
-    return urlunsplit((parsed.scheme, host, parsed.path or "/", safe_query, ""))
+    return redact_text(urlunsplit((parsed.scheme, host, parsed.path or "/", safe_query, "")))
 
 
 def _safe_local_reference(raw: Any, destination: Any) -> str | None:
@@ -88,7 +90,7 @@ def _safe_local_reference(raw: Any, destination: Any) -> str | None:
 
 
 def _safe_entry(entry: Mapping[str, Any]) -> dict[str, Any]:
-    result = redact_metadata(dict(entry))
+    result = redact_report(redact_metadata(dict(entry)))
     for key in ("source", "canonical"):
         reference = _safe_local_reference(entry.get(key), entry.get("destination"))
         if reference:
@@ -108,7 +110,16 @@ def redact_metadata(value: Any) -> Any:
     if isinstance(value, Mapping):
         result: dict[str, Any] = {}
         for key, item in value.items():
-            if key in {"input", "source", "url", "canonical", "repo_url", "docs_url", "requested_url", "final_url"} and isinstance(item, str):
+            if key in {
+                "input",
+                "source",
+                "url",
+                "canonical",
+                "repo_url",
+                "docs_url",
+                "requested_url",
+                "final_url",
+            } and isinstance(item, str):
                 result[str(key)] = redact_url(item)
             else:
                 result[str(key)] = redact_metadata(item)
@@ -130,6 +141,8 @@ def build_manifest(
     created_at: str | None = None,
     checkpoints: Mapping[str, Any] | None = None,
     metrics: Mapping[str, Any] | None = None,
+    outcome: Mapping[str, Any] | None = None,
+    readiness: Mapping[str, Any] | None = None,
     warnings: Iterable[str] = (),
     errors: Iterable[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
@@ -153,11 +166,16 @@ def build_manifest(
     accepted = sum(1 for entry in normalized_entries if entry.get("status") == "accepted")
     ignored = sum(1 for entry in normalized_entries if entry.get("status") == "ignored")
     entry_errors = sum(1 for entry in normalized_entries if entry.get("status") in {"error", "failed"})
-    explicit_errors = [redact_metadata(dict(error)) for error in errors]
+    explicit_errors = [redact_report(redact_metadata(dict(error))) for error in errors]
     all_errors = explicit_errors + [entry for entry in normalized_entries if entry.get("status") in {"error", "failed"}]
-    status = "blocked" if resolution.requires_decision and not selected else ("partial" if all_errors else "succeeded")
-    return {
+    default_status = (
+        "blocked" if resolution.requires_decision and not selected else ("partial" if all_errors else "succeeded")
+    )
+    terminal_outcome = dict(outcome or {})
+    status = str(terminal_outcome.get("status") or default_status)
+    payload = {
         "schema_version": MANIFEST_SCHEMA_VERSION,
+        "contract_version": 1,
         "run_id": run_id or f"run-{uuid.uuid4().hex}",
         "created_at": created_at or utc_now(),
         "status": status,
@@ -167,17 +185,22 @@ def build_manifest(
             "kind": resolution.kind,
             "candidate_count": len(resolution.candidates),
             "selected_confidence": selected.confidence if selected else None,
-            "evidence": list(selected.evidence) if selected else [],
+            "evidence": [redact_text(value) for value in selected.evidence] if selected else [],
         },
-        "provenance": redact_metadata(dict(provenance)),
+        "provenance": redact_report(redact_metadata(dict(provenance))),
         "entries": normalized_entries,
         "counts": {"accepted": accepted, "ignored": ignored, "errors": entry_errors + len(explicit_errors)},
         "artifacts": dict(artifacts),
-        "checkpoints": redact_metadata(dict(checkpoints or {})),
-        "metrics": redact_metadata(dict(metrics or {})),
-        "warnings": list(warnings),
+        "checkpoints": redact_report(redact_metadata(dict(checkpoints or {}))),
+        "metrics": redact_report(redact_metadata(dict(metrics or {}))),
+        "warnings": [redact_text(warning) for warning in warnings],
         "errors": all_errors,
     }
+    if readiness is not None:
+        payload["readiness"] = redact_report(redact_metadata(dict(readiness)))
+    if terminal_outcome:
+        payload["outcome"] = redact_report(redact_metadata(terminal_outcome))
+    return payload
 
 
 def write_manifest(path: Path | str, manifest: Mapping[str, Any]) -> None:

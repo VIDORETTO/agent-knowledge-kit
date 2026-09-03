@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from docops.mcp_client import first_json_payload, start_mcp_server  # noqa: E402
+from docops.observability import redact_report, redact_text  # noqa: E402
 from docops.runtime import discover_rag_python, runtime_environment  # noqa: E402
 
 
@@ -38,26 +39,35 @@ def main() -> int:
         reindex = first_json_payload(reindex_response) or {}
         deadline = time.monotonic() + args.seconds
         while time.monotonic() < deadline:
-            search_response = load.call("tools/call", name="search_knowledge", arguments={"query": "documentation", "max_results": 1}, timeout=120)
+            search_response = load.call(
+                "tools/call",
+                name="search_knowledge",
+                arguments={"query": "documentation", "max_results": 1},
+                timeout=120,
+            )
             if search_response.get("error"):
-                errors.append(str(search_response["error"]))
+                errors.append(redact_text(search_response["error"]))
             else:
                 searches += 1
             status_response = primary.call("tools/call", name="get_reindex_status", arguments={}, timeout=120)
             status_payload = first_json_payload(status_response) or {}
-            status = status_payload.get("reindex") if isinstance(status_payload.get("reindex"), dict) else status_payload
+            status = (
+                status_payload.get("reindex") if isinstance(status_payload.get("reindex"), dict) else status_payload
+            )
             if not status.get("active", False):
                 reindex = status
                 break
             time.sleep(0.25)
     except (OSError, RuntimeError, TimeoutError) as exc:
-        errors.append(str(exc))
+        errors.append(redact_text(exc))
     finally:
         if load is not None:
             load.close()
         if primary is not None:
             primary.close()
-    payload = {"ok": not errors and searches > 0, "searches": searches, "errors": errors, "reindex": reindex}
+    payload = redact_report(
+        {"ok": not errors and searches > 0, "searches": searches, "errors": errors, "reindex": reindex}
+    )
     print(json.dumps(payload, indent=2, ensure_ascii=False))
     return 0 if payload["ok"] else 1
 

@@ -58,9 +58,7 @@ def _run_audit(*, requirements: Path | None = None, local: bool = False) -> dict
         payload = json.loads(completed.stdout)
     except json.JSONDecodeError as exc:
         raise RuntimeError(
-            "pip-audit did not return JSON\n"
-            f"stdout: {completed.stdout[-2000:]}\n"
-            f"stderr: {completed.stderr[-2000:]}"
+            f"pip-audit did not return JSON\nstdout: {completed.stdout[-2000:]}\nstderr: {completed.stderr[-2000:]}"
         ) from exc
     if not isinstance(payload, dict) or not isinstance(payload.get("dependencies"), list):
         raise RuntimeError("pip-audit returned an unexpected JSON shape")

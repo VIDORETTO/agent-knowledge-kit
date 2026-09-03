@@ -36,9 +36,29 @@ from docops.runtime import discover_rag_python, runtime_environment  # noqa: E40
 from docops.storage import write_json_atomic  # noqa: E402
 
 _SUPPORTED_SUFFIXES = {
-    ".md", ".markdown", ".txt", ".rst", ".adoc", ".pdf", ".docx", ".py", ".c",
-    ".h", ".cpp", ".js", ".jsx", ".ts", ".tsx", ".json", ".yaml", ".yml",
-    ".xml", ".csv", ".ipynb", ".xlsx", ".pptx",
+    ".md",
+    ".markdown",
+    ".txt",
+    ".rst",
+    ".adoc",
+    ".pdf",
+    ".docx",
+    ".py",
+    ".c",
+    ".h",
+    ".cpp",
+    ".js",
+    ".jsx",
+    ".ts",
+    ".tsx",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".xml",
+    ".csv",
+    ".ipynb",
+    ".xlsx",
+    ".pptx",
 }
 
 
@@ -94,9 +114,7 @@ class McpClient:
     def call(self, method: str, *, timeout: float = 120.0, **params) -> dict:
         req_id = self._next_id
         self._next_id += 1
-        self.send_json(
-            {"jsonrpc": "2.0", "id": req_id, "method": method, "params": params}
-        )
+        self.send_json({"jsonrpc": "2.0", "id": req_id, "method": method, "params": params})
         while True:
             msg = self.recv_json(timeout=timeout)
             if msg.get("id") == req_id:
@@ -135,9 +153,15 @@ def connect() -> McpClient:
     env.pop("HF_ENDPOINT", None)  # hf-mirror quebra download; usar cdn.hf.co padrão
     proc = subprocess.Popen(
         [str(rag_python.path), "-m", "mcp_server.server"],
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        env=env, cwd=str(PROJECT_ROOT),
-        text=True, encoding="utf-8", errors="replace", bufsize=1,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+        cwd=str(PROJECT_ROOT),
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        bufsize=1,
     )
     threading.Thread(target=drain, args=(proc,), daemon=True).start()
     client = McpClient(proc)
@@ -205,8 +229,10 @@ def apply(direct: bool = False) -> int:
     if direct:
         # Modo lote: deixa o servidor varrer documents/ (detecção mtime/size é
         # mais eficiente que add_document por arquivo em corpora grandes).
-        print(f"Modo lote: reindex_documents(force=True) para {len(adds)} add / "
-              f"{len(updates)} update / {len(removes)} remove")
+        print(
+            f"Modo lote: reindex_documents(force=True) para {len(adds)} add / "
+            f"{len(updates)} update / {len(removes)} remove"
+        )
         client.call("tools/call", name="reindex_documents", arguments={"force": True})
         deadline = time.time() + 1800
         while time.time() < deadline:
@@ -216,7 +242,7 @@ def apply(direct: bool = False) -> int:
                 data = json.loads(text)
             except json.JSONDecodeError:
                 data = {}
-            status = (data.get("reindex") or {})
+            status = data.get("reindex") or {}
             if not status.get("active", False):
                 print("Reindex completo.")
                 save_state(current)
@@ -234,8 +260,12 @@ def apply(direct: bool = False) -> int:
         path = DOCUMENTS_DIR / rel
         content = path.read_text(encoding="utf-8", errors="replace")
         try:
-            r = client.call("tools/call", timeout=MUTATION_TIMEOUT_SECONDS, name="add_document",
-                            arguments={"filepath": rel, "content": content, "category": "general"})
+            r = client.call(
+                "tools/call",
+                timeout=MUTATION_TIMEOUT_SECONDS,
+                name="add_document",
+                arguments={"filepath": rel, "content": content, "category": "general"},
+            )
         except (TimeoutError, RuntimeError) as exc:
             print(f"  add [{i}/{len(adds)}] {rel} FALHOU: {exc}")
             failed.add(rel)
@@ -253,8 +283,12 @@ def apply(direct: bool = False) -> int:
         path = DOCUMENTS_DIR / rel
         content = path.read_text(encoding="utf-8", errors="replace")
         try:
-            r = client.call("tools/call", timeout=MUTATION_TIMEOUT_SECONDS, name="update_document",
-                            arguments={"filepath": rel, "content": content})
+            r = client.call(
+                "tools/call",
+                timeout=MUTATION_TIMEOUT_SECONDS,
+                name="update_document",
+                arguments={"filepath": rel, "content": content},
+            )
         except (TimeoutError, RuntimeError) as exc:
             print(f"  update [{i}/{len(updates)}] {rel} FALHOU: {exc}")
             failed.add(rel)
@@ -270,8 +304,12 @@ def apply(direct: bool = False) -> int:
 
     for rel in removes:
         try:
-            r = client.call("tools/call", timeout=MUTATION_TIMEOUT_SECONDS, name="remove_document",
-                            arguments={"filepath": rel, "delete_file": False})
+            r = client.call(
+                "tools/call",
+                timeout=MUTATION_TIMEOUT_SECONDS,
+                name="remove_document",
+                arguments={"filepath": rel, "delete_file": False},
+            )
         except (TimeoutError, RuntimeError) as exc:
             print(f"  remove {rel} FALHOU: {exc}")
             failed.add(rel)
@@ -330,8 +368,10 @@ def status() -> int:
     for p in r.get("result", {}).get("content", []):
         try:
             stats = json.loads(p["text"])["stats"]
-            print(f"Servidor: {stats['total_documents']} docs / {stats['total_chunks']} chunks "
-                  f"(embedding {stats.get('embedding_model')}, chunk_size {stats.get('chunk_size')})")
+            print(
+                f"Servidor: {stats['total_documents']} docs / {stats['total_chunks']} chunks "
+                f"(embedding {stats.get('embedding_model')}, chunk_size {stats.get('chunk_size')})"
+            )
         except (KeyError, json.JSONDecodeError):
             print(p.get("text", ""))
     return 0
@@ -340,10 +380,13 @@ def status() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=["plan", "apply", "status"])
-    parser.add_argument("--direct", action="store_true",
-                        help="apply em modo lote (reindex_documents force) — EXPERIMENTAL; "
-                             "no Windows o reindex em lote pode congelar após ~20 docs; "
-                             "preferir o modo por arquivo (padrão, com checkpoint)")
+    parser.add_argument(
+        "--direct",
+        action="store_true",
+        help="apply em modo lote (reindex_documents force) — EXPERIMENTAL; "
+        "no Windows o reindex em lote pode congelar após ~20 docs; "
+        "preferir o modo por arquivo (padrão, com checkpoint)",
+    )
     args = parser.parse_args()
 
     if not DOCUMENTS_DIR.exists():

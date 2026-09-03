@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Mapping
 
 from .config_audit import audit_config_file
-from .runtime import _supports_knowledge_rag, discover_rag_python
+from .runtime import _supports_knowledge_rag, discover_rag_python, platform_venv_name, venv_config_matches_host
 
 
 @dataclass(frozen=True)
@@ -54,23 +54,29 @@ class DoctorReport:
 
 
 def _candidate_paths(project_root: Path) -> list[tuple[Path, str]]:
-    """Return venv layouts in a platform-neutral order.
-
-    A clean clone can be prepared on one operating system and inspected on
-    another, so both POSIX and Windows layouts are considered regardless of
-    the current host.
-    """
+    """Return runnable venv candidates without selecting a foreign OS config."""
 
     candidates: list[tuple[Path, str]] = []
-    for venv_name in (".venv", ".venv-rag"):
-        for relative in (
-            Path("bin") / "python",
-            Path("bin") / "python3",
-            Path("Scripts") / "python.exe",
-            Path("Scripts") / "python",
-        ):
-            source = "project-venv" if venv_name == ".venv" else "rag-venv"
-            candidates.append((project_root / venv_name / relative, source))
+    platform_specific = platform_venv_name()
+    other_platform = ".venv-posix" if platform_specific == ".venv-windows" else ".venv-windows"
+    if os.name == "nt":
+        native = (Path("Scripts") / "python.exe", Path("Scripts") / "python")
+        fallback = (Path("bin") / "python", Path("bin") / "python3")
+    else:
+        native = (Path("bin") / "python", Path("bin") / "python3")
+        fallback = (Path("Scripts") / "python.exe", Path("Scripts") / "python")
+    for venv_name in (platform_specific, ".venv", ".venv-rag", other_platform):
+        directory = project_root / venv_name
+        if not venv_config_matches_host(directory):
+            continue
+        source = "project-venv" if venv_name != ".venv-rag" else "rag-venv"
+        for relative in native:
+            candidates.append((directory / relative, source))
+        # A fixture may contain a layout-neutral placeholder without a config;
+        # real cross-platform venvs are never selected through this fallback.
+        if not (directory / "pyvenv.cfg").is_file():
+            for relative in fallback:
+                candidates.append((directory / relative, source))
     return candidates
 
 
@@ -144,7 +150,11 @@ def run_doctor(
                 "errors": [{"code": "config_unreadable", "message": str(exc)}],
             }
         else:
-            checks["config"] = {"ok": config_result.ok, "transport": config_result.transport, "errors": config_result.errors}
+            checks["config"] = {
+                "ok": config_result.ok,
+                "transport": config_result.transport,
+                "errors": config_result.errors,
+            }
 
     skip_rag = env.get("DOCOPS_SKIP_RAG", "").lower() in {"1", "true", "yes"}
     if skip_rag:

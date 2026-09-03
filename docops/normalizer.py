@@ -13,9 +13,31 @@ from xml.etree import ElementTree
 from .web_acquirer import normalize_html
 
 SUPPORTED_SUFFIXES = {
-    ".md", ".markdown", ".rst", ".adoc", ".txt", ".html", ".htm", ".pdf",
-    ".docx", ".py", ".c", ".h", ".cpp", ".js", ".jsx", ".ts", ".tsx",
-    ".json", ".yaml", ".yml", ".xml", ".csv", ".ipynb", ".xlsx", ".pptx",
+    ".md",
+    ".markdown",
+    ".rst",
+    ".adoc",
+    ".txt",
+    ".html",
+    ".htm",
+    ".pdf",
+    ".docx",
+    ".py",
+    ".c",
+    ".h",
+    ".cpp",
+    ".js",
+    ".jsx",
+    ".ts",
+    ".tsx",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".xml",
+    ".csv",
+    ".ipynb",
+    ".xlsx",
+    ".pptx",
 }
 MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
 
@@ -253,10 +275,7 @@ def _pptx_markdown(archive: zipfile.ZipFile, members: list[str], fallback: str) 
     for index, name in enumerate(slides, 1):
         root = ElementTree.fromstring(archive.read(name))
         text = "\n".join(
-            value
-            for element in root.iter()
-            if _xml_local_name(element.tag) == "t"
-            if (value := _xml_text(element))
+            value for element in root.iter() if _xml_local_name(element.tag) == "t" if (value := _xml_text(element))
         )
         if text:
             lines.extend([f"\n## Slide {index}", "", text])
@@ -278,11 +297,22 @@ def normalize_file(
     if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 1:
         raise ValueError("max_bytes must be a positive integer")
     if input_path.is_symlink():
-        return NormalizationResult("error", "", origin, suffix.lstrip("."), error_code="symlink_not_allowed", error="symbolic links are not ingested")
+        return NormalizationResult(
+            "error",
+            "",
+            origin,
+            suffix.lstrip("."),
+            error_code="symlink_not_allowed",
+            error="symbolic links are not ingested",
+        )
     if not file_path.is_file():
-        return NormalizationResult("error", "", origin, suffix.lstrip("."), error_code="not_found", error="file does not exist")
+        return NormalizationResult(
+            "error", "", origin, suffix.lstrip("."), error_code="not_found", error="file does not exist"
+        )
     if suffix not in SUPPORTED_SUFFIXES:
-        return NormalizationResult("ignored", "", origin, suffix.lstrip("."), error_code="unsupported_format", error="format is not supported")
+        return NormalizationResult(
+            "ignored", "", origin, suffix.lstrip("."), error_code="unsupported_format", error="format is not supported"
+        )
     try:
         if file_path.stat().st_size > max_bytes:
             return NormalizationResult(
@@ -309,13 +339,27 @@ def normalize_file(
             content = _extract_pdf(file_path)
             fmt = "pdf"
             if not content:
-                return NormalizationResult("ocr_required", "", origin, fmt, error_code="ocr_required", error="no extractable text; run OCR before ingestion")
+                return NormalizationResult(
+                    "ocr_required",
+                    "",
+                    origin,
+                    fmt,
+                    error_code="ocr_required",
+                    error="no extractable text; run OCR before ingestion",
+                )
             title = file_path.stem
         elif suffix == ".docx":
             try:
                 from docx import Document  # type: ignore[import-not-found]
             except ImportError:
-                return NormalizationResult("dependency_missing", "", origin, "docx", error_code="dependency_missing", error="python-docx is required")
+                return NormalizationResult(
+                    "dependency_missing",
+                    "",
+                    origin,
+                    "docx",
+                    error_code="dependency_missing",
+                    error="python-docx is required",
+                )
             document = Document(str(file_path))
             content = "\n\n".join(paragraph.text for paragraph in document.paragraphs if paragraph.text.strip())
             title = _title_from_markdown(content, file_path.stem)
@@ -340,7 +384,11 @@ def normalize_file(
                 content = raw
                 warnings.append("invalid JSON preserved as text")
             else:
-                if isinstance(parsed, dict) and ("openapi" in parsed or "swagger" in parsed) and isinstance(parsed.get("paths"), dict):
+                if (
+                    isinstance(parsed, dict)
+                    and ("openapi" in parsed or "swagger" in parsed)
+                    and isinstance(parsed.get("paths"), dict)
+                ):
                     content = _openapi_markdown(parsed)
                     fmt = "openapi"
                     title = _title_from_markdown(content, file_path.stem)
@@ -351,10 +399,16 @@ def normalize_file(
             try:
                 parsed = _load_yaml(file_path)
             except RuntimeError as exc:
-                return NormalizationResult("dependency_missing", "", origin, "yaml", error_code="dependency_missing", error=str(exc))
+                return NormalizationResult(
+                    "dependency_missing", "", origin, "yaml", error_code="dependency_missing", error=str(exc)
+                )
             except ValueError as exc:
                 return NormalizationResult("error", "", origin, "yaml", error_code="invalid_document", error=str(exc))
-            if isinstance(parsed, dict) and ("openapi" in parsed or "swagger" in parsed) and isinstance(parsed.get("paths"), dict):
+            if (
+                isinstance(parsed, dict)
+                and ("openapi" in parsed or "swagger" in parsed)
+                and isinstance(parsed.get("paths"), dict)
+            ):
                 content = _openapi_markdown(parsed)
                 fmt = "openapi"
                 title = _title_from_markdown(content, file_path.stem)
@@ -369,7 +423,9 @@ def normalize_file(
 
     content = content.strip()
     if not content:
-        return NormalizationResult("error", "", origin, fmt, title=title, error_code="empty_document", error="document has no text")
+        return NormalizationResult(
+            "error", "", origin, fmt, title=title, error_code="empty_document", error="document has no text"
+        )
     untrusted, injection_warnings = _untrusted_warnings(content)
     warnings.extend(injection_warnings)
     return NormalizationResult("accepted", content, origin, fmt, title=title, warnings=warnings, untrusted=untrusted)

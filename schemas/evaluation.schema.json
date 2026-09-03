@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consulta-documentacao.invalid/schemas/evaluation.schema.json",
+  "title": "docops retrieval evaluation result",
+  "type": "object",
+  "required": ["schema_version", "ok", "metrics", "cases", "errors", "warnings", "diagnostics", "thresholds", "metadata"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "ok": {"type": "boolean"},
+    "metrics": {"type": "object"},
+    "cases": {"type": "array", "items": {"type": "object"}},
+    "errors": {"type": "array", "items": {"type": "object"}},
+    "warnings": {"type": "array", "items": {"type": "string"}},
+    "diagnostics": {"type": "array", "items": {"type": "string"}},
+    "thresholds": {"type": "object"},
+    "metadata": {"type": "object"}
+  }
+}

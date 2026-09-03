@@ -22,11 +22,16 @@ python scripts/mcp_smoke.py "background tasks"
 No Windows use `scripts/bootstrap.ps1`; em Linux/macOS use
 `sh scripts/bootstrap.sh`. `doctor` trata o RAG como capacidade opcional;
 `DOCOPS_REQUIRE_RAG=1 python -m docops doctor --json` torna-o obrigatório.
+Se o mesmo checkout for acessado por Windows e WSL, o bootstrap detecta um
+`.venv` de outra plataforma e usa `.venv-windows` ou `.venv-posix`, evitando
+que um ambiente nativo seja sobrescrito; esses diretórios são ignorados pelo
+Git.
 
 ## Protocolo único de fonte
 
 ```text
 python -m docops resolve <nome|URL|repo|pasta> --json
+python -m docops plan <nome|URL|repo|pasta> --output <pacote> --license <id> --json
 python -m docops run <nome|URL|repo|pasta> --output <pacote> --license <id>
 python -m docops validate <pacote> --json
 ```
@@ -36,11 +41,20 @@ quando a confiança é ambígua; uma URL de repositório pode receber `--version
 e `--scope`. Para catálogo próprio, passe `--catalog catalog.json` a `resolve`
 ou `run`.
 
-O `run` gera skill, router, corpus normalizado, `config.yaml`,
-`harness.json` e manifesto. A configuração padrão é relativa ao pacote e não
-sobrescreve uma configuração existente. Para indexar de fato no servidor local,
-acrescente `--index-rag`; sem essa opção o `rag/index.json` fica em modo
-`corpus-ready`, pronto para o processo MCP.
+`plan` executa as fases somente leitura, calcula add/update/remove, valida
+licença e mostra blockers/readiness esperados. `run` aplica esse plano em
+staging; `--mode create` e `--mode update` impõem as invariantes de ciclo de
+vida, e `--mode dry-run` é o alias sem efeitos. Uma falha deixa a geração ativa
+intacta e pode deixar staging resumível; `inspect()` mostra tentativas e
+resíduos sem conteúdo privado e espera um writer vivo terminar a promoção.
+`cleanup()` remove apenas resíduos expirados segundo a política de retenção;
+ela nunca remove a geração ativa nem staging resumível recente.
+
+O `run` gera skill, router, corpus normalizado, `config.yaml`, `harness.json` e
+manifesto. A configuração padrão é relativa ao pacote e não sobrescreve uma
+configuração existente. Para indexar de fato no servidor local, acrescente
+`--index-rag`; sem essa opção o `rag/index.json` fica em modo `corpus-ready`,
+pronto para o processo MCP.
 
 ## Atualização legada
 
@@ -81,13 +95,20 @@ local e o cache de modelos fica em `models_cache/`, que é ignorado.
 
 ```text
 python -m docops golden-candidates <pacote> --json
-python -m docops evaluate --package <pacote> --cases <golden-revisado.json> --json
+python -m docops evaluate --package <pacote> --cases <golden-revisado.json> --adapter lexical --json
+python -m docops evaluate --package <pacote> --cases <golden-revisado.json> --adapter mcp --runtime-root . --json
 python scripts/evaluate_golden.py --cases golden-set/test-cases.json
 ```
 
-O avaliador lexical local exige `reviewed: true`; a avaliação real do backend
-MCP continua sendo feita por `evaluate_retrieval`. Toda resposta factual do
-harness deve citar `path#secao` ou `path:linha`.
+O adapter `lexical` é um diagnóstico rápido; `memory` é adequado ao TDD; o
+adapter `mcp` é a avaliação híbrida real e exige `rag/index.json` em modo
+`indexed`. Todos exigem Golden revisado e o relatório explicita backend,
+versão, perfil, corpus, rota, top-k e casos. Toda resposta factual do harness
+deve citar `path#secao` ou `path:linha`.
+
+O suporte publicado é Python 3.11–3.13 em Ubuntu, Windows e macOS; Python 3.14
+é somente tolerado localmente. A matriz normativa está em
+`docs/SUPPORT-MATRIX.json` e é validada por `scripts/check_support_matrix.py`.
 
 ## Auditoria de dependências
 
@@ -101,3 +122,6 @@ O comando falha para qualquer advisory fora do residual explicitamente
 documentado em [SECURITY.md](../SECURITY.md). Trocar o perfil de embedding
 exige `reindex_documents(full_rebuild=True)`; não reutilize um índice com
 dimensão ou modelo diferentes.
+Para integração Python, use a interface raiz documentada em
+[`docs/PYTHON-API.md`](PYTHON-API.md); `docops.pipeline` permanece somente como
+adapter de compatibilidade.

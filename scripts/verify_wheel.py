@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -35,7 +36,12 @@ def main() -> int:
         wheel = wheels[0]
         with zipfile.ZipFile(wheel) as archive:
             names = set(archive.namelist())
-            required = {"docops/__init__.py", "docops/templates/router.md"}
+            required = {
+                "docops/__init__.py",
+                "docops/templates/router.md",
+                "docops/schemas/manifest.schema.json",
+                "docops/schemas/evaluation.schema.json",
+            }
             missing = sorted(required - names)
             if missing:
                 raise RuntimeError(f"wheel is missing package files: {missing}")
@@ -50,21 +56,132 @@ def main() -> int:
             capture_output=True,
             text=True,
         )
+        # The checkout carries the reviewed, pinned backend source while the
+        # operator wheel intentionally does not vendor it.  Copy that exact
+        # backend fixture into the isolated target so this gate exercises the
+        # wheel with an explicit installed-package runtime rather than an
+        # arbitrary globally installed implementation.  The fixture is copied
+        # instead of rebuilt because its upstream packaging metadata includes
+        # duplicate data entries on some hatchling versions.
+        reviewed_backend = root / "skills" / "vendor" / "knowledge-rag"
+        if reviewed_backend.is_dir():
+            shutil.copytree(reviewed_backend / "mcp_server", target_dir / "mcp_server")
         environment = dict(os.environ)
-        environment["PYTHONPATH"] = str(target_dir)
+        inherited_pythonpath = environment.get("PYTHONPATH", "")
+        environment["PYTHONPATH"] = os.pathsep.join(value for value in (str(target_dir), inherited_pythonpath) if value)
+        # The wheel gate must exercise the same interpreter for the installed
+        # operator and the optional MCP backend.  The environment variable is
+        # intentionally scoped to this temporary subprocess environment.
+        environment["DOCOPS_RAG_PYTHON"] = str(sys.executable)
         subprocess.run(
-            [
-                sys.executable,
-                "-c",
-                "import docops; from docops.pipeline import _router_artifact; "
-                f"assert docops.__version__ == {__version__!r}; "
-                "assert 'search_knowledge' in _router_artifact('smoke')",
-            ],
+            [sys.executable, "-c", f"import docops; assert docops.__version__ == {__version__!r}; "],
             check=True,
             cwd=workspace,
             env=environment,
         )
-    print(json.dumps({"ok": True, "wheel": wheel.name, "version": __version__}))
+        source = workspace / "source"
+        source.mkdir()
+        (source / "guide.md").write_text("# Guide\nRetry policy and exact defaults.\n", encoding="utf-8")
+        package = workspace / "package"
+        cases = workspace / "cases.json"
+        cases.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "reviewed": True,
+                    "cases": [{"query": "retry policy", "expected_filepath": "guide.md", "reviewed": True}],
+                }
+            ),
+            encoding="utf-8",
+        )
+        rag_probe = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import mcp_server.server",
+            ],
+            check=False,
+            cwd=workspace,
+            env=environment,
+            capture_output=True,
+            text=True,
+        )
+        rag_available = rag_probe.returncode == 0
+        require_rag = environment.get("DOCOPS_REQUIRE_WHEEL_RAG", "").strip().casefold() in {"1", "true", "yes"}
+        if require_rag and not rag_available:
+            raise RuntimeError("wheel RAG gate requested but knowledge-rag is not installed in the test interpreter")
+        adapter = "mcp" if rag_available else "memory"
+        run_command = [
+            sys.executable,
+            "-m",
+            "docops",
+            "run",
+            str(source),
+            "--output",
+            str(package),
+            "--slug",
+            "wheel",
+            "--license",
+            "MIT",
+            "--runtime-root",
+            str(workspace),
+        ]
+        if rag_available:
+            run_command.append("--index-rag")
+        commands = [
+            run_command,
+            [sys.executable, "-m", "docops", "validate", str(package), "--json"],
+            [
+                sys.executable,
+                "-m",
+                "docops",
+                "evaluate",
+                "--package",
+                str(package),
+                "--cases",
+                str(cases),
+                "--adapter",
+                adapter,
+                "--runtime-root",
+                str(workspace),
+                "--json",
+            ],
+        ]
+        evaluation: dict[str, object] | None = None
+        for command in commands:
+            completed = subprocess.run(
+                command, check=False, cwd=workspace, env=environment, capture_output=True, text=True
+            )
+            if completed.returncode:
+                raise RuntimeError(
+                    f"wheel end-to-end command failed: {command}: {completed.stdout[-2000:]} {completed.stderr[-2000:]}"
+                )
+            if command[3] == "evaluate":
+                try:
+                    parsed = json.loads(completed.stdout)
+                except json.JSONDecodeError as exc:
+                    raise RuntimeError("wheel evaluation did not emit JSON") from exc
+                if not isinstance(parsed, dict):
+                    raise RuntimeError("wheel evaluation emitted an invalid JSON object")
+                evaluation = parsed
+        if evaluation is None or evaluation.get("ok") is not True:
+            raise RuntimeError("wheel evaluation did not produce a successful result")
+        metadata = evaluation.get("metadata")
+        if not isinstance(metadata, dict) or metadata.get("adapter") != adapter:
+            raise RuntimeError(f"wheel evaluation did not report the adapter that was executed: {evaluation!r}")
+        if rag_available and (metadata.get("backend") != "knowledge-rag" or not metadata.get("profile")):
+            raise RuntimeError("wheel RAG evaluation did not report backend provenance and profile")
+        manifest_text = (package / "manifest.json").read_text(encoding="utf-8")
+        if str(workspace) in manifest_text or str(PROJECT_ROOT) in manifest_text:
+            raise RuntimeError("wheel package leaked a machine-local path into its manifest")
+        if rag_available:
+            manifest = json.loads(manifest_text)
+            runtime = manifest.get("provenance", {}).get("runtime", {}) if isinstance(manifest, dict) else {}
+            if runtime.get("backend_source") != "installed-package":
+                raise RuntimeError("wheel RAG gate did not record installed-package runtime provenance")
+    print(
+        json.dumps({"ok": True, "wheel": wheel.name, "version": __version__, "adapter": adapter, "rag": rag_available})
+    )
     return 0
 
 

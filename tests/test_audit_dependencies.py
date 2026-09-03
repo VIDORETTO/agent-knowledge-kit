@@ -12,8 +12,7 @@ def _dependency(name: str, version: str, *vulnerability_ids: str) -> dict[str, o
         "name": name,
         "version": version,
         "vulns": [
-            {"id": vulnerability_id, "aliases": [], "fix_versions": []}
-            for vulnerability_id in vulnerability_ids
+            {"id": vulnerability_id, "aliases": [], "fix_versions": []} for vulnerability_id in vulnerability_ids
         ],
     }
 
@@ -38,4 +37,3 @@ def test_dependency_audit_rejects_future_chroma_and_non_chroma_findings() -> Non
         ("chromadb", "CVE-2099-00001"),
         ("pytest", "CVE-2099-00002"),
     }
-

@@ -43,7 +43,9 @@ def fixture_server() -> str:
                 self.end_headers()
                 return
             self.send_response(200)
-            content_type = "text/plain" if path == "/robots.txt" else "application/xml" if path.endswith(".xml") else "text/html"
+            content_type = (
+                "text/plain" if path == "/robots.txt" else "application/xml" if path.endswith(".xml") else "text/html"
+            )
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -104,7 +106,11 @@ def test_fetch_rechecks_dns_and_rejects_a_rebinding_to_private_address(monkeypat
         return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (address, 80))]
 
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
-    monkeypatch.setattr(socket, "create_connection", lambda *_args, **_kwargs: pytest.fail("private address must be rejected before connect"))
+    monkeypatch.setattr(
+        socket,
+        "create_connection",
+        lambda *_args, **_kwargs: pytest.fail("private address must be rejected before connect"),
+    )
 
     with pytest.raises(NetworkPolicyError) as caught:
         WebAcquirer(policy=FetchPolicy(retries=0)).fetch("http://docs.example.test/")
@@ -154,10 +160,7 @@ def test_sitemap_crawl_applies_limits_filters_and_deduplication() -> None:
     assert len(accepted) == 1
     assert accepted[0]["canonical"] == f"{base}/allowed"
     assert result.counts["ignored"] >= 2
-    assert all(
-        entry["status"] != "accepted" or "outside.test" not in str(entry)
-        for entry in result.entries
-    )
+    assert all(entry["status"] != "accepted" or "outside.test" not in str(entry) for entry in result.entries)
     assert any(entry.get("reason") == "external-host" for entry in result.entries)
 
 

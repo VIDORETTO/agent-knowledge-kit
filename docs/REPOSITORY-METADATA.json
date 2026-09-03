@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "name": "consulta-documentacao",
+  "display_name": "consulta-documentacao",
+  "description": "Portable, deterministic documentation-to-knowledge orchestration with optional local RAG/MCP.",
+  "version": "1.1.0",
+  "maturity": "release-candidate",
+  "license": "MIT",
+  "repository": "https://github.com/VIDORETTO/agent-knowledge-kit",
+  "homepage": "https://github.com/VIDORETTO/agent-knowledge-kit",
+  "issues": "https://github.com/VIDORETTO/agent-knowledge-kit/issues",
+  "documentation": "https://github.com/VIDORETTO/agent-knowledge-kit/tree/main/docs",
+  "topics": ["agent-skills", "documentation", "knowledge-base", "mcp", "rag"],
+  "ownership": {
+    "codeowners": ".github/CODEOWNERS",
+    "maintainers": "community/MAINTAINERS.md"
+  },
+  "support": "docs/SUPPORT-MATRIX.json",
+  "release": {
+    "status": "candidate",
+    "publication_automated": false,
+    "human_authorization_required": true,
+    "protections_and_permissions": "human-review-required"
+  }
+}

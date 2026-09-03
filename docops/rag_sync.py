@@ -10,7 +10,8 @@ from typing import Any
 
 from .config_audit import audit_config_file
 from .mcp_client import first_json_payload, start_mcp_server
-from .runtime import discover_rag_python, runtime_environment
+from .observability import redact_report
+from .runtime import discover_rag_python, runtime_environment, runtime_provenance
 from .storage import write_text_atomic
 
 
@@ -39,9 +40,31 @@ def package_rag_config() -> dict[str, Any]:
         },
         "documents": {
             "supported_formats": [
-                ".md", ".markdown", ".txt", ".rst", ".adoc", ".html", ".htm",
-                ".json", ".yaml", ".yml", ".xml", ".csv", ".py", ".c", ".h",
-                ".cpp", ".js", ".jsx", ".ts", ".tsx", ".ipynb", ".xlsx", ".pptx", ".pdf", ".docx",
+                ".md",
+                ".markdown",
+                ".txt",
+                ".rst",
+                ".adoc",
+                ".html",
+                ".htm",
+                ".json",
+                ".yaml",
+                ".yml",
+                ".xml",
+                ".csv",
+                ".py",
+                ".c",
+                ".h",
+                ".cpp",
+                ".js",
+                ".jsx",
+                ".ts",
+                ".tsx",
+                ".ipynb",
+                ".xlsx",
+                ".pptx",
+                ".pdf",
+                ".docx",
             ],
             "exclude_patterns": ["data", "models_cache", ".venv", ".git"],
             "chunking": {"chunk_size": 1000, "chunk_overlap": 200},
@@ -109,15 +132,33 @@ class RagSyncResult:
     reindex: dict[str, Any] = field(default_factory=dict)
     smoke: dict[str, Any] = field(default_factory=dict)
     error: dict[str, str] | None = None
+    provenance: dict[str, Any] = field(default_factory=dict)
+    diagnostics: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"ok": self.ok, "stats": self.stats, "reindex": self.reindex, "smoke": self.smoke, "error": self.error}
+        return redact_report(
+            {
+                "ok": self.ok,
+                "stats": self.stats,
+                "reindex": self.reindex,
+                "smoke": self.smoke,
+                "error": self.error,
+                "provenance": self.provenance,
+                "diagnostics": self.diagnostics,
+            }
+        )
 
 
 class RagSynchronizer:
     """Run the real knowledge-rag MCP reindex only when explicitly requested."""
 
-    def __init__(self, *, python: Path | str | None = None, runtime_root: Path | str | None = None, timeout_seconds: float = 1800.0) -> None:
+    def __init__(
+        self,
+        *,
+        python: Path | str | None = None,
+        runtime_root: Path | str | None = None,
+        timeout_seconds: float = 1800.0,
+    ) -> None:
         self.python = Path(python) if python else None
         self.runtime_root = Path(runtime_root).resolve() if runtime_root else None
         self.timeout_seconds = timeout_seconds
@@ -126,21 +167,53 @@ class RagSynchronizer:
         root = Path(package_root).resolve()
         config_path = root / "config.yaml"
         if config_path.is_symlink():
-            return RagSyncResult(False, error={"code": "unsafe_rag_config", "message": "package config.yaml must not be a symbolic link"})
+            return RagSyncResult(
+                False, error={"code": "unsafe_rag_config", "message": "package config.yaml must not be a symbolic link"}
+            )
         if not config_path.exists():
             write_text_atomic(config_path, package_rag_config_text())
         config_audit = audit_config_file(config_path)
         if not config_audit.ok:
-            return RagSyncResult(False, error={"code": "unsafe_rag_config", "message": "; ".join(error["message"] for error in config_audit.errors)})
-        executable = self.python or discover_rag_python(self.runtime_root or root).path
+            return RagSyncResult(
+                False,
+                error={
+                    "code": "unsafe_rag_config",
+                    "message": "; ".join(error["message"] for error in config_audit.errors),
+                },
+            )
+        runtime_root = self.runtime_root or root
+        executable = self.python or discover_rag_python(runtime_root).path
         if not executable.is_file():
-            return RagSyncResult(False, error={"code": "rag_python_missing", "message": str(executable)})
+            return RagSyncResult(
+                False, error={"code": "rag_python_missing", "message": "knowledge-rag Python executable is unavailable"}
+            )
         client = None
+        reviewed_vendor = self.runtime_root / "skills" / "vendor" / "knowledge-rag" if self.runtime_root else None
+        runtime_env = runtime_environment(root, vendor_root=reviewed_vendor)
+        expected_provenance = runtime_provenance(
+            runtime_root,
+            python=executable,
+            environ=runtime_env,
+        )
         try:
-            reviewed_vendor = self.runtime_root / "skills" / "vendor" / "knowledge-rag" if self.runtime_root else None
-            client = start_mcp_server(executable, root, env=runtime_environment(root, vendor_root=reviewed_vendor))
+            client = start_mcp_server(executable, root, env=runtime_env)
+            server_info = getattr(client, "server_info", {})
+            actual_version = server_info.get("version") if isinstance(server_info, dict) else None
+            expected_version = expected_provenance.get("expected_version")
+            if expected_version and actual_version != expected_version:
+                return RagSyncResult(
+                    False,
+                    error={
+                        "code": "rag_version_mismatch",
+                        "message": "knowledge-rag server version does not match the selected runtime",
+                    },
+                    provenance={**expected_provenance, "server_version": actual_version},
+                    diagnostics=client.diagnostics(status="failed") if hasattr(client, "diagnostics") else {},
+                )
             arguments = {"full_rebuild": True} if full_rebuild else {"force": True}
-            response = client.call("tools/call", name="reindex_documents", arguments=arguments, timeout=self.timeout_seconds)
+            response = client.call(
+                "tools/call", name="reindex_documents", arguments=arguments, timeout=self.timeout_seconds
+            )
             reindex = _response_payload(response, "reindex_documents")
             deadline = time.monotonic() + self.timeout_seconds
             while time.monotonic() < deadline:
@@ -152,7 +225,9 @@ class RagSynchronizer:
                     break
                 time.sleep(1)
             else:
-                return RagSyncResult(False, reindex=reindex, error={"code": "rag_timeout", "message": "reindex timeout"})
+                return RagSyncResult(
+                    False, reindex=reindex, error={"code": "rag_timeout", "message": "reindex timeout"}
+                )
             stats_response = client.call("tools/call", name="get_index_stats", arguments={}, timeout=120)
             stats = _response_payload(stats_response, "get_index_stats")
             if isinstance(stats.get("stats"), dict):
@@ -169,9 +244,20 @@ class RagSynchronizer:
                 stats=stats,
                 reindex=reindex,
                 smoke={"ok": True, "result_count": len(smoke.get("results") or [])},
+                provenance={**expected_provenance, "server_version": actual_version},
+                diagnostics=client.diagnostics(status="completed") if hasattr(client, "diagnostics") else {},
             )
         except (OSError, RuntimeError, TimeoutError) as exc:
-            return RagSyncResult(False, error={"code": "rag_integration_failed", "message": str(exc)})
+            code = str(getattr(exc, "code", "rag_integration_failed"))
+            diagnostics = (
+                client.diagnostics(status="failed") if client is not None and hasattr(client, "diagnostics") else {}
+            )
+            return RagSyncResult(
+                False, error={"code": code, "message": "knowledge-rag integration failed"}, diagnostics=diagnostics
+            )
         finally:
             if client is not None:
-                client.close()
+                try:
+                    client.close()
+                except OSError:
+                    pass

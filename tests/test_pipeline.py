@@ -99,7 +99,9 @@ def test_pipeline_preserves_an_existing_package_rag_configuration(tmp_path: Path
 
     custom_config = "server:\n  transport: stdio\n# custom package setting\n"
     (output / "config.yaml").write_text(custom_config, encoding="utf-8")
-    second = run_pipeline(source, options=PipelineOptions(output_dir=output, slug="guide", license="MIT", mode="update"))
+    second = run_pipeline(
+        source, options=PipelineOptions(output_dir=output, slug="guide", license="MIT", mode="update")
+    )
 
     assert second.ok, second.errors
     assert (output / "config.yaml").read_text(encoding="utf-8") == custom_config
@@ -210,7 +212,9 @@ def test_update_removes_a_previous_destination_when_source_format_changes(tmp_pa
 
     original.unlink()
     (source / "guide.md").write_text("# Guide\nMarkdown version.", encoding="utf-8")
-    second = run_pipeline(source, options=PipelineOptions(output_dir=output, slug="guide", license="MIT", mode="update"))
+    second = run_pipeline(
+        source, options=PipelineOptions(output_dir=output, slug="guide", license="MIT", mode="update")
+    )
 
     assert second.ok, second.errors
     assert (output / "rag" / "documents" / "guide.md").read_text(encoding="utf-8").endswith("Markdown version.\n")
@@ -292,7 +296,9 @@ def test_update_keeps_new_content_when_old_source_has_the_same_destination(tmp_p
 
     first = run_pipeline(first_source, options=PipelineOptions(output_dir=output, slug="guide", license="MIT"))
     assert first.ok, first.errors
-    second = run_pipeline(second_source, options=PipelineOptions(output_dir=output, slug="guide", license="MIT", mode="update"))
+    second = run_pipeline(
+        second_source, options=PipelineOptions(output_dir=output, slug="guide", license="MIT", mode="update")
+    )
 
     assert second.ok, second.errors
     assert (output / "rag" / "documents" / "guide.md").read_text(encoding="utf-8") == "# Second\n"
@@ -311,7 +317,9 @@ def test_update_removes_generated_chapters_for_deleted_sources(tmp_path: Path) -
     assert len(generated) == 2
 
     (source / "two.md").unlink()
-    second = run_pipeline(source, options=PipelineOptions(output_dir=output, slug="guide", license="MIT", mode="update"))
+    second = run_pipeline(
+        source, options=PipelineOptions(output_dir=output, slug="guide", license="MIT", mode="update")
+    )
 
     assert second.ok, second.errors
     remaining = sorted((output / "skill" / "chapters").glob("*.md"))
@@ -331,7 +339,9 @@ def test_failed_normalization_does_not_delete_an_existing_package(tmp_path: Path
     previous = (output / "rag" / "documents" / "guide.md").read_text(encoding="utf-8")
 
     (source / "broken.xlsx").write_bytes(b"not an OOXML workbook")
-    second = run_pipeline(source, options=PipelineOptions(output_dir=output, slug="guide", license="MIT", mode="update"))
+    second = run_pipeline(
+        source, options=PipelineOptions(output_dir=output, slug="guide", license="MIT", mode="update")
+    )
 
     assert not second.ok
     assert any(error["code"] == "invalid_document" for error in second.errors)

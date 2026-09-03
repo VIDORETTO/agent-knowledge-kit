@@ -105,19 +105,26 @@ def main() -> int:
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            env=env, cwd=str(PROJECT_ROOT),
-            text=True, encoding="utf-8", errors="replace", bufsize=1,
+            env=env,
+            cwd=str(PROJECT_ROOT),
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
         )
         threading.Thread(target=drain, args=(proc,), daemon=True).start()
         client = McpClient(proc)
-        init = client.call("initialize", protocolVersion="2024-11-05", capabilities={},
-                           clientInfo={"name": "evaluate_golden", "version": __version__})
+        init = client.call(
+            "initialize",
+            protocolVersion="2024-11-05",
+            capabilities={},
+            clientInfo={"name": "evaluate_golden", "version": __version__},
+        )
         if init.get("error"):
             sys.exit(f"initialize falhou: {init['error']}")
         client.send_json({"jsonrpc": "2.0", "method": "notifications/initialized"})
 
-        resp = client.call("tools/call", name="evaluate_retrieval",
-                           arguments={"test_cases": json.dumps(cases)})
+        resp = client.call("tools/call", name="evaluate_retrieval", arguments={"test_cases": json.dumps(cases)})
         for part in resp.get("result", {}).get("content", []):
             text = part.get("text", "")
             try:

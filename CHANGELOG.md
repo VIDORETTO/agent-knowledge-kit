@@ -2,7 +2,30 @@
 
 ## Unreleased
 
-No changes yet.
+- Added the `plan`/`apply`/`inspect` operation seam with real create/update/dry-run
+  lifecycle semantics, staged transactional promotion, resumable phase receipts,
+  and a recoverable single-writer lease.
+- Added executable contracts for manifests, handoffs, Golden sets, validation,
+  plans, outcomes, results, evaluations and review-required Golden candidates.
+- Distinguished scaffold, enriched-skill, corpus, indexed, evaluated and release
+  readiness using observed evidence rather than editable manifest claims.
+- Added resolver providers, explicit runtime provenance, redacted MCP diagnostics,
+  named retrieval adapters, and MCP-backed evaluation controls.
+- Added a normative support matrix, contract/release gates, immutable GitHub
+  Actions revisions, and installed-wheel create/validate/evaluate coverage.
+
+## 1.1.0 — candidate (2026-09-02; not published)
+
+- Hardened candidate auditing for nested runtime artifacts, binary paths,
+  structured token canaries and exact Git candidate sets.
+- Added deterministic MCP runtime contracts, public root Python operations,
+  one-way operation primitives, snapshot revalidation and observable residue
+  cleanup.
+- Added installed-wheel provenance, reproducible supply-chain evidence, SPDX
+  SBOM, lock/digest verification, vendor/model provenance and the explicit
+  four-CVE Chroma residual-risk policy.
+- Added profile-based support claims, workflow drift checks, community policy
+  files and the unpublished candidate bundle/verification tools.
 
 ## 1.0.0 — 2026-08-29
 

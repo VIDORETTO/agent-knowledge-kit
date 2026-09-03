@@ -5,10 +5,13 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Iterable as IterableABC
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, Protocol
 from urllib.parse import unquote, urlsplit, urlunsplit
+
+from .observability import redact_report, redact_text
 
 
 def _normalise_name(value: str) -> str:
@@ -35,7 +38,9 @@ def canonicalize_url(value: str) -> str:
     if parsed.username is not None or parsed.password is not None:
         # Preserve the signal for the security layer; it will reject userinfo.
         netloc = parsed.netloc
-    elif port is not None and not ((parsed.scheme == "http" and port == 80) or (parsed.scheme == "https" and port == 443)):
+    elif port is not None and not (
+        (parsed.scheme == "http" and port == 80) or (parsed.scheme == "https" and port == 443)
+    ):
         netloc = f"{host}:{port}"
     path = parsed.path or "/"
     if path != "/":
@@ -61,6 +66,7 @@ class SourceCandidate:
     confidence: float = 0.0
     evidence: tuple[str, ...] = ()
     aliases: tuple[str, ...] = ()
+    provider: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         result = asdict(self)
@@ -69,7 +75,8 @@ class SourceCandidate:
         for key in ("canonical", "url", "repo_url", "docs_url"):
             if isinstance(result.get(key), str):
                 result[key] = redact_url(result[key])
-        result["evidence"] = list(self.evidence)
+        result["evidence"] = [redact_text(value) for value in self.evidence]
+        result["aliases"] = [redact_text(value) for value in self.aliases]
         return result
 
 
@@ -92,15 +99,15 @@ class SourceResolution:
             "selected": self.selected.to_dict() if self.selected else None,
             "candidates": [candidate.to_dict() for candidate in self.candidates],
             "requires_decision": self.requires_decision,
-            "decision_reason": self.decision_reason,
-            "error": self.error,
+            "decision_reason": redact_text(self.decision_reason) if self.decision_reason else None,
+            "error": redact_report(self.error),
         }
 
 
 def _redact_source_value(value: str) -> str:
     from .manifest import redact_url
 
-    return redact_url(value)
+    return redact_text(redact_url(value))
 
 
 _DEFAULT_CATALOG: tuple[dict[str, Any], ...] = (
@@ -167,6 +174,33 @@ _DEFAULT_CATALOG: tuple[dict[str, Any], ...] = (
 )
 
 
+class ResolverProvider(Protocol):
+    """Small name-resolution adapter supplied by a harness when needed."""
+
+    name: str
+
+    def resolve(
+        self, value: str, *, version: str | None = None, scope: str | None = None, language: str | None = None
+    ) -> Iterable[SourceCandidate | Mapping[str, Any]]: ...
+
+
+class CatalogResolverProvider:
+    """Deterministic offline provider backed by the curated catalog."""
+
+    name = "catalog"
+
+    def __init__(self, catalog: Iterable[SourceCandidate]) -> None:
+        self.catalog = tuple(catalog)
+
+    def resolve(self, value: str, **_kwargs: object) -> tuple[SourceCandidate, ...]:
+        normalized = _normalise_name(value)
+        return tuple(
+            candidate
+            for candidate in self.catalog
+            if normalized in {_normalise_name(name) for name in (candidate.slug, *candidate.aliases)}
+        )
+
+
 class SourceResolver:
     """Resolve a source without performing network or subprocess actions."""
 
@@ -176,10 +210,14 @@ class SourceResolver:
         *,
         root: Path | str | None = None,
         ambiguity_delta: float = 0.05,
+        providers: Iterable[ResolverProvider | Any] | None = None,
     ) -> None:
         self.root = Path(root or Path.cwd()).resolve()
         self.ambiguity_delta = ambiguity_delta
-        self.catalog = tuple(self._candidate_from_mapping(item) for item in (catalog or _DEFAULT_CATALOG))
+        self.catalog = tuple(
+            replace(self._candidate_from_mapping(item), provider="catalog") for item in (catalog or _DEFAULT_CATALOG)
+        )
+        self.providers = tuple(providers or ()) + (CatalogResolverProvider(self.catalog),)
 
     @classmethod
     def from_catalog_file(cls, path: Path | str, **kwargs: Any) -> "SourceResolver":
@@ -262,24 +300,34 @@ class SourceResolver:
                 )
             return SourceResolution(raw, "local", None, error={"code": "local_not_found", "message": str(path)})
 
-        candidates = tuple(
-            candidate
-            for candidate in self.catalog
-            if _normalise_name(raw) in {_normalise_name(raw_name) for raw_name in self._names_for(candidate)}
-        )
-        # The expression above intentionally includes exact canonical slug/name
-        # matches. Catalog entries loaded from JSON retain their aliases below.
-        if not candidates:
-            candidates = tuple(
-                candidate for candidate in self.catalog if _normalise_name(raw) == _normalise_name(candidate.slug)
-            )
+        candidates: list[SourceCandidate] = []
+        provider_errors: list[str] = []
+        for provider in self.providers:
+            try:
+                produced = self._call_provider(provider, raw, version=version, scope=scope, language=language)
+                if isinstance(produced, (str, bytes)) or not isinstance(produced, IterableABC):
+                    raise TypeError("resolver provider returned a non-iterable candidate collection")
+                provider_name = str(getattr(provider, "name", provider.__class__.__name__.casefold()))
+                for candidate in produced:
+                    if isinstance(candidate, Mapping):
+                        candidate = self._candidate_from_mapping(candidate)
+                    if not isinstance(candidate, SourceCandidate):
+                        continue
+                    candidates.append(candidate if candidate.provider else replace(candidate, provider=provider_name))
+            except Exception as exc:
+                provider_errors.append(type(exc).__name__)
+                continue
+        candidates = list(dict.fromkeys(candidates))
         candidates = tuple(sorted(candidates, key=lambda item: item.confidence, reverse=True))
         if not candidates:
             return SourceResolution(
                 raw,
                 "name",
                 None,
-                error={"code": "source_not_found", "message": f"no catalog candidate for {raw!r}"},
+                error={
+                    "code": "resolver_provider_failed" if provider_errors else "source_not_found",
+                    "message": "no resolver provider produced an official candidate",
+                },
             )
         if len(candidates) > 1 and candidates[0].confidence - candidates[1].confidence <= self.ambiguity_delta:
             return SourceResolution(
@@ -329,6 +377,7 @@ class SourceResolver:
             confidence=1.0,
             evidence=("existing local path",),
             aliases=(resolved.name,),
+            provider="local",
         )
 
     def _resolve_url(
@@ -363,6 +412,7 @@ class SourceResolver:
                 confidence=0.9 if host == "github.com" else 0.7,
                 evidence=("repository URL supplied by user",),
                 aliases=(repo,),
+                provider="url",
             )
             return SourceResolution(raw, "repository", candidate)
 
@@ -378,5 +428,27 @@ class SourceResolver:
             confidence=0.5,
             evidence=("URL supplied by user; ownership not independently verified",),
             aliases=(parsed.hostname or "documentation",),
+            provider="url",
         )
         return SourceResolution(raw, "web", candidate)
+
+    @staticmethod
+    def _call_provider(
+        provider: ResolverProvider | Any,
+        value: str,
+        *,
+        version: str | None,
+        scope: str | None,
+        language: str | None,
+    ) -> Iterable[SourceCandidate | Mapping[str, Any]]:
+        if hasattr(provider, "resolve"):
+            result = provider.resolve(value, version=version, scope=scope, language=language)
+        elif hasattr(provider, "candidates"):
+            result = provider.candidates(value, version=version, scope=scope, language=language)
+        elif callable(provider):
+            result = provider(value, version=version, scope=scope, language=language)
+        else:
+            return ()
+        if isinstance(result, (SourceCandidate, Mapping)):
+            return (result,)
+        return result or ()

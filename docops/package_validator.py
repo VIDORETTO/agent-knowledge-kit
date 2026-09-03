@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from .config_audit import audit_config_file
+from .contracts import validate_artifact
 from .divergence import inspect_package_divergence
+from .observability import redact_report
+from .readiness import READINESS_ORDER, assess_readiness
 
 
 @dataclass
@@ -22,13 +26,15 @@ class ValidationResult:
     checks: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "schema_version": 1,
-            "ok": self.ok,
-            "errors": self.errors,
-            "warnings": self.warnings,
-            "checks": self.checks,
-        }
+        return redact_report(
+            {
+                "schema_version": 1,
+                "ok": self.ok,
+                "errors": self.errors,
+                "warnings": self.warnings,
+                "checks": self.checks,
+            }
+        )
 
 
 def _error(errors: list[dict[str, str]], code: str, message: str) -> None:
@@ -43,9 +49,12 @@ def _safe_relative(root: Path, raw: Any, errors: list[dict[str, str]], code: str
     if candidate.is_absolute() or re.match(r"^[A-Za-z]:", raw.replace("\\", "/")) or ".." in candidate.parts:
         _error(errors, code, f"artifact path must remain inside package: {raw!r}")
         return None
-    if (root / candidate).is_symlink():
-        _error(errors, "symlink_artifact", f"artifact path must be a regular package path: {raw!r}")
-        return None
+    current = root
+    for part in candidate.parts:
+        current = current / part
+        if current.is_symlink():
+            _error(errors, "symlink_artifact", "artifact path must be a regular package path")
+            return None
     resolved = (root / candidate).resolve()
     try:
         resolved.relative_to(root.resolve())
@@ -91,10 +100,17 @@ def validate_package(package_root: Path | str) -> ValidationResult:
     server, download a model, execute a skill, or call an LLM.
     """
 
-    root = Path(package_root).resolve()
+    root = Path(os.path.abspath(os.fspath(Path(package_root).expanduser())))
     errors: list[dict[str, str]] = []
     warnings: list[dict[str, str]] = []
     checks: dict[str, dict[str, Any]] = {}
+    if root.is_symlink():
+        return ValidationResult(
+            False,
+            [{"code": "symlink_artifact", "message": "package root must not be a symbolic link"}],
+            [],
+            {"root": {"ok": False, "reason": "symlink_artifact"}},
+        )
     manifest_path = root / "manifest.json"
     manifest: dict[str, Any] = {}
 
@@ -113,10 +129,35 @@ def validate_package(package_root: Path | str) -> ValidationResult:
             else:
                 _error(errors, "invalid_manifest", "manifest.json must contain an object")
 
+    # Packages produced by the current operator carry the complete public
+    # manifest envelope.  Validate that envelope through the same normative
+    # contract used by callers.  A small legacy compatibility path remains for
+    # hand-written 1.0 fixture packages that predate the complete envelope.
+    if manifest and "contract_version" in manifest:
+        contract = validate_artifact("manifest", manifest)
+        checks["contract"] = contract.to_dict()
+        for contract_error in contract.errors:
+            _error(
+                errors,
+                contract_error["code"],
+                f"manifest contract {contract_error.get('path', '$')}: {contract_error['message']}",
+            )
+
     if manifest.get("schema_version") != 1:
         _error(errors, "manifest_schema", "manifest schema_version must be 1")
     if not isinstance(manifest.get("run_id"), str) or not manifest["run_id"].strip():
         _error(errors, "manifest_run_id", "manifest run_id is required")
+    outcome = manifest.get("outcome")
+    if isinstance(outcome, dict):
+        if outcome.get("status") != manifest.get("status"):
+            _error(errors, "outcome_status_mismatch", "manifest status and terminal outcome status must agree")
+        if outcome.get("status") == "succeeded" and outcome.get("exit_code") != 0:
+            _error(errors, "outcome_exit_code_mismatch", "a succeeded outcome must have exit_code=0")
+    validation_payload = manifest.get("validation")
+    if isinstance(validation_payload, dict) and isinstance(validation_payload.get("ok"), bool):
+        expected_ok = manifest.get("status") == "succeeded"
+        if validation_payload["ok"] != expected_ok:
+            _error(errors, "manifest_validation_mismatch", "manifest status and validation.ok must agree")
 
     source = manifest.get("source")
     if not isinstance(source, dict) or not source.get("canonical") or not source.get("input"):
@@ -153,7 +194,11 @@ def validate_package(package_root: Path | str) -> ValidationResult:
             else:
                 if not isinstance(harness, dict) or harness.get("schema_version") != 1:
                     _error(errors, "harness_schema", "harness manifest schema_version must be 1")
-                elif harness.get("package_root") != "." or not isinstance(harness.get("mcp"), dict) or harness["mcp"].get("cwd") != ".":
+                elif (
+                    harness.get("package_root") != "."
+                    or not isinstance(harness.get("mcp"), dict)
+                    or harness["mcp"].get("cwd") != "."
+                ):
                     _error(errors, "harness_paths", "harness manifest must use relative package paths")
                 else:
                     harness_config_target = _safe_relative(
@@ -227,7 +272,11 @@ def validate_package(package_root: Path | str) -> ValidationResult:
                 docs = list(rag_docs.rglob("*"))
                 symlinks = [path for path in docs if path.is_symlink()]
                 for path in symlinks:
-                    _error(errors, "symlink_artifact", f"RAG document must be a regular file: {path.relative_to(root).as_posix()}")
+                    _error(
+                        errors,
+                        "symlink_artifact",
+                        f"RAG document must be a regular file: {path.relative_to(root).as_posix()}",
+                    )
                 file_count = sum(1 for path in docs if path.is_file() and not path.is_symlink())
                 if file_count < 1:
                     _error(errors, "empty_rag", "rag/documents must contain at least one source")
@@ -244,7 +293,9 @@ def validate_package(package_root: Path | str) -> ValidationResult:
 
     manifest_entries = manifest.get("entries")
     if isinstance(manifest_entries, list):
-        accepted_entries = [entry for entry in manifest_entries if isinstance(entry, dict) and entry.get("status") == "accepted"]
+        accepted_entries = [
+            entry for entry in manifest_entries if isinstance(entry, dict) and entry.get("status") == "accepted"
+        ]
         identities = [
             (str(entry.get("canonical")), str(entry.get("version") or manifest.get("source", {}).get("version") or ""))
             for entry in accepted_entries
@@ -286,4 +337,37 @@ def validate_package(package_root: Path | str) -> ValidationResult:
     checks["synchronization"] = divergence.to_dict()
     for warning in divergence.warnings:
         _error(errors, warning["code"], warning["message"])
-    return ValidationResult(not errors, errors, warnings, checks)
+    declared_readiness = manifest.get("readiness")
+    if isinstance(declared_readiness, dict):
+        derived_readiness = assess_readiness(root)
+        checks["readiness"] = derived_readiness
+        for field_name in ("state", "skill", "rag"):
+            declared = declared_readiness.get(field_name)
+            derived = derived_readiness.get(field_name)
+            if isinstance(declared, str) and isinstance(derived, str):
+                if READINESS_ORDER.get(declared, -1) > READINESS_ORDER.get(derived, -1):
+                    _error(
+                        errors,
+                        "readiness_overclaim",
+                        f"manifest readiness.{field_name} claims {declared!r} without matching evidence",
+                    )
+                elif READINESS_ORDER.get(declared, -1) < READINESS_ORDER.get(derived, -1):
+                    warnings.append(
+                        {
+                            "code": "readiness_stale",
+                            "message": f"manifest readiness.{field_name} is behind observed evidence",
+                        }
+                    )
+    result = ValidationResult(not errors, errors, warnings, checks)
+    contract = validate_artifact("validation", result.to_dict())
+    if not contract.ok:
+        result.errors.extend(
+            {
+                "code": error["code"],
+                "message": f"validation contract {error.get('path', '$')}: {error['message']}",
+            }
+            for error in contract.errors
+        )
+        result.ok = False
+    result.checks.setdefault("validation_contract", contract.to_dict())
+    return result

@@ -50,3 +50,30 @@ estão em [HARNESSES.md](HARNESSES.md).
 Os números e hashes da execução final — incluindo a quantidade exata de testes,
 o resultado do CI público, a tag e a release — ficam registrados em
 `tasks/todo.md`, que é a checklist operacional da publicação.
+
+## SPEC-002 pós-1.0
+
+O seam normativo da iniciativa é `plan(request)`, `apply(plan)` e
+`inspect(package)`. `plan` não escreve no destino; `apply` usa staging no
+mesmo volume, valida os contratos e promove uma geração completa. Falhas
+preservam a geração ativa e registram uma tentativa redigida.
+
+Os gates executáveis adicionais são:
+
+```text
+python scripts/check_support_matrix.py --json
+python scripts/check_contracts.py --json
+python scripts/verify_wheel.py
+python -m docops run documents/fixtures/acme-docs --output artifacts/acme --slug acme --license MIT --index-rag
+python -m docops validate artifacts/acme --json
+python -m docops evaluate --package artifacts/acme --cases golden-set/test-cases-fixture.json --adapter mcp --runtime-root . --json
+```
+
+O adapter lexical é diagnóstico; o gate de qualidade híbrida usa MCP real. A
+matriz de suporte publicada, incluindo versões toleradas apenas localmente,
+está em `docs/SUPPORT-MATRIX.json`. Esta documentação não autoriza commit,
+push, tag ou release automático.
+
+O gate `verify_wheel.py` mantém o operador instalado em alvo temporário e
+exercita o perfil MCP do wheel quando o runtime RAG revisado está disponível.
+No CI, `DOCOPS_REQUIRE_WHEEL_RAG=1` torna essa parte obrigatória.

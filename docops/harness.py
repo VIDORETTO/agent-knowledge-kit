@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .contracts import validate_artifact
 from .storage import write_json_atomic
 
 
@@ -13,7 +14,7 @@ def build_harness_manifest(package_root: Path | str) -> dict[str, Any]:
     """Describe how a harness can load artifacts without author paths."""
 
     root = Path(package_root).resolve()
-    return {
+    payload = {
         "schema_version": 1,
         "package_root": ".",
         "skills": ["skill", "router"],
@@ -32,6 +33,11 @@ def build_harness_manifest(package_root: Path | str) -> dict[str, Any]:
             f"Generated for package basename {root.name!r}; no absolute path is persisted.",
         ],
     }
+    contract = validate_artifact("harness", payload)
+    if not contract.ok:
+        details = "; ".join(f"{error.get('path', '$')}: {error['message']}" for error in contract.errors)
+        raise RuntimeError(f"generated harness contract is invalid: {details}")
+    return payload
 
 
 def write_harness_manifest(package_root: Path | str) -> Path:
@@ -47,6 +53,10 @@ def read_harness_manifest(path: Path | str) -> dict[str, Any]:
     """Read and minimally validate a hand-off file."""
 
     value = json.loads(Path(path).read_text(encoding="utf-8"))
+    contract = validate_artifact("harness", value)
+    if not contract.ok:
+        details = "; ".join(f"{error.get('path', '$')}: {error['message']}" for error in contract.errors)
+        raise ValueError(f"invalid harness contract: {details}")
     if not isinstance(value, dict) or value.get("schema_version") != 1:
         raise ValueError("unsupported harness manifest")
     return value

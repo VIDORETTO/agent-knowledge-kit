@@ -37,7 +37,11 @@ def test_validator_accepts_the_complete_fixture_package(tmp_path: Path) -> None:
     router.mkdir()
     (rag / "documents").mkdir(parents=True)
     (skill / "SKILL.md").write_text(
-        "---\nname: fixture-skill\ndescription: Fixture knowledge skill.\n---\n# Fixture\n\n- Version: " + chr(96) + "local" + chr(96) + "\n",
+        "---\nname: fixture-skill\ndescription: Fixture knowledge skill.\n---\n# Fixture\n\n- Version: "
+        + chr(96)
+        + "local"
+        + chr(96)
+        + "\n",
         encoding="utf-8",
     )
     (router / "SKILL.md").write_text(
@@ -46,9 +50,7 @@ def test_validator_accepts_the_complete_fixture_package(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     (rag / "documents" / "guide.md").write_text("# Guide\n", encoding="utf-8")
-    (rag / "index.json").write_text(
-        json.dumps({"status": "ready", "documents": 1, "chunks": 1}), encoding="utf-8"
-    )
+    (rag / "index.json").write_text(json.dumps({"status": "ready", "documents": 1, "chunks": 1}), encoding="utf-8")
     (tmp_path / "manifest.json").write_text(
         json.dumps(
             {
@@ -75,34 +77,46 @@ def test_validator_rejects_an_unavailable_harness_config(tmp_path: Path) -> None
     router.mkdir()
     (rag / "documents").mkdir(parents=True)
     (skill / "SKILL.md").write_text("---\nname: fixture\ndescription: Fixture.\n---\n", encoding="utf-8")
-    (router / "SKILL.md").write_text("---\nname: fixture-router\ndescription: Router.\n---\nfixture search_knowledge citation", encoding="utf-8")
+    (router / "SKILL.md").write_text(
+        "---\nname: fixture-router\ndescription: Router.\n---\nfixture search_knowledge citation", encoding="utf-8"
+    )
     (rag / "documents" / "guide.md").write_text("# Guide\n", encoding="utf-8")
     (rag / "index.json").write_text(json.dumps({"status": "ready", "documents": 1, "chunks": 1}), encoding="utf-8")
     (tmp_path / "harness.json").write_text(
-        json.dumps({
-            "schema_version": 1,
-            "package_root": ".",
-            "skills": ["skill", "router"],
-            "mcp": {
-                "name": "knowledge-rag",
-                "transport": "stdio",
-                "command": "python",
-                "args": ["-m", "mcp_server.server"],
-                "cwd": ".",
-                "env": {},
-                "config": "config.yaml",
-            },
-        }),
+        json.dumps(
+            {
+                "schema_version": 1,
+                "package_root": ".",
+                "skills": ["skill", "router"],
+                "mcp": {
+                    "name": "knowledge-rag",
+                    "transport": "stdio",
+                    "command": "python",
+                    "args": ["-m", "mcp_server.server"],
+                    "cwd": ".",
+                    "env": {},
+                    "config": "config.yaml",
+                },
+            }
+        ),
         encoding="utf-8",
     )
     (tmp_path / "manifest.json").write_text(
-        json.dumps({
-            "schema_version": 1,
-            "run_id": "run-1",
-            "source": {"input": "fixture", "canonical": "file:///fixture", "version": "local"},
-            "provenance": {"license": "MIT", "redistribution": "private-only"},
-            "artifacts": {"skill": "skill", "router": "router", "rag": "rag", "harness": "harness.json", "config": "config.yaml"},
-        }),
+        json.dumps(
+            {
+                "schema_version": 1,
+                "run_id": "run-1",
+                "source": {"input": "fixture", "canonical": "file:///fixture", "version": "local"},
+                "provenance": {"license": "MIT", "redistribution": "private-only"},
+                "artifacts": {
+                    "skill": "skill",
+                    "router": "router",
+                    "rag": "rag",
+                    "harness": "harness.json",
+                    "config": "config.yaml",
+                },
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -136,7 +150,9 @@ def test_validator_does_not_claim_success_when_skill_version_diverges(tmp_path: 
     source.mkdir()
     (source / "guide.md").write_text("# Guide\n", encoding="utf-8")
     package = tmp_path / "package"
-    assert run_pipeline(source, options=PipelineOptions(output_dir=package, slug="guide", version="v1", license="MIT")).ok
+    assert run_pipeline(
+        source, options=PipelineOptions(output_dir=package, slug="guide", version="v1", license="MIT")
+    ).ok
 
     skill = package / "skill" / "SKILL.md"
     marker_v1 = "Version: " + chr(96) + "v1" + chr(96)

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consulta-documentacao.invalid/schemas/plan.schema.json",
+  "title": "docops immutable operation plan",
+  "type": "object",
+  "required": ["schema_version", "plan_version", "plan_hash", "mode", "request", "resolution", "actions", "blockers", "warnings", "expected_readiness", "source_fingerprint", "destination_fingerprint", "request_fingerprint"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "plan_version": {"const": 1},
+    "plan_hash": {"type": "string", "minLength": 1},
+    "mode": {"enum": ["create", "update", "run", "dry-run"]},
+    "request": {"type": "object"},
+    "resolution": {"type": "object"},
+    "actions": {"type": "array", "items": {"type": "object", "required": ["kind", "destination"], "properties": {"kind": {"enum": ["add", "update", "remove"]}, "destination": {"type": "string", "minLength": 1}}}},
+    "blockers": {"type": "array", "items": {"type": "object"}},
+    "warnings": {"type": "array", "items": {"type": "string"}},
+    "expected_readiness": {"type": "object"},
+    "source_fingerprint": {"type": "string", "minLength": 1},
+    "destination_fingerprint": {"type": "string", "minLength": 1},
+    "request_fingerprint": {"type": "string", "minLength": 1}
+  }
+}

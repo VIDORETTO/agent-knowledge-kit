@@ -1,6 +1,8 @@
 # Ambientes, índices e caches — nunca versionar
 .venv/
 /.venv-rag/
+/.venv-posix/
+/.venv-windows/
 /data/
 /models_cache/
 /.rag_state.json
@@ -24,5 +26,6 @@ documents/*
 /build/
 /dist/
 *.egg-info/
+/.scratch/
 skills/generated/
 config/network.yaml

@@ -21,9 +21,31 @@ class RepositoryAcquisitionError(RuntimeError):
 
 
 _DOC_SUFFIXES = {
-    ".md", ".markdown", ".rst", ".adoc", ".txt", ".html", ".htm", ".pdf", ".docx",
-    ".json", ".yaml", ".yml", ".xml", ".csv", ".py", ".c", ".h", ".cpp", ".js",
-    ".jsx", ".ts", ".tsx", ".ipynb", ".xlsx", ".pptx",
+    ".md",
+    ".markdown",
+    ".rst",
+    ".adoc",
+    ".txt",
+    ".html",
+    ".htm",
+    ".pdf",
+    ".docx",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".xml",
+    ".csv",
+    ".py",
+    ".c",
+    ".h",
+    ".cpp",
+    ".js",
+    ".jsx",
+    ".ts",
+    ".tsx",
+    ".ipynb",
+    ".xlsx",
+    ".pptx",
 }
 _IGNORED_DIRS = {".git", ".hg", ".svn", "node_modules", "dist", "build", "__pycache__", "img", "images", "assets"}
 
@@ -100,15 +122,21 @@ class RepositoryAcquirer:
     ) -> RepositoryAcquisitionResult:
         candidate = self._candidate(source, version=version, scope=scope, language=language)
         if not candidate:
-            return RepositoryAcquisitionResult(False, errors=[{"code": "not_repository", "message": "source is not a repository"}])
+            return RepositoryAcquisitionResult(
+                False, errors=[{"code": "not_repository", "message": "source is not a repository"}]
+            )
 
         requested_version = version or candidate.version
         try:
             root, cloned = self._obtain_root(candidate, destination=destination, version=requested_version)
         except NetworkPolicyError as exc:
-            return RepositoryAcquisitionResult(False, errors=[{"code": exc.code, "message": str(exc)}], source=candidate.to_dict())
+            return RepositoryAcquisitionResult(
+                False, errors=[{"code": exc.code, "message": str(exc)}], source=candidate.to_dict()
+            )
         except (OSError, RepositoryAcquisitionError, subprocess.SubprocessError) as exc:
-            return RepositoryAcquisitionResult(False, errors=[{"code": "repository_unavailable", "message": str(exc)}], source=candidate.to_dict())
+            return RepositoryAcquisitionResult(
+                False, errors=[{"code": "repository_unavailable", "message": str(exc)}], source=candidate.to_dict()
+            )
         temporary = cloned and destination is None and self.clone_root is None
 
         if not (root / ".git").is_dir() or (root / ".git").is_symlink():
@@ -141,7 +169,9 @@ class RepositoryAcquirer:
                 version=requested_version or "local",
                 license=self._license(root),
                 source=candidate.to_dict(),
-                errors=[{"code": "docs_tree_not_found", "message": "could not detect a supported documentation directory"}],
+                errors=[
+                    {"code": "docs_tree_not_found", "message": "could not detect a supported documentation directory"}
+                ],
                 temporary=temporary,
             )
 
@@ -222,7 +252,9 @@ class RepositoryAcquirer:
             aliases=candidate.aliases,
         )
 
-    def _obtain_root(self, candidate: SourceCandidate, *, destination: Path | str | None, version: str | None) -> tuple[Path, bool]:
+    def _obtain_root(
+        self, candidate: SourceCandidate, *, destination: Path | str | None, version: str | None
+    ) -> tuple[Path, bool]:
         if candidate.canonical.startswith("file://"):
             parsed = urlsplit(candidate.canonical)
             raw_path = unquote(parsed.path)
@@ -240,8 +272,14 @@ class RepositoryAcquirer:
             if parsed_repo_url.scheme != "https":
                 raise RepositoryAcquisitionError("remote repository URLs must use HTTPS")
             addresses = self.network_policy.resolve_addresses(canonical_repo_url)
-            target = Path(destination).resolve() if destination else (
-                self.clone_root / candidate.slug if self.clone_root else Path(tempfile.mkdtemp(prefix=f"docops-{candidate.slug}-"))
+            target = (
+                Path(destination).resolve()
+                if destination
+                else (
+                    self.clone_root / candidate.slug
+                    if self.clone_root
+                    else Path(tempfile.mkdtemp(prefix=f"docops-{candidate.slug}-"))
+                )
             )
             if target.is_symlink():
                 raise RepositoryAcquisitionError(f"clone destination must not be a symbolic link: {target}")
@@ -262,16 +300,23 @@ class RepositoryAcquirer:
                 if address.casefold() == (parsed_repo_url.hostname or "").casefold():
                     continue
                 pinned_address = f"[{address}]" if ":" in address and not address.startswith("[") else address
-                command.extend(["-c", f"http.curloptResolve={parsed_repo_url.hostname}:{parsed_repo_url.port or 443}:{pinned_address}"])
-            command.extend([
-                "clone",
-                "--depth",
-                "1",
-                "--no-tags",
-                "--single-branch",
-                "--no-recurse-submodules",
-                "--filter=blob:none",
-            ])
+                command.extend(
+                    [
+                        "-c",
+                        f"http.curloptResolve={parsed_repo_url.hostname}:{parsed_repo_url.port or 443}:{pinned_address}",
+                    ]
+                )
+            command.extend(
+                [
+                    "clone",
+                    "--depth",
+                    "1",
+                    "--no-tags",
+                    "--single-branch",
+                    "--no-recurse-submodules",
+                    "--filter=blob:none",
+                ]
+            )
             if version:
                 command.extend(["--branch", version])
             command.extend([canonical_repo_url, str(target)])
@@ -365,7 +410,9 @@ class RepositoryAcquirer:
     @staticmethod
     def _git_output(root: Path, *args: str) -> str | None:
         try:
-            completed = subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, text=True, timeout=30)
+            completed = subprocess.run(
+                ["git", "-C", str(root), *args], check=True, capture_output=True, text=True, timeout=30
+            )
         except (subprocess.SubprocessError, OSError):
             return None
         output = completed.stdout.strip()
@@ -377,6 +424,10 @@ class RepositoryAcquirer:
             path = root / name
             if not path.is_symlink() and path.is_file():
                 text = path.read_text(encoding="utf-8", errors="replace")[:1000]
-                identifier = "MIT" if "mit license" in text.casefold() or "permission is hereby granted" in text.casefold() else "declared"
+                identifier = (
+                    "MIT"
+                    if "mit license" in text.casefold() or "permission is hereby granted" in text.casefold()
+                    else "declared"
+                )
                 return {"status": "declared", "file": name, "identifier": identifier}
         return {"status": "unknown", "file": None, "identifier": None}

@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "name": "knowledge-rag",
+  "version": "4.8.5",
+  "license": "MIT",
+  "upstream": "https://github.com/lyonzin/knowledge-rag",
+  "source": "reviewed vendored release tree",
+  "refresh_policy": "manual review and digest regeneration; never auto-sync main",
+  "digest_authority": "artifacts/supply-chain/supply-chain.json",
+  "model_policy": "external runtime snapshots require an explicit digest",
+  "security_policy": "local PersistentClient only; no Chroma HTTP API, remote model repository, or trust_remote_code"
+}

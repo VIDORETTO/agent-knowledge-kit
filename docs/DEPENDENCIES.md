@@ -38,6 +38,12 @@ Um advisory novo do Chroma reprova automaticamente o CI.
 MCP `stdio` como padrão. Isso é um risco residual documentado, não uma
 declaração de ausência de vulnerabilidades.
 
+Na revalidação de 2026-09-02, o `pip-audit` cru em um venv limpo Python 3.12
+retornou código 1, com 128 dependências resolvidas, um pacote vulnerável e os
+quatro advisories do Chroma. O wrapper local retorna `ok=true` somente porque a
+allowlist por pacote/CVE é estreita e vinculada a esse threat model. Os dois
+resultados devem continuar separados em qualquer relatório de release.
+
 O pacote vendorizado é uma cópia revisada de `knowledge-rag`; não se deve
 atualizá-lo automaticamente a partir de `main`. O processo é: escolher uma
 versão publicada, atualizar o pin e o `serverInfo`, revisar o diff da cópia,
@@ -61,3 +67,21 @@ instalado; defina `DOCOPS_REQUIRE_RAG=1` quando a validação depender do
 servidor. Os testes de symlink podem ser pulados em hosts sem privilégio para
 criar links; limites de tamanho e formatos opcionais continuam cobertos por
 fixtures e pelo CI.
+## Evidência do candidato
+
+O lock de entrada é `requirements.lock`. Para cada candidato, a ferramenta
+offline abaixo materializa o hash do lock e de cada linha, o inventário SPDX,
+o digest do wheel, a árvore vendorizada e os snapshots de modelo fornecidos:
+
+```text
+python scripts/generate_supply_chain.py --root . --wheel dist/<wheel>.whl \
+  --model-cache models_cache --output artifacts/supply-chain --require-model
+python scripts/verify_supply_chain.py --root . --evidence artifacts/supply-chain
+```
+
+`supply-chain.json` mantém a política por perfil: Chroma é somente
+`PersistentClient`, os quatro CVEs (`CVE-2026-45829`, `CVE-2026-45830`,
+`CVE-2026-45831`, `CVE-2026-45833`) são risco residual explícito, e HTTP do
+Chroma, `trust_remote_code` e repositórios remotos de modelo não são
+permitidos. A ausência de um snapshot de modelo só é aceita no perfil core;
+um candidato RAG usa `--require-model`.

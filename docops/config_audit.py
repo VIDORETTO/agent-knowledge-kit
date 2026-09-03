@@ -160,7 +160,12 @@ def audit_config(config: Mapping[str, Any]) -> ConfigAuditResult:
             _error(errors, "network_json_logging_required", "HTTP/SSE transport requires server.logging.format=json")
         host = str(server.get("host") or "127.0.0.1")
         if host in {"0.0.0.0", "::"}:
-            warnings.append({"code": "public_bind", "message": "server binds on every interface; keep bearer auth and firewall rules enabled"})
+            warnings.append(
+                {
+                    "code": "public_bind",
+                    "message": "server binds on every interface; keep bearer auth and firewall rules enabled",
+                }
+            )
     return ConfigAuditResult(not errors, transport, errors, warnings)
 
 

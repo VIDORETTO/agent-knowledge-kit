@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consulta-documentacao.invalid/schemas/result.schema.json",
+  "title": "docops terminal operation result",
+  "type": "object",
+  "required": ["schema_version", "ok", "outcome", "manifest", "validation", "state_diff", "written_files", "errors", "warnings"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "ok": {"type": "boolean"},
+    "outcome": {"$ref": "#/$defs/outcome"},
+    "manifest": {"type": "object"},
+    "validation": {"type": ["object", "null"]},
+    "state_diff": {"type": "object"},
+    "written_files": {"type": "integer"},
+    "errors": {"type": "array", "items": {"type": "object"}},
+    "warnings": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "outcome": {
+      "type": "object",
+      "required": ["status", "code", "phase", "message", "exit_code"],
+      "properties": {
+        "status": {"enum": ["succeeded", "blocked", "failed", "cancelled"]},
+        "code": {"type": "string", "minLength": 1},
+        "phase": {"type": "string", "minLength": 1},
+        "message": {"type": "string"},
+        "exit_code": {"type": "integer"}
+      }
+    }
+  }
+}

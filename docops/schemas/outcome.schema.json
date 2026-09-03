@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consulta-documentacao.invalid/schemas/outcome.schema.json",
+  "title": "docops terminal outcome",
+  "type": "object",
+  "required": ["status", "code", "phase", "message", "exit_code"],
+  "properties": {
+    "status": {"enum": ["succeeded", "blocked", "failed", "cancelled"]},
+    "code": {"type": "string", "minLength": 1},
+    "phase": {"type": "string", "minLength": 1},
+    "message": {"type": "string"},
+    "exit_code": {"type": "integer"},
+    "attempt_id": {"type": "string"}
+  }
+}

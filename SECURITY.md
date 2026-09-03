@@ -9,9 +9,11 @@ commit afetado, sistema operacional, comando reproduzível, impacto e um fixture
 mínimo sanitizado. Nunca anexe corpus privado, índices, tokens, credenciais ou
 logs que os contenham.
 
-No repositório público, secret scanning, push protection e Dependabot security
-updates estão habilitados. Se o formulário privado não estiver disponível para
-o relator, use um canal privado do mantenedor e não divulgue o detalhe em uma
+A política do repositório exige secret scanning, push protection e Dependabot
+security updates. Uma leitura pública sem autenticação não confirmou o estado
+atual dessas settings; o mantenedor deve verificá-las autenticado antes de
+qualquer release. Se o formulário privado não estiver disponível para o
+relator, use um canal privado do mantenedor e não divulgue o detalhe em uma
 issue pública.
 
 O mantenedor pretende acusar recebimento em até 3 dias úteis, concluir a
@@ -22,8 +24,9 @@ tempos são metas operacionais, não uma garantia de disponibilidade.
 
 O escopo inclui o código Python em `docops/`, scripts, workflows, configuração
 de release, templates, schemas e a cópia vendorizada de `knowledge-rag` usada
-pelo pacote. A linha suportada nesta publicação é `1.0.x`, com `1.0.0` como
-versão atual. O corpus FastAPI, índices, caches, ambientes virtuais e qualquer
+pelo pacote. O candidato atual é `1.1.0` e ainda requer autorização humana
+antes de publicação; a linha suportada da release anterior é `1.0.x`. O corpus
+FastAPI, índices, caches, ambientes virtuais e qualquer
 arquivo em `config/network.yaml` são dados locais e não fazem parte do release.
 
 Ficam fora do escopo falhas que exigem controle prévio do checkout, acesso ao
@@ -40,7 +43,7 @@ quando o impacto atravessar uma fronteira controlada pelo produto.
 | MCP local | `stdio` é o padrão; HTTP/SSE é opt-in e exige bearer token, rate limit, métricas e logging JSON | quem muda o bind para uma rede deve aplicar firewall e TLS/proxy adequados |
 | Autenticação HTTP | ausência de token recusa o processo antes de abrir a porta; token correto passa e token incorreto falha; o health check é apenas uma sonda local | o projeto não gerencia rotação, cofre de segredos ou identidade multiusuário |
 | ChromaDB | uso local via `PersistentClient`; o caminho do produto não usa `HttpClient` nem `trust_remote_code`; transporte padrão não expõe a base | há quatro CVEs sem correção conhecida no snapshot auditado; ver a seção abaixo |
-| Modelos RAG | modelos declarados pelo perfil, cache em diretório ignorado e carregamento local via FastEmbed; não há execução de código remoto | os artefatos externos não têm hash de conteúdo versionado pelo produto |
+| Modelos RAG | modelos declarados pelo perfil, cache em diretório ignorado e carregamento local via FastEmbed; não há execução de código remoto | o candidato registra identidade/digest quando o snapshot é fornecido; ausência continua risco explícito |
 | Publicação | `audit_release`, `config-audit`, `pip-audit`, fixtures sintéticas e clone limpo bloqueiam dados proibidos e segredos conhecidos | revisão humana de licença e dos artefatos derivados continua necessária |
 
 ## Risco residual do ChromaDB
@@ -74,10 +77,11 @@ revisar a configuração e o cache do modelo é parte do procedimento de mudanç
 
 ## Limitações e resposta a incidentes
 
-Esta release não fixa hashes de todas as dependências transitivas por sistema
-operacional, não fixa hashes dos modelos baixados e não consegue impor um limite
-de transferência antes do servidor Git remoto aceitar o clone. O CI e o
-`scripts/audit_dependencies.py` devem ser executados em cada release; o risco
+O candidato registra hashes dos artefatos produzidos, lock inputs e SBOM; a
+resolução transitiva ainda pode variar por sistema operacional/Python e deve
+ser repetida no perfil anunciado. Snapshots de modelo só recebem digest quando
+fornecidos ao gate. O CI, `scripts/audit_dependencies.py` e
+`scripts/verify_candidate.py` devem ser executados em cada release; o risco
 residual deve permanecer descrito até existir uma mitigação efetiva.
 
 Ao confirmar uma falha, preserve evidências sem redistribuir dados protegidos,

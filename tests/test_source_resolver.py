@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from docops.source_resolver import SourceResolver
+from docops.source_resolver import SourceCandidate, SourceResolver
 
 
 def test_resolves_a_local_directory_without_network_access(tmp_path: Path) -> None:
@@ -33,14 +33,16 @@ def test_classifies_github_tree_url_and_keeps_version_and_scope() -> None:
 
 def test_catalog_resolution_preserves_requested_language_and_version() -> None:
     resolver = SourceResolver(
-        [{
-            "names": ["manual"],
-            "slug": "manual",
-            "docs_url": "https://docs.example.test/manual",
-            "official": True,
-            "confidence": 1.0,
-            "license": "MIT",
-        }]
+        [
+            {
+                "names": ["manual"],
+                "slug": "manual",
+                "docs_url": "https://docs.example.test/manual",
+                "official": True,
+                "confidence": 1.0,
+                "license": "MIT",
+            }
+        ]
     )
 
     result = resolver.resolve("manual", version="v2", language="pt-BR")
@@ -123,3 +125,90 @@ def test_serialized_resolution_redacts_sensitive_url_values() -> None:
 
     assert "super-secret-value" not in serialized
     assert "REDACTED" in serialized
+
+
+def test_serialized_provider_evidence_does_not_leak_secrets_or_local_paths() -> None:
+    secret = "x" * 24
+    private_path = "C:" + r"\Users\gabri\private\evidence.txt"
+
+    class Provider:
+        name = "fixture-provider"
+
+        def resolve(self, _value: str, **_kwargs: object):
+            return [
+                SourceCandidate(
+                    kind="web",
+                    slug="custom-framework",
+                    canonical="https://docs.example.test/custom",
+                    official=True,
+                    confidence=0.99,
+                    evidence=("token=" + secret, private_path),
+                )
+            ]
+
+    result = SourceResolver(providers=[Provider()]).resolve("custom framework")
+    serialized = json.dumps(result.to_dict())
+
+    assert secret not in serialized
+    assert private_path not in serialized
+
+
+def test_serialized_resolution_redacts_token_like_input_without_url_scheme() -> None:
+    secret = "s" * 24
+
+    result = SourceResolver().resolve("token=" + secret)
+
+    assert secret not in json.dumps(result.to_dict())
+
+
+def test_harness_can_supply_a_name_provider_without_network_discovery() -> None:
+    class Provider:
+        name = "fixture-provider"
+
+        def resolve(self, value: str, **_kwargs: object):
+            if value == "custom framework":
+                return [
+                    SourceCandidate(
+                        kind="web",
+                        slug="custom-framework",
+                        canonical="https://docs.example.test/custom",
+                        url="https://docs.example.test/custom",
+                        official=True,
+                        confidence=0.99,
+                        evidence=("fixture provider",),
+                    )
+                ]
+            return []
+
+    result = SourceResolver(providers=[Provider()]).resolve("custom framework")
+
+    assert result.selected is not None
+    assert result.selected.slug == "custom-framework"
+    assert result.selected.provider == "fixture-provider"
+
+
+def test_failed_name_provider_is_reported_without_crashing_resolution() -> None:
+    class BrokenProvider:
+        name = "broken-provider"
+
+        def resolve(self, _value: str, **_kwargs: object):
+            raise LookupError("provider unavailable")
+
+    result = SourceResolver(providers=[BrokenProvider()]).resolve("unknown framework")
+
+    assert result.selected is None
+    assert result.error["code"] == "resolver_provider_failed"
+
+
+def test_malformed_name_provider_fails_as_a_structured_resolution_result() -> None:
+    class BrokenProvider:
+        name = "broken-provider"
+
+        def resolve(self, _value: str, **_kwargs: object):
+            return 42
+
+    result = SourceResolver(providers=[BrokenProvider()]).resolve("unknown framework")
+
+    assert result.selected is None
+    assert result.error is not None
+    assert result.error["code"] == "resolver_provider_failed"

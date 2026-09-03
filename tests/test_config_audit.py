@@ -7,7 +7,7 @@ from docops.config_audit import _minimal_yaml_config, audit_config, audit_config
 
 def test_minimal_yaml_fallback_accepts_inline_comments_and_quoted_hashes() -> None:
     config = _minimal_yaml_config(
-        'server:\n'
+        "server:\n"
         '  transport: "stdio"  # stdio is the safe default\n'
         '  host: "docs.example/#anchor"  # the hash is part of the value\n'
     )
@@ -48,7 +48,12 @@ def test_http_config_requires_auth_rate_limit_metrics_and_json_logging() -> None
 
     assert not result.ok
     codes = {error["code"] for error in result.errors}
-    assert {"network_auth_required", "network_rate_limit_required", "network_metrics_required", "network_json_logging_required"} <= codes
+    assert {
+        "network_auth_required",
+        "network_rate_limit_required",
+        "network_metrics_required",
+        "network_json_logging_required",
+    } <= codes
 
 
 def test_config_file_audit_is_portable_and_does_not_return_secrets(tmp_path: Path) -> None:

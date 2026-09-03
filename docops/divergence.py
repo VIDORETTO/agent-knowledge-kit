@@ -25,13 +25,19 @@ def inspect_package_divergence(package_root: Path | str) -> DivergenceReport:
     manifest_path = root / "manifest.json"
     skill_path = root / "skill" / "SKILL.md"
     if manifest_path.is_symlink() or (root / "skill").is_symlink() or skill_path.is_symlink():
-        return DivergenceReport(False, [{"code": "symlink_artifact", "message": "manifest and skill must not be symbolic links"}])
+        return DivergenceReport(
+            False, [{"code": "symlink_artifact", "message": "manifest and skill must not be symbolic links"}]
+        )
     if not manifest_path.is_file() or not skill_path.is_file():
-        return DivergenceReport(False, [{"code": "divergence_inputs_missing", "message": "manifest and skill are required"}])
+        return DivergenceReport(
+            False, [{"code": "divergence_inputs_missing", "message": "manifest and skill are required"}]
+        )
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return DivergenceReport(False, [{"code": "divergence_manifest_invalid", "message": "manifest could not be read"}])
+        return DivergenceReport(
+            False, [{"code": "divergence_manifest_invalid", "message": "manifest could not be read"}]
+        )
     source = manifest.get("source") if isinstance(manifest, dict) else {}
     source_version = source.get("version") if isinstance(source, dict) else None
     try:
@@ -43,8 +49,15 @@ def inspect_package_divergence(package_root: Path | str) -> DivergenceReport:
     if source_version and skill_version and str(source_version) != skill_version:
         return DivergenceReport(
             False,
-            [{"code": "skill_rag_divergence", "message": f"skill version {skill_version!r} differs from source version {source_version!r}"}],
+            [
+                {
+                    "code": "skill_rag_divergence",
+                    "message": f"skill version {skill_version!r} differs from source version {source_version!r}",
+                }
+            ],
         )
     if source_version and not skill_version:
-        return DivergenceReport(False, [{"code": "skill_version_missing", "message": "skill has no source version marker"}])
+        return DivergenceReport(
+            False, [{"code": "skill_version_missing", "message": "skill has no source version marker"}]
+        )
     return DivergenceReport(True)

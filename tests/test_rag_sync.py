@@ -7,6 +7,14 @@ import docops.rag_sync as rag_sync
 from docops.rag_sync import RagSynchronizer, package_rag_config
 
 
+def _runtime_root(tmp_path: Path) -> Path:
+    runtime = tmp_path / "runtime"
+    vendor = runtime / "skills" / "vendor" / "knowledge-rag" / "mcp_server"
+    vendor.mkdir(parents=True)
+    (vendor / "__init__.py").write_text('__version__ = "4.8.5"\n', encoding="utf-8")
+    return runtime
+
+
 def test_package_rag_config_is_relative_and_local_only(tmp_path: Path) -> None:
     config = package_rag_config()
 
@@ -29,6 +37,8 @@ def test_rag_synchronizer_runs_reindex_status_stats_and_smoke(monkeypatch, tmp_p
     calls: list[str] = []
 
     class FakeClient:
+        server_info = {"version": "4.8.5"}
+
         def call(self, _method: str, *, name: str, arguments: dict, **_kwargs: object) -> dict:
             calls.append(name)
             payload = {
@@ -44,7 +54,7 @@ def test_rag_synchronizer_runs_reindex_status_stats_and_smoke(monkeypatch, tmp_p
 
     monkeypatch.setattr(rag_sync, "start_mcp_server", lambda *_args, **_kwargs: FakeClient())
 
-    result = RagSynchronizer(python=executable).sync(package)
+    result = RagSynchronizer(python=executable, runtime_root=_runtime_root(tmp_path)).sync(package)
 
     assert result.ok, result.error
     assert result.smoke == {"ok": True, "result_count": 0}
@@ -75,6 +85,8 @@ def test_rag_synchronizer_fails_when_mcp_returns_no_json_payload(monkeypatch, tm
     executable.touch()
 
     class EmptyClient:
+        server_info = {"version": "4.8.5"}
+
         def call(self, *_args: object, **_kwargs: object) -> dict:
             return {"result": {"content": []}}
 
@@ -83,7 +95,32 @@ def test_rag_synchronizer_fails_when_mcp_returns_no_json_payload(monkeypatch, tm
 
     monkeypatch.setattr(rag_sync, "start_mcp_server", lambda *_args, **_kwargs: EmptyClient())
 
-    result = RagSynchronizer(python=executable).sync(package)
+    result = RagSynchronizer(python=executable, runtime_root=_runtime_root(tmp_path)).sync(package)
 
     assert not result.ok
     assert result.error["code"] == "rag_integration_failed"
+
+
+def test_rag_synchronizer_rejects_missing_server_version_before_indexing(monkeypatch, tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    (package / "rag" / "documents").mkdir(parents=True)
+    (package / "rag" / "documents" / "guide.md").write_text("# Guide", encoding="utf-8")
+    executable = tmp_path / "python"
+    executable.touch()
+    calls: list[str] = []
+
+    class UnversionedClient:
+        def call(self, _method: str, *, name: str, **_kwargs: object) -> dict:
+            calls.append(name)
+            return {"result": {"content": [{"text": json.dumps({"active": False, "results": []})}]}}
+
+        def close(self) -> None:
+            return
+
+    monkeypatch.setattr(rag_sync, "start_mcp_server", lambda *_args, **_kwargs: UnversionedClient())
+
+    result = RagSynchronizer(python=executable, runtime_root=_runtime_root(tmp_path)).sync(package)
+
+    assert not result.ok
+    assert result.error["code"] == "rag_version_mismatch"
+    assert calls == []

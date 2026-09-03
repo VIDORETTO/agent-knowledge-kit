@@ -1,0 +1,26 @@
+name: Feature request
+description: Propose a change with a clear user-facing outcome
+title: "[feature] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and users
+      description: Who needs this and what problem does it solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the public CLI, Python or artifact seam.
+    validations:
+      required: true
+  - type: textarea
+    id: tradeoffs
+    attributes:
+      label: Security and compatibility impact
+      description: Explain data, dependency, platform and migration considerations.
+    validations:
+      required: true

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from docops.manifest import build_manifest, redact_url, write_manifest
-from docops.source_resolver import SourceResolver
+from docops.source_resolver import SourceCandidate, SourceResolution, SourceResolver
 
 
 def test_manifest_preserves_resolution_provenance_and_entry_outcomes(tmp_path: Path) -> None:
@@ -32,6 +32,33 @@ def test_manifest_preserves_resolution_provenance_and_entry_outcomes(tmp_path: P
     assert json.loads(output.read_text(encoding="utf-8"))["run_id"] == "run-test"
 
 
+def test_manifest_redacts_candidate_discovery_evidence() -> None:
+    secret = "m" * 24
+    private_path = "C:" + r"\Users\gabri\private\evidence.txt"
+    resolution = SourceResolution(
+        "custom",
+        "web",
+        SourceCandidate(
+            kind="web",
+            slug="custom",
+            canonical="https://docs.example.test/custom",
+            official=True,
+            evidence=("token=" + secret, private_path),
+        ),
+    )
+
+    manifest = build_manifest(
+        resolution,
+        entries=[],
+        provenance={"license": "MIT", "redistribution": "private-only"},
+        artifacts={"skill": "skill", "router": "router", "rag": "rag"},
+    )
+
+    serialized = json.dumps(manifest)
+    assert secret not in serialized
+    assert private_path not in serialized
+
+
 def test_manifest_redacts_credentials_even_when_input_url_contains_userinfo(tmp_path: Path) -> None:
     resolution = SourceResolver(root=tmp_path).resolve("https://user:secret@example.test/docs")
 
@@ -44,13 +71,15 @@ def test_manifest_redacts_credentials_even_when_input_url_contains_userinfo(tmp_
 
 def test_manifest_redacts_credentials_in_catalog_candidates(tmp_path: Path) -> None:
     resolution = SourceResolver(
-        [{
-            "names": ["private"],
-            "slug": "private",
-            "docs_url": "https://user:secret@example.test/docs",
-            "official": True,
-            "confidence": 0.9,
-        }]
+        [
+            {
+                "names": ["private"],
+                "slug": "private",
+                "docs_url": "https://user:secret@example.test/docs",
+                "official": True,
+                "confidence": 0.9,
+            }
+        ]
     ).resolve("private")
 
     text = json.dumps(build_manifest(resolution, entries=[], provenance={"license": "unknown"}, artifacts={}))
@@ -65,6 +94,14 @@ def test_manifest_redacts_sensitive_query_parameters() -> None:
     assert "secret-value" not in value
     assert "REDACTED" in value
     assert "lang=en" in value
+
+
+def test_manifest_redacts_token_like_non_url_values() -> None:
+    secret = "v" * 24
+
+    value = redact_url("token=" + secret)
+
+    assert secret not in value
 
 
 def test_manifest_redacts_local_machine_paths(tmp_path: Path) -> None:

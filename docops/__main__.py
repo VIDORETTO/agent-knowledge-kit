@@ -8,11 +8,16 @@ import sys
 from pathlib import Path
 
 from .config_audit import audit_config_file
+from .contracts import validate_artifact
 from .doctor import run_doctor
 from .evaluator import evaluate_package, generate_golden_candidates
 from .manifest import redact_metadata
+from .observability import redact_report, redact_text
+from .operations import OperationOptions, preview
+from .operations import apply as apply_operation
+from .operations import cleanup as cleanup_residue
+from .operations import plan as build_plan
 from .package_validator import validate_package
-from .pipeline import PipelineOptions, run_pipeline
 from .source_resolver import SourceResolver
 
 
@@ -30,6 +35,29 @@ def build_parser() -> argparse.ArgumentParser:
     resolve.add_argument("--scope")
     resolve.add_argument("--language")
     resolve.add_argument("--json", action="store_true")
+    plan = commands.add_parser("plan", help="plan a package operation without writing artifacts")
+    plan.add_argument("source")
+    plan.add_argument("--output", type=Path, required=True)
+    plan.add_argument("--catalog", type=Path)
+    plan.add_argument("--slug")
+    plan.add_argument("--version")
+    plan.add_argument("--scope")
+    plan.add_argument("--language")
+    plan.add_argument("--mode", choices=("create", "update", "run", "dry-run"), default="run")
+    plan.add_argument("--license", default=None)
+    plan.add_argument("--redistribution", default="private-only")
+    plan.add_argument("--index-rag", action="store_true")
+    plan.add_argument("--allow-private-network", action="store_true")
+    plan.add_argument("--max-pages", type=int, default=50)
+    plan.add_argument("--max-depth", type=int, default=2)
+    plan.add_argument("--include", dest="include_patterns", action="append", default=[])
+    plan.add_argument("--exclude", dest="exclude_patterns", action="append", default=[])
+    plan.add_argument("--runtime-root", type=Path)
+    plan.add_argument("--source-root", type=Path)
+    plan.add_argument("--lease-policy", choices=("fail", "wait"), default="fail")
+    plan.add_argument("--lease-timeout-seconds", type=float, default=0.0)
+    plan.add_argument("--stale-lease-seconds", type=float, default=300.0)
+    plan.add_argument("--json", action="store_true")
     run = commands.add_parser("run", help="produce a knowledge package")
     run.add_argument("source")
     run.add_argument("--output", type=Path, required=True)
@@ -38,7 +66,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--version")
     run.add_argument("--scope")
     run.add_argument("--language")
-    run.add_argument("--mode", choices=("create", "update", "dry-run"), default="create")
+    run.add_argument("--mode", choices=("create", "update", "run", "dry-run"), default="run")
     run.add_argument("--license", default=None)
     run.add_argument("--redistribution", default="private-only")
     run.add_argument("--index-rag", action="store_true")
@@ -47,16 +75,28 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--max-depth", type=int, default=2)
     run.add_argument("--include", dest="include_patterns", action="append", default=[])
     run.add_argument("--exclude", dest="exclude_patterns", action="append", default=[])
+    run.add_argument("--runtime-root", type=Path)
+    run.add_argument("--source-root", type=Path)
+    run.add_argument("--lease-policy", choices=("fail", "wait"), default="fail")
+    run.add_argument("--lease-timeout-seconds", type=float, default=0.0)
+    run.add_argument("--stale-lease-seconds", type=float, default=300.0)
     run.add_argument("--json", action="store_true")
     validate = commands.add_parser("validate", help="validate a produced knowledge package")
     validate.add_argument("package", type=Path)
     validate.add_argument("--json", action="store_true")
+    cleanup = commands.add_parser("cleanup", help="remove expired operation residue safely")
+    cleanup.add_argument("package", type=Path)
+    cleanup.add_argument("--retention-seconds", type=float, default=7 * 24 * 60 * 60)
+    cleanup.add_argument("--keep-attempts", type=int, default=20)
+    cleanup.add_argument("--json", action="store_true")
     evaluate = commands.add_parser("evaluate", help="evaluate reviewed golden cases")
     evaluate.add_argument("--package", type=Path, required=True)
     evaluate.add_argument("--cases", type=Path, required=True)
     evaluate.add_argument("--recall-threshold", type=float, default=0.85)
     evaluate.add_argument("--mrr-threshold", type=float, default=0.7)
     evaluate.add_argument("--top-k", type=int, default=5)
+    evaluate.add_argument("--adapter", choices=("lexical", "memory", "mcp"), default="lexical")
+    evaluate.add_argument("--runtime-root", type=Path)
     evaluate.add_argument("--json", action="store_true")
     candidates = commands.add_parser("golden-candidates", help="generate unreviewed golden candidates")
     candidates.add_argument("package", type=Path)
@@ -77,14 +117,22 @@ def _dispatch(args: argparse.Namespace) -> int:
             print(json.dumps(report.to_dict(), indent=2, ensure_ascii=False))
         return 0 if report.ok else 1
     if args.command == "resolve":
-        resolver = SourceResolver.from_catalog_file(args.catalog, root=args.root) if args.catalog else SourceResolver(root=args.root)
+        resolver = (
+            SourceResolver.from_catalog_file(args.catalog, root=args.root)
+            if args.catalog
+            else SourceResolver(root=args.root)
+        )
         resolution = resolver.resolve(args.source, version=args.version, scope=args.scope, language=args.language)
-        print(json.dumps(redact_metadata(resolution.to_dict()), indent=2, ensure_ascii=False, sort_keys=True))
+        print(
+            json.dumps(
+                redact_report(redact_metadata(resolution.to_dict())), indent=2, ensure_ascii=False, sort_keys=True
+            )
+        )
         return 0 if resolution.selected is not None and not resolution.requires_decision else 2
-    if args.command == "run":
-        result = run_pipeline(
+    if args.command == "plan":
+        operation = build_plan(
             args.source,
-            options=PipelineOptions(
+            options=OperationOptions(
                 output_dir=args.output,
                 catalog=args.catalog,
                 slug=args.slug,
@@ -100,32 +148,93 @@ def _dispatch(args: argparse.Namespace) -> int:
                 max_depth=args.max_depth,
                 include_patterns=tuple(args.include_patterns),
                 exclude_patterns=tuple(args.exclude_patterns),
+                runtime_root=args.runtime_root,
+                source_root=args.source_root,
+                lease_policy=args.lease_policy,
+                lease_timeout_seconds=args.lease_timeout_seconds,
+                stale_lease_seconds=args.stale_lease_seconds,
             ),
         )
+        print(operation.json())
+        return 0 if operation.ok else 2
+    if args.command == "run":
+        operation = build_plan(
+            args.source,
+            options=OperationOptions(
+                output_dir=args.output,
+                catalog=args.catalog,
+                slug=args.slug,
+                version=args.version,
+                scope=args.scope,
+                language=args.language,
+                mode=args.mode,
+                license=args.license,
+                redistribution=args.redistribution,
+                index_rag=args.index_rag,
+                allow_private_network=args.allow_private_network,
+                max_pages=args.max_pages,
+                max_depth=args.max_depth,
+                include_patterns=tuple(args.include_patterns),
+                exclude_patterns=tuple(args.exclude_patterns),
+                runtime_root=args.runtime_root,
+                source_root=args.source_root,
+                lease_policy=args.lease_policy,
+                lease_timeout_seconds=args.lease_timeout_seconds,
+                stale_lease_seconds=args.stale_lease_seconds,
+            ),
+        )
+        result = preview(operation) if args.mode == "dry-run" else apply_operation(operation)
         print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False, sort_keys=True))
-        return 0 if result.ok else 1
+        return result.exit_code if not result.ok else 0
     if args.command == "validate":
         result = validate_package(args.package)
         print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False, sort_keys=True))
         return 0 if result.ok else 1
+    if args.command == "cleanup":
+        result = cleanup_residue(
+            args.package,
+            retention_seconds=args.retention_seconds,
+            keep_attempts=args.keep_attempts,
+        )
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("ok") else 3 if result.get("code") == "writer_busy" else 1
     if args.command == "evaluate":
         metric_top_k = args.top_k if 1 <= args.top_k <= 100 else 5
         result = evaluate_package(
             args.package,
             args.cases,
-            thresholds={f"recall_at_{metric_top_k}": args.recall_threshold, f"mrr_at_{metric_top_k}": args.mrr_threshold},
+            thresholds={
+                f"recall_at_{metric_top_k}": args.recall_threshold,
+                f"mrr_at_{metric_top_k}": args.mrr_threshold,
+            },
             top_k=args.top_k,
+            adapter=args.adapter,
+            runtime_root=args.runtime_root,
         )
         print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False, sort_keys=True))
         return 0 if result.ok else 1
     if args.command == "golden-candidates":
-        print(json.dumps({"schema_version": 1, "reviewed": False, "cases": generate_golden_candidates(args.package, limit=args.limit)}, indent=2, ensure_ascii=False, sort_keys=True))
+        payload = {
+            "schema_version": 1,
+            "reviewed": False,
+            "cases": generate_golden_candidates(args.package, limit=args.limit),
+        }
+        contract = validate_artifact("golden-candidates", payload)
+        if not contract.ok:
+            raise ValueError("generated golden candidates violate their contract")
+        print(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True))
         return 0
     if args.command == "config-audit":
         try:
             result = audit_config_file(args.config)
         except (OSError, ValueError) as exc:
-            print(json.dumps({"schema_version": 1, "ok": False, "errors": [{"code": "config_unreadable", "message": str(exc)}]}, indent=2, ensure_ascii=False))
+            print(
+                json.dumps(
+                    {"schema_version": 1, "ok": False, "errors": [{"code": "config_unreadable", "message": str(exc)}]},
+                    indent=2,
+                    ensure_ascii=False,
+                )
+            )
             return 1
         print(result.to_json())
         return 0 if result.ok else 1
@@ -142,7 +251,7 @@ def main(argv: list[str] | None = None) -> int:
                 {
                     "schema_version": 1,
                     "ok": False,
-                    "errors": [{"code": "invalid_request", "message": str(exc)}],
+                    "errors": [{"code": "invalid_request", "message": redact_text(exc)}],
                 },
                 indent=2,
                 ensure_ascii=False,

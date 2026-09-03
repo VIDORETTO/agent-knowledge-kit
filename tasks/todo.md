@@ -1,3 +1,115 @@
+# Registro de autoanálise e especificação pós-1.0
+
+## Auditoria real atual — plano documental — 2026-09-02
+
+**Status:** auditoria concluída; documentos revisados; tickets 23–29
+intencionalmente não implementados.
+
+> Este é o plano vigente para a auditoria solicitada. As seções abaixo são
+> registros históricos de auditorias e execuções anteriores; não substituem a
+> revalidação atual do estado público, do `HEAD` e do working tree.
+
+- [x] Ler `AGENTS.md`, `RTK.md`, `README.md`, `tasks/lessons.md`, documentação
+  existente, issues locais e o estado do Git antes de concluir qualquer nota.
+- [x] Comparar release/tag pública `v1.0.0`, `origin/main`/`HEAD` e working tree
+  candidato 1.1.0, incluindo arquivos rastreados e não rastreados.
+- [x] Revalidar os riscos solicitados: smoke sem RAG, `pip-audit` limpo,
+  CVEs Chroma, acoplamento de módulos, claims de plataforma e publicação de
+  corpus/índices/tokens.
+- [x] Executar gates proporcionais de testes, lint, formato, contratos,
+  dependências, release, clean clone, wheel, suporte e RAG/MCP real.
+- [x] Aplicar o vocabulário de módulo/interface/seam do `codebase-design` à
+  especificação e separar fatos, inferências e recomendações.
+- [x] Aplicar a disciplina `tdd` ao plano: red observável, green mínimo,
+  tracer bullets e testes somente nos seams públicos.
+- [x] Criar a auditoria atual, revisar a especificação e o plano TDD, e criar
+  tickets 23–29 ordenados por blocker, aceite e dependência.
+- [x] Revalidar os documentos gerados e registrar o resultado final nesta
+  seção.
+- [ ] Implementar tickets 23–29 — próximo modelo, em uma etapa posterior e
+  separada desta auditoria.
+
+### Revisão da auditoria atual
+
+As conclusões vigentes estão em
+`docs/GITHUB-PUBLICATION-AUDIT-2026-09-02.md`. A nota geral é **6,2/10**;
+“publicar hoje” é **3,0/10** porque o candidato 1.1.0 existe apenas no working
+tree e ainda não tem CI público para o mesmo conteúdo; “produção estável” é
+**5,3/10** devido ao residual de quatro CVEs do Chroma, locks sem hashes/transitivas,
+recuperação pós-crash não provada e cobertura insuficiente do seam raiz.
+
+Os tickets novos são 23–29 em
+`.scratch/post-1-0-reliability/issues/`. Nenhuma implementação, alteração de
+código, commit, push, tag, publicação ou release foi feita nesta auditoria.
+
+## Auditoria real de prontidão GitHub — 2026-09-01
+
+> Registro histórico. Os números e resultados abaixo pertencem à execução de
+> 2026-09-01 e foram revalidados/contestados quando necessário pela auditoria
+> atual; não são o estado vigente por si só.
+
+- [x] Inventariar documentação, código e os estados `v1.0.0`, `HEAD/origin/main` e working tree.
+- [x] Executar auditoria crítica pelos 13 setores solicitados, distinguindo fatos, inferências e recomendações.
+- [x] Rodar gates proporcionais no ambiente atual e em ambientes limpos: testes, lint, contratos, dependências, release, suporte, clone, wheel e RAG/MCP quando disponível.
+- [x] Registrar falhas de ambiente separadamente de defeitos do produto e riscos de reprodutibilidade.
+- [x] Produzir relatório de auditoria com notas, blockers, comandos, resultados e evidências localizáveis.
+- [x] Aplicar `to-spec` aos achados confirmados e revisar `docs/POST-1.0-IMPROVEMENT-SPEC.md`.
+- [x] Aplicar `to-tickets` e revisar os tickets em `.scratch/post-1-0-reliability/issues/` por severidade e dependências.
+- [x] Aplicar `tdd` para definir seams públicos, tracer bullets e ciclos red → green, sem implementar tickets.
+- [x] Revalidar todos os documentos produzidos e registrar a revisão final nesta seção.
+
+> Restrição desta auditoria: não implementar código e não fazer commit, push,
+> tag ou release. Mudanças preexistentes devem ser preservadas.
+
+### Revisão da auditoria real
+
+Concluída sem implementar código. O baseline candidato **não está verde**:
+`pytest` teve `1 failed, 153 passed, 2 skipped`; o clean clone preparado
+reproduziu a mesma falha sem RAG; o wheel construiu e falhou no contrato de
+metadata do adapter. Ruff lint, contratos, matriz e `git diff --check`
+passaram; Ruff format reportou 54 arquivos fora do formato. A integração RAG
+real passou por run indexado, validate, evaluate MCP e concorrência.
+
+A auditoria de dependências passou após o pin documentado de pip, mantendo
+quatro CVEs Chroma allowlisted como risco residual. O auditor de release
+tracked retornou sucesso, mas um fixture Git adversarial confirmou falsos
+negativos para dados privados aninhados; portanto esse resultado não autoriza
+publicação. As notas e comandos estão em
+`docs/GITHUB-PUBLICATION-AUDIT-2026-09-01.md`, a spec atual em
+`docs/POST-1.0-IMPROVEMENT-SPEC.md`, o plano red → green em
+`docs/POST-1.0-TDD-PLAN.md` e os novos tickets são 13–22.
+
+> Objetivo: produzir uma crítica técnica e de produto baseada em evidências,
+> uma especificação de melhoria e tickets TDD executáveis por GPT-5.6 Luna Max,
+> sem implementar as mudanças nesta etapa.
+
+- [x] Inventariar contratos, fluxos, módulos, documentação, testes, CI e
+  dependências do estado atual.
+- [x] Executar auditorias independentes de arquitetura, qualidade/segurança e
+  experiência do operador/produto com revisores GPT-5.6 Sol High.
+- [x] Verificar cada achado relevante no código, nos testes ou por comandos
+  reproduzíveis; distinguir fatos, inferências e propostas.
+- [x] Escolher os seams públicos de teste e a estratégia red-green por tracer
+  bullet, preservando o contrato DOCOPS e a fronteira com o harness externo.
+- [x] Publicar uma especificação completa e tickets locais em ordem de
+  dependência, dimensionados para contextos frescos do Luna Max.
+- [x] Executar os gates atuais para estabelecer o baseline, revisar a
+  elegância do plano e registrar resultados, riscos e decisões nesta seção.
+
+## Revisão da autoanálise
+
+Registro histórico de 2026-08-30, anterior ao working tree atual. Naquele
+baseline, a suíte permaneceu verde (`107 passed, 2 skipped`,
+Ruff e auditoria de release aprovados). A análise confirmou como prioridades:
+outcome terminal único, contratos executáveis, plan sem efeitos, apply
+transacional, retomada verificável, lease de writer, readiness honesto e gates
+de avaliação pelas rotas reais. A especificação está em
+`docs/POST-1.0-IMPROVEMENT-SPEC.md`; 12 tickets locais estão em
+`.scratch/post-1-0-reliability/issues/`. Esse resultado foi supersedido para o
+candidato atual pela auditoria de 2026-09-01 acima.
+
+---
+
 # Plano de estabilização e publicação — agent-knowledge-kit
 
 > Checklist operacional da release técnica pública 1.0.0. Cada item marcado
@@ -215,3 +327,222 @@ Os gates locais, as decisões de suporte, a tag, a release, o push e os
 workflows públicos foram observados e registrados. O residual de Chroma e as
 revisões manuais descritas acima continuam sendo limitações conhecidas, não
 falhas silenciosas do gate.
+# Execução tickets 13–22 — plano ativo
+
+> Objetivo: implementar os gaps pós-1.0 sobre o working tree recebido,
+> preservando os tickets 01–12 e sem commit, push, tag, publicação ou release.
+> Cada ticket será executado verticalmente: red observável → green mínimo →
+> gate proporcional → atualização deste plano e do ticket.
+
+## Ordem de dependência e ciclos
+
+- [x] 13 — Auditoria de candidato fail-closed: Git tracked/candidate, paths
+  proibidos, binários, canários de token e relatório redigido.
+- [x] 14 — Contrato MCP determinístico: runtime selecionado, drift, ausência,
+  timeout/EOF/stderr e smoke real.
+- [x] 16 — Interface Python raiz: request/options, plan/apply/inspect, contratos
+  imutáveis/versionados e compatibilidade observável.
+- [x] 15 — Tracer do wheel instalado: core e RAG sem fallback silencioso,
+  metadata de adapter/backend/perfil/proveniência coerente.
+- [x] 17 — Expandir primitives internas: ownership unidirecional sem imports
+  privados do legado, mantendo todos os seams verdes.
+- [x] 18 — Migrar e contrair pipeline legado: callers pela interface nova,
+  revalidação por snapshot sem readquisição completa sob lease e remoção segura.
+- [x] 19 — Promoção/resíduos: reader concorrente, falhas de promoção, inspect,
+  retenção e limpeza segura, com garantia por filesystem.
+- [x] 20 — Supply chain: locks por perfil/plataforma, hashes, SBOM, vendor/model
+  provenance e allowlist Chroma fail-closed.
+- [x] 21 — Suporte perfilado/runbook: matriz por capacidade, wrappers, skips
+  obrigatórios, ordem em clean clone e checker de drift docs/workflows.
+- [x] 22 — Readiness profissional versionado: identidade nova, bundle de
+  candidato verificável, metadata/community e prova de digest único.
+
+## Método de verificação
+
+- [x] Registrar cada red com comando e falha antes da implementação.
+- [x] Executar testes somente nos seams públicos já aprovados em
+  `docs/POST-1.0-TDD-PLAN.md`; não testar helpers privados/call counts.
+- [x] Rodar testes rápidos após cada slice e gates de ticket ao concluir cada
+  dependência.
+- [x] Rodar suíte sem RAG e com RAG, auditoria de candidato, contratos, lint e
+  format como gates separados.
+- [x] Reproduzir clean clone, wheel core/RAG, security/dependency/portability,
+  e tracer real RAG/MCP sobre o mesmo bundle antes do readiness final.
+- [x] Manter falha ambiental separada de defeito do produto e não declarar
+  release-ready sem evidência executável.
+
+## Registro de execução
+
+- Baseline inicial: `pytest -q` = 1 failed, 153 passed, 2 skipped; falha em
+  `test_public_smoke_cli_rejects_server_version_drift` porque o launcher
+  encerra com EOF em vez de reportar drift.
+- Cwd/projeto: `<workspace>`, branch `main`, origin
+  `https://github.com/VIDORETTO/agent-knowledge-kit`.
+
+# Execução SPEC-002 pós-1.0 — registro histórico
+
+> Esta seção registra a execução anterior do SPEC-002. Para o estado vigente,
+> consulte a auditoria de 2026-09-02 e a revisão documental no início deste
+> arquivo.
+
+> Atualizado em 2026-09-01 após a implementação dos 12 tickets. `[x]` significa
+> implementação e evidência executada; a seção histórica acima foi preservada.
+
+## Ordem e critérios de aceite
+
+- [x] Baseline e seams públicos caracterizados; mudanças preexistentes preservadas.
+- [x] 01 — contratos normativos executáveis, outcome terminal único e drift gate.
+- [x] 02 — `plan` completo, imutável/sem efeitos, diff fiel e plano verificável.
+- [x] 03 — invariantes observáveis de `create`, `update` e `run`.
+- [x] 04 — staging no mesmo volume, validação completa e promoção transacional,
+  incluindo restauração segura, falhas por fase e leitores concorrentes.
+- [x] 05 — recibos atômicos verificáveis, invalidação seletiva e retomada segura.
+- [x] 06 — lease local recuperável; um writer por pacote e readers preservados.
+- [x] 07 — readiness monotônico com evidências de scaffold, skill, RAG e release.
+- [x] 08 — avaliação por rota/adaptador, backend/proveniência e gate MCP real.
+- [x] 09 — resolver providers explícitos sem descoberta silenciosa de rede.
+- [x] 10 — contexto de runtime explícito e procedência verificável em checkout e
+  wheel, incluindo detecção de drift.
+- [x] 11 — eventos e diagnósticos limitados, redigidos e derivados de recibos reais.
+- [x] 12 — matriz, CI, release gates e documentação alinhados.
+- [x] Suíte completa e todos os gates locais/integrados abaixo executados com
+  sucesso; os únicos skips são symlinks indisponíveis neste host Windows.
+
+## Evidência por ticket
+
+| Ticket | Teste/artefato proporcional | Resultado atual | Pendência explícita |
+|---|---|---|---|
+| 01 | `tests/test_post_contracts.py`; `scripts/check_contracts.py --json` | PASS; 9 contratos, sem findings | Nenhuma conhecida |
+| 02 | `tests/test_post_lifecycle.py` — plan, imutabilidade, diff e stale plan | PASS | Nenhuma conhecida |
+| 03 | `tests/test_post_lifecycle.py` — create/update/run e blockers | PASS | Nenhuma conhecida |
+| 04 | lifecycle, promoção/restauração, staging seguro e concorrência | PASS | Nenhuma conhecida no escopo local |
+| 05 | lifecycle/reliability — receipts, resume, truncamento/adulteração | PASS | Nenhuma conhecida |
+| 06 | `tests/test_post_reliability.py`; teste de reindex concorrente | PASS | Nenhuma conhecida |
+| 07 | contratos, package validator e readiness | PASS | Nenhuma conhecida |
+| 08 | `tests/test_evaluator.py`; tracer MCP real e Golden fixture | PASS; Recall@5/MRR@5 1,0 | Nenhuma conhecida |
+| 09 | `tests/test_source_resolver.py` — catálogo, providers e entradas legadas | PASS | Nenhuma conhecida |
+| 10 | `tests/test_runtime.py`; `scripts/verify_wheel.py` com MCP; clean clone | PASS | Nenhuma conhecida |
+| 11 | `tests/test_post_observability.py`, MCP, smoke e redaction | PASS | Nenhuma conhecida |
+| 12 | `scripts/check_support_matrix.py`; workflows, docs e auditorias | PASS | Nenhuma conhecida |
+
+## Gates executados
+
+- `python -m pytest -q`: **154 passed, 2 skipped** em 17,63 s; os skips são
+  criação de symlink indisponível neste host Windows.
+- `python -m ruff check docops scripts tests`: **PASS**; `compileall` e
+  `git diff --check`: **PASS**.
+- `scripts/check_contracts.py --json`: **PASS**, 9 contratos e nenhum finding.
+- `scripts/check_support_matrix.py --json`: **PASS**; Python 3.11–3.13
+  suportado, 3.14 tolerado, Ubuntu/Windows/macOS declarados e gates coerentes.
+- `scripts/audit_release.py --tracked-only --json`: **PASS**, 324 arquivos
+  rastreados, nenhum finding.
+- `scripts/audit_dependencies.py --requirements requirements.lock --local
+  --strict`: **ok=true**; os quatro advisories residuais do Chroma 1.5.9 estão
+  explicitamente classificados como permitidos apenas para `PersistentClient`
+  local, sem HTTP/trust_remote_code.
+- `python -m docops doctor --json`: **ok=true**; config, lock, skill e RAG
+  disponíveis. O Python local é 3.14, tolerado pela matriz.
+- `python -m docops config-audit config.yaml --json`: **ok=true**; transporte
+  `stdio`, sem erros ou warnings.
+- `scripts/verify_wheel.py`: **PASS**; wheel 1.0.0 construído e instalado em
+  alvo isolado, com `run --index-rag` → `validate` → `evaluate --adapter mcp`;
+  saída confirmou `adapter=mcp`, `rag=true` e proveniência `installed-package`.
+- Clean clone: **PASS**, doctor, auditoria de release e suíte (**154 passed,
+  2 skipped**) em árvore temporária sem estado local.
+- Tracer público RAG: **PASS** — `run --index-rag` → `validate` →
+  `evaluate --adapter mcp`, com `knowledge-rag` 4.8.5, perfil compact, 2 casos,
+  Recall@5=1,0 e MRR@5=1,0; o pacote registrou aquisição, artifacts, index,
+  state e validate.
+- `scripts/mcp_smoke.py "background tasks"`: **PASS**; handshake, tools/list e
+  busca real, com conteúdo, caminhos e stderr redigidos/omitidos.
+- `scripts/test_reindex_concurrency.py --seconds 20`: **PASS**; nenhum erro,
+  reindex encerrado e índice consistente.
+- TDD do gate do wheel: o red inicial expôs drift do backend instalado
+  (`serverInfo=4.6.0` versus metadata `4.8.5`); o green usa runtime pinned
+  isolado e falha explicitamente se `DOCOPS_REQUIRE_WHEEL_RAG=1` não puder
+  executar MCP real.
+- Revisão crítica: compatibilidade de `run` e manifests legados preservada;
+  symlink/path traversal, SSRF, tokens, corpus e diagnósticos cobertos;
+  staging/backup evita sobrescrever dados do usuário; mudanças preexistentes e
+  o updater legado foram preservados.
+
+## Pendências e limites honestos
+
+- [x] Nenhum commit, push, tag, publicação ou release foi executado nesta tarefa.
+- [x] O CI declara a matriz Python 3.11–3.13 e runners Ubuntu/Windows/macOS;
+  a execução local desta rodada ocorreu no Windows com Python 3.14 tolerado.
+- [x] A decisão sobre o residual de Chroma, licença de novos corpora e eventual
+  transporte HTTP/SSE continua exigindo revisão operacional antes de qualquer
+  publicação futura.
+
+## Revisão histórica — tickets 13–22 (2026-09-03)
+
+Esta seção é a evidência da execução anterior dos tickets 13–22; os números
+históricos acima foram preservados. Ela não substitui a auditoria atual nem
+significa que os tickets 23–29 foram implementados.
+
+### TDD red → green
+
+- [x] 13: os testes de candidate audit iniciaram sem seleção de conjunto
+  candidato; o CLI agora audita exatamente tracked + novos arquivos aprovados,
+  incluindo binários e canários estruturados, sem ecoar segredos.
+- [x] 14: o baseline reproduziu EOF em vez de `server_version_drift`; o smoke
+  agora seleciona o interpretador real e separa ausência, drift, timeout e EOF.
+- [x] 15: o red do wheel mostrou `serverInfo=4.6.0` contra metadata 4.8.5; o
+  tracer agora usa o runtime pinado e falha se RAG obrigatório cair em fallback.
+- [x] 14/15 follow-up: o módulo MCP redirecionava a versão para stderr e o
+  wheel via `selected_version=None`; o contrato agora lê `sys.__stdout__` sem
+  contaminar o canal JSON-RPC.
+- [x] 16: o seam raiz e o teste de imutabilidade falharam antes dos exports e
+  snapshots; `docops` agora expõe tipos versionados e resultados profundamente
+  imutáveis e serializáveis.
+- [x] 17: callers ainda dependiam da engine/adapter legado; primitives e
+  geração foram extraídos e o pipeline legado ficou somente como adapter fino.
+- [x] 18: o teste de lease observou 9 requests, acima do limite 6; a
+  revalidação agora usa snapshot/fingerprint sem readquirir o corpus sob lease.
+- [x] 19: o reader separado observou a janela de rename e a suíte reproduziu
+  `WinError 5`; retry de promoção e inspect estável fecharam a garantia pública.
+- [x] 20: o teste de bundle iniciou sem gerador; generator/verifier agora
+  produzem e validam locks, hashes, SBOM, vendor/model provenance e allowlist.
+- [x] 21: o checker de suporte iniciou sem CLI; matriz, workflows, wrappers,
+  skips e ordem de gates agora são validados como contrato.
+- [x] 21 follow-up: o wrapper POSIX inicialmente não importava o checkout e
+  sobrescrevia o venv Windows; o bootstrap agora carrega a raiz antes da
+  instalação e separa `.venv-posix`/`.venv-windows` por configuração nativa.
+- [x] 21 follow-up: o clean clone inicialmente tentou copiar o symlink `lib64`
+  do venv POSIX; os dois diretórios específicos agora são ignorados também
+  pelo copiador, auditor e builder de candidato.
+- [x] 22: o teste de candidato iniciou sem builder; o bundle 1.1.0 agora é
+  digest-bound, verificável independentemente e explicitamente unpublished.
+
+### Gates finais executados
+
+- [x] `rtk python -m pytest -q` e o mesmo comando no `.venv` RAG: **171 passed,
+  2 skipped**. Os skips são exclusivamente a capacidade de criar symlink neste
+  host Windows.
+- [x] `ruff check`, `ruff format --check`, `compileall`, `git diff --check`,
+  `check_contracts.py --json`, `check_support_matrix.py --json` e auditoria
+  tracked/candidate: **PASS**, sem findings.
+- [x] Wheel core e RAG: **PASS**, versão 1.1.0, adapter memory/mcp conforme o
+  perfil; o RAG instalado confirmou `knowledge-rag==4.8.5`.
+- [x] Dependências: `pip check` limpo; auditoria estrita **ok=true**, com
+  exatamente os quatro CVEs Chroma permitidos pelo threat model local
+  `PersistentClient` e sem unresolved.
+- [x] Smoke MCP real e ciclo RAG: handshake/tools/search **PASS**; run
+  indexado, validate, evaluate MCP e reindex concorrente **PASS**, com
+  Recall@5=1.0 e MRR@5=1.0.
+- [x] Security vendor: **160 passed, 7 skipped, 5 xfailed**; warning apenas de
+  depreciação externa do Chroma.
+- [x] Clean clone: **171 passed, 2 skipped**; doctor, release audit e suíte
+  passaram sem estado local.
+- [x] Candidate final: `artifacts/candidate-1.1.0-final11`, manifest e
+  verificação independente **PASS**, source commit
+  `855038019abbbe37d027728ac1bf034f4af210fb`; o digest final é o valor
+  emitido e verificado no `manifest.json` do bundle.
+- [x] Portabilidade: bootstrap Python, PowerShell e execução POSIX **PASS**;
+  `--no-install` não exige `ensurepip`. O bootstrap completo com instalação de
+  dependências ainda requer `pip`/`python3-venv` no host Linux, enquanto os
+  wrappers e a matriz CI permanecem cobertos.
+- [x] Nenhum commit, push, tag, publish ou release foi executado. A assinatura,
+  branch/release protections, licença de corpus e decisão sobre o residual
+  Chroma continuam como revisão humana antes de qualquer publicação.

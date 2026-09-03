@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "python": {
+    "supported": ["3.11", "3.12", "3.13"],
+    "tolerated": ["3.14"],
+    "minimum": "3.11"
+  },
+  "runners": ["ubuntu-latest", "windows-latest", "macos-latest"],
+  "gates": {
+    "quick": ["pytest", "ruff", "format", "doctor", "contract-conformance", "release-audit"],
+    "clean_clone": ["doctor", "release-audit", "pytest"],
+    "package": ["wheel-create-validate-evaluate", "supply-chain", "supply-chain-verify", "candidate-audit", "candidate-bundle", "candidate-verify"],
+    "integration": ["run-indexed", "validate", "evaluate-mcp", "mcp-smoke", "reindex-concurrency"]
+  },
+  "profiles": {
+    "core": {"gates": ["quick", "clean_clone"], "optional": false},
+    "formats": {"gates": ["quick"], "optional": true},
+    "bootstrap": {"gates": ["clean_clone"], "optional": false},
+    "wheel": {"gates": ["package"], "optional": false},
+    "rag-mcp": {"gates": ["integration"], "optional": true},
+    "filesystem": {"gates": ["integration"], "optional": false}
+  },
+  "claims": [
+    {"id": "core-cross-platform", "platforms": ["ubuntu-latest", "windows-latest", "macos-latest"], "profile": "core", "job": "quick"},
+    {"id": "clean-clone-cross-platform", "platforms": ["ubuntu-latest", "windows-latest", "macos-latest"], "profile": "bootstrap", "job": "clean-clone"},
+    {"id": "wheel-linux", "platforms": ["ubuntu-latest"], "profile": "wheel", "job": "package"},
+    {"id": "rag-linux", "platforms": ["ubuntu-latest"], "profile": "rag-mcp", "job": "rag"},
+    {"id": "filesystem-linux", "platforms": ["ubuntu-latest"], "profile": "filesystem", "job": "rag"}
+  ],
+  "wrappers": {
+    "bootstrap": ["scripts/bootstrap.py", "scripts/bootstrap.ps1", "scripts/bootstrap.sh"],
+    "operations": ["scripts/update_docs.ps1", "scripts/update_rag.py"]
+  },
+  "skips": [
+    {"id": "rag-optional", "condition": "knowledge-rag unavailable", "observable": "SKIPPED [rag_optional_unavailable]"},
+    {"id": "symlink-capability", "condition": "filesystem cannot create symlinks", "observable": "pytest skip"}
+  ],
+  "order": ["bootstrap", "doctor", "dependencies", "support-matrix", "contracts", "pytest", "ruff", "clean-clone", "wheel", "supply-chain", "supply-chain-verify", "rag", "candidate-audit", "candidate-bundle", "candidate-verify"]
+}

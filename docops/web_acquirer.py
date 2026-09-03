@@ -72,11 +72,19 @@ class FetchPolicy:
     )
 
     def __post_init__(self) -> None:
-        if not isinstance(self.timeout_seconds, (int, float)) or isinstance(self.timeout_seconds, bool) or not math.isfinite(self.timeout_seconds) or self.timeout_seconds <= 0:
+        if (
+            not isinstance(self.timeout_seconds, (int, float))
+            or isinstance(self.timeout_seconds, bool)
+            or not math.isfinite(self.timeout_seconds)
+            or self.timeout_seconds <= 0
+        ):
             raise ValueError("timeout_seconds must be positive")
         if isinstance(self.max_bytes, bool) or not isinstance(self.max_bytes, int) or self.max_bytes < 1:
             raise ValueError("max_bytes must be positive")
-        if any(isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in (self.max_redirects, self.retries)):
+        if any(
+            isinstance(value, bool) or not isinstance(value, int) or value < 0
+            for value in (self.max_redirects, self.retries)
+        ):
             raise ValueError("max_redirects and retries cannot be negative")
 
 
@@ -206,11 +214,7 @@ class NetworkPolicy:
         if self.allow_private:
             return (host,)
         try:
-            addresses = {
-                item[4][0]
-                for item in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
-                if item[4]
-            }
+            addresses = {item[4][0] for item in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM) if item[4]}
         except socket.gaierror as exc:
             raise AcquisitionError("dns_failed", f"could not resolve {host}: {exc}", url=url) from exc
         if not addresses:
@@ -474,7 +478,9 @@ class WebAcquirer:
                     context = ssl.create_default_context()
                     wrapped_socket = context.wrap_socket(raw_socket, server_hostname=host)
                     raw_socket = None
-                    connection = http.client.HTTPSConnection(host, port, timeout=self.policy.timeout_seconds, context=context)
+                    connection = http.client.HTTPSConnection(
+                        host, port, timeout=self.policy.timeout_seconds, context=context
+                    )
                     connection.sock = wrapped_socket
                 else:
                     connection = http.client.HTTPConnection(host, port, timeout=self.policy.timeout_seconds)
@@ -522,10 +528,14 @@ class WebAcquirer:
                         raise AcquisitionError(code, f"HTTP {status} for {current}", url=current)
                     content_type = response.headers.get_content_type().casefold()
                     if content_type not in self.policy.allowed_content_types:
-                        raise AcquisitionError("unsupported_content_type", f"content type is not supported: {content_type}", url=current)
+                        raise AcquisitionError(
+                            "unsupported_content_type", f"content type is not supported: {content_type}", url=current
+                        )
                     content_length = response.headers.get("Content-Length")
                     if content_length and content_length.isdigit() and int(content_length) > self.policy.max_bytes:
-                        raise AcquisitionError("payload_too_large", f"response exceeds {self.policy.max_bytes} bytes", url=current)
+                        raise AcquisitionError(
+                            "payload_too_large", f"response exceeds {self.policy.max_bytes} bytes", url=current
+                        )
                     body = bytearray()
                     while True:
                         block = response.read(min(64 * 1024, self.policy.max_bytes - len(body) + 1))
@@ -533,7 +543,9 @@ class WebAcquirer:
                             break
                         body.extend(block)
                         if len(body) > self.policy.max_bytes:
-                            raise AcquisitionError("payload_too_large", f"response exceeds {self.policy.max_bytes} bytes", url=current)
+                            raise AcquisitionError(
+                                "payload_too_large", f"response exceeds {self.policy.max_bytes} bytes", url=current
+                            )
                     return FetchedResponse(requested, current, status, content_type, bytes(body), tuple(redirects))
                 except AcquisitionError:
                     raise
@@ -566,13 +578,15 @@ class WebAcquirer:
         try:
             start = canonicalize_url(start_url)
         except ValueError as exc:
-            result.entries.append({
-                "source": start_url,
-                "canonical": str(start_url),
-                "status": "error",
-                "code": "invalid_url",
-                "reason": str(exc),
-            })
+            result.entries.append(
+                {
+                    "source": start_url,
+                    "canonical": str(start_url),
+                    "status": "error",
+                    "code": "invalid_url",
+                    "reason": str(exc),
+                }
+            )
             return result
         robots, sitemap_origins = self._read_robots(start)
         candidates: list[str] = []
@@ -594,13 +608,15 @@ class WebAcquirer:
             try:
                 canonical_candidate = canonicalize_url(candidate)
             except ValueError as exc:
-                result.entries.append({
-                    "source": candidate,
-                    "canonical": str(candidate),
-                    "status": "error",
-                    "code": "invalid_url",
-                    "reason": str(exc),
-                })
+                result.entries.append(
+                    {
+                        "source": candidate,
+                        "canonical": str(candidate),
+                        "status": "error",
+                        "code": "invalid_url",
+                        "reason": str(exc),
+                    }
+                )
                 continue
             if canonical_candidate in seen:
                 continue
@@ -613,7 +629,9 @@ class WebAcquirer:
                 user_agent=self.policy.user_agent,
             )
             if reason:
-                result.entries.append({"source": candidate, "canonical": canonical_candidate, "status": "ignored", "reason": reason})
+                result.entries.append(
+                    {"source": candidate, "canonical": canonical_candidate, "status": "ignored", "reason": reason}
+                )
                 continue
             fetched_pages += 1
             try:
@@ -624,13 +642,15 @@ class WebAcquirer:
                     try:
                         content = _extract_pdf_bytes(response.body)
                     except AcquisitionError as exc:
-                        result.entries.append({
-                            "source": candidate,
-                            "canonical": canonical_candidate,
-                            "status": "error",
-                            "code": exc.code,
-                            "reason": str(exc),
-                        })
+                        result.entries.append(
+                            {
+                                "source": candidate,
+                                "canonical": canonical_candidate,
+                                "status": "error",
+                                "code": exc.code,
+                                "reason": str(exc),
+                            }
+                        )
                         continue
                     document = NormalizedDocument(
                         content=content,
@@ -648,49 +668,65 @@ class WebAcquirer:
                         content_type=response.content_type,
                     )
                 if document.browser_required:
-                    result.entries.append({
-                        "source": candidate,
-                        "canonical": document.canonical,
-                        "status": "error",
-                        "code": "browser_rendering_required",
-                        "reason": "page contains little visible text and likely requires a browser renderer",
-                    })
+                    result.entries.append(
+                        {
+                            "source": candidate,
+                            "canonical": document.canonical,
+                            "status": "error",
+                            "code": "browser_rendering_required",
+                            "reason": "page contains little visible text and likely requires a browser renderer",
+                        }
+                    )
                     result.warnings.append(f"browser rendering required: {candidate}")
                     continue
                 if not document.content:
-                    result.entries.append({"source": candidate, "canonical": document.canonical, "status": "error", "code": "empty_document", "reason": "no text extracted"})
+                    result.entries.append(
+                        {
+                            "source": candidate,
+                            "canonical": document.canonical,
+                            "status": "error",
+                            "code": "empty_document",
+                            "reason": "no text extracted",
+                        }
+                    )
                     continue
                 if document.canonical in canonical_seen:
-                    result.entries.append({
-                        "source": candidate,
-                        "canonical": document.canonical,
-                        "status": "ignored",
-                        "reason": "duplicate-canonical",
-                    })
+                    result.entries.append(
+                        {
+                            "source": candidate,
+                            "canonical": document.canonical,
+                            "status": "ignored",
+                            "reason": "duplicate-canonical",
+                        }
+                    )
                     continue
                 canonical_seen.add(document.canonical)
-                result.entries.append({
-                    "source": candidate,
-                    "canonical": document.canonical,
-                    "status": "accepted",
-                    "content_type": document.content_type,
-                    "title": document.title,
-                    "content": document.content,
-                    "content_hash": hashlib.sha256(document.content.encode("utf-8")).hexdigest(),
-                    "destination": destination_for_url(document.canonical),
-                    "redirects": list(response.redirects),
-                    "provenance": {"requested_url": response.requested_url, "final_url": response.final_url},
-                })
+                result.entries.append(
+                    {
+                        "source": candidate,
+                        "canonical": document.canonical,
+                        "status": "accepted",
+                        "content_type": document.content_type,
+                        "title": document.title,
+                        "content": document.content,
+                        "content_hash": hashlib.sha256(document.content.encode("utf-8")).hexdigest(),
+                        "destination": destination_for_url(document.canonical),
+                        "redirects": list(response.redirects),
+                        "provenance": {"requested_url": response.requested_url, "final_url": response.final_url},
+                    }
+                )
                 if not sitemap_used and options.follow_links_without_sitemap and depth < options.max_depth:
                     queue.extend((link, depth + 1) for link in document.links if link not in seen)
             except AcquisitionError as exc:
-                result.entries.append({
-                    "source": candidate,
-                    "canonical": canonical_candidate,
-                    "status": "error",
-                    "code": exc.code,
-                    "reason": str(exc),
-                })
+                result.entries.append(
+                    {
+                        "source": candidate,
+                        "canonical": canonical_candidate,
+                        "status": "error",
+                        "code": exc.code,
+                        "reason": str(exc),
+                    }
+                )
         if queue:
             result.warnings.append(f"crawl limit reached: max_pages={options.max_pages}")
         return result
@@ -706,7 +742,11 @@ class WebAcquirer:
         parser.set_url(robots_url)
         lines = robots.body.decode("utf-8", errors="replace").splitlines()
         parser.parse(lines)
-        origins = [line.split(":", 1)[1].strip() for line in lines if line.casefold().startswith("sitemap:") and line.split(":", 1)[1].strip()]
+        origins = [
+            line.split(":", 1)[1].strip()
+            for line in lines
+            if line.casefold().startswith("sitemap:") and line.split(":", 1)[1].strip()
+        ]
         return parser, origins
 
     def _discover_sitemap(self, start: str, *, sitemap_origins: list[str] | None = None) -> list[str]:

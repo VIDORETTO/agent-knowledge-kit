@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
 from pathlib import Path
 
 from docops.release_audit import audit_release
@@ -54,3 +57,65 @@ def test_tracked_only_audit_fails_without_a_git_index(tmp_path: Path) -> None:
 
     assert not result.ok
     assert any(finding["code"] == "git_index_unavailable" for finding in result.findings)
+
+
+def test_tracked_candidate_audit_rejects_forced_added_nested_binary_before_decoding(tmp_path: Path) -> None:
+    (tmp_path / "nested" / "data").mkdir(parents=True)
+    prohibited = tmp_path / "nested" / "data" / "index.bin"
+    prohibited.write_bytes(b"\\x00\\xffprivate-index")
+    subprocess.run(["git", "init", "--quiet"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", "-f", "nested/data/index.bin"], cwd=tmp_path, check=True)
+
+    result = audit_release(tmp_path, tracked_only=True)
+
+    assert not result.ok
+    assert any(
+        finding["code"] == "prohibited_artifact" and finding["path"] == "nested/data/index.bin"
+        for finding in result.findings
+    )
+
+
+def test_tracked_candidate_audit_rejects_nested_private_paths_and_structured_bearer_canary(tmp_path: Path) -> None:
+    canary = "canary-" + "bearer-token-value-1234567890"
+    files = {
+        "vendor/data/index.bin": b"private index",
+        "vendor/models_cache/model.bin": b"private model",
+        "vendor/.docops/receipt.json": b"private receipt",
+        "vendor/documents/acquired.md": b"acquired corpus",
+        "vendor/config/network.yaml": b"transport: http\n",
+        "vendor/settings.json": ('{"bearer_token": "' + canary + '"}').encode(),
+    }
+    for name, content in files.items():
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+    subprocess.run(["git", "init", "--quiet"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", "-f", *files], cwd=tmp_path, check=True)
+
+    result = audit_release(tmp_path, tracked_only=True)
+    report = result.to_json()
+
+    assert not result.ok
+    assert sum(finding["code"] == "prohibited_artifact" for finding in result.findings) >= 5
+    assert any(finding["code"] == "secret_like_value" for finding in result.findings)
+    assert canary not in report
+
+
+def test_candidate_cli_audits_tracked_and_new_public_files(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("safe", encoding="utf-8")
+    (tmp_path / "new-module.py").write_text("VALUE = 1\n", encoding="utf-8")
+    subprocess.run(["git", "init", "--quiet"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", "README.md"], cwd=tmp_path, check=True)
+
+    completed = subprocess.run(
+        [sys.executable, "scripts/audit_release.py", "--root", str(tmp_path), "--candidate", "--json"],
+        cwd=Path(__file__).resolve().parents[1],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    payload = json.loads(completed.stdout)
+    assert payload["candidate"] is True
+    assert payload["scanned_files"] == 2

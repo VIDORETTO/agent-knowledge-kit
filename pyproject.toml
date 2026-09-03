@@ -4,13 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "consulta-documentacao"
-version = "1.0.0"
+version = "1.1.0"
 description = "Portable agent skills, source acquisition, RAG orchestration and package validation"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [{ name = "consulta-documentacao contributors" }]
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/VIDORETTO/agent-knowledge-kit"
+Repository = "https://github.com/VIDORETTO/agent-knowledge-kit"
+Documentation = "https://github.com/VIDORETTO/agent-knowledge-kit/tree/main/docs"
+Issues = "https://github.com/VIDORETTO/agent-knowledge-kit/issues"
 
 [project.optional-dependencies]
 rag = ["knowledge-rag==4.8.5"]
@@ -21,10 +27,10 @@ dev = ["pytest==9.1.1", "ruff==0.12.7", "pip-audit==2.10.1", "setuptools==84.0.0
 docops = "docops.__main__:main"
 
 [tool.setuptools]
-packages = ["docops", "docops.templates"]
+packages = ["docops", "docops.templates", "docops.schemas"]
 
 [tool.setuptools.package-data]
-docops = ["templates/*.md"]
+docops = ["templates/*.md", "schemas/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
