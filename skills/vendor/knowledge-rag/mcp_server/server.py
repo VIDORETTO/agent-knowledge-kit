@@ -34,6 +34,7 @@ import sys
 import threading
 import time
 from collections import OrderedDict, deque
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -785,8 +786,11 @@ class CrossEncoderReranker:
         return documents[:top_k]
 
 
-def _metadata_path_score(query: str, metadata: Dict[str, Any]) -> float:
+def _metadata_path_score(query: str, metadata: Mapping[str, Any] | None) -> float:
     """Return a small generic score boost when query terms match path metadata."""
+    if not isinstance(metadata, Mapping):
+        return 0.0
+
     query_terms = re.findall(r"[^\W_]+(?:-[^\W_]+)*", query.lower())
     if not query_terms:
         return 0.0
@@ -2931,7 +2935,12 @@ class KnowledgeOrchestrator:
             document = documents_by_id.get(chunk_id)
             if not document:
                 continue
-            metadata = metadata_by_id.get(chunk_id) or {}
+            metadata = metadata_by_id.get(chunk_id)
+            if not isinstance(metadata, Mapping):
+                # Chroma can briefly expose a row before its metadata is
+                # durable during a concurrent reindex.  Fail closed: a
+                # source-less result cannot satisfy DOCOPS citation rules.
+                continue
             if category_filter and metadata.get("category") != category_filter:
                 continue
             normalized = (float(raw_score) - min_score) / score_range if score_range > 0 else 1.0
@@ -3025,9 +3034,11 @@ class KnowledgeOrchestrator:
         if category_filter:
             where_filter = {"category": category_filter}
 
-        def _matches_category(metadata: Dict[str, Any]) -> bool:
+        def _matches_category(metadata: Mapping[str, Any] | None) -> bool:
             if not where_filter:
                 return True
+            if not isinstance(metadata, Mapping):
+                return False
             expected_category = where_filter.get("category")
             return not expected_category or metadata.get("category") == expected_category
 
@@ -3050,11 +3061,19 @@ class KnowledgeOrchestrator:
                     )
                     if results["ids"] and results["ids"][0]:
                         for i, chunk_id in enumerate(results["ids"][0]):
+                            metadata = results["metadatas"][0][i] if results["metadatas"] else None
+                            document = results["documents"][0][i] if results["documents"] else ""
+                            if not isinstance(metadata, Mapping) or not document:
+                                # Concurrent zero-downtime reindex can expose
+                                # a transient row without citation metadata.
+                                # Do not turn it into an uncitable result or
+                                # let the fusion stage fail the whole request.
+                                continue
                             r[chunk_id] = {
                                 "rank": i + 1,
                                 "distance": results["distances"][0][i] if results["distances"] else 0,
-                                "document": results["documents"][0][i] if results["documents"] else "",
-                                "metadata": results["metadatas"][0][i] if results["metadatas"] else {},
+                                "document": document,
+                                "metadata": metadata,
                             }
                 except Exception as e:
                     print(f"[WARN] Semantic search failed: {e}")
@@ -3130,15 +3149,21 @@ class KnowledgeOrchestrator:
                 except Exception:
                     continue
 
-            if not _matches_category(data.get("metadata", {})):
+            metadata = data.get("metadata")
+            if not isinstance(metadata, Mapping):
+                # Keep malformed/transient Chroma rows out of the result
+                # contract.  Returning an empty source would be worse than
+                # returning no result because callers rely on citations.
+                continue
+            if not _matches_category(metadata):
                 continue
 
             combined_scores[chunk_id] = {
-                "rrf_score": combined_rrf + _metadata_path_score(query_text, data.get("metadata", {})),
+                "rrf_score": combined_rrf + _metadata_path_score(query_text, metadata),
                 "semantic_rank": semantic_rank if chunk_id in semantic_results else None,
                 "bm25_rank": bm25_rank if chunk_id in bm25_results else None,
                 "document": data.get("document", ""),
-                "metadata": data.get("metadata", {}),
+                "metadata": metadata,
                 "distance": data.get("distance", 0),
             }
 
@@ -3179,7 +3204,9 @@ class KnowledgeOrchestrator:
 
         formatted = []
         for chunk_id, data in sorted_results[:max_results]:
-            metadata = data.get("metadata", {})
+            metadata = data.get("metadata")
+            if not isinstance(metadata, Mapping):
+                continue
             s_rank = data.get("semantic_rank")
             b_rank = data.get("bm25_rank")
 
@@ -3661,6 +3688,8 @@ class KnowledgeOrchestrator:
         output = []
         for i, chunk_id in enumerate(similar["ids"][0]):
             meta = similar["metadatas"][0][i]
+            if not isinstance(meta, Mapping):
+                continue
             source = meta.get("source", "")
 
             if meta.get("doc_id") == doc_id:

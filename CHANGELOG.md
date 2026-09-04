@@ -41,6 +41,9 @@
 - The concurrent RAG stress harness now starts the reviewed vendored backend,
   matching the runtime used by indexing and MCP evaluation instead of the
   independently installed package.
+- Hardened vendored RAG search against transient Chroma rows without metadata
+  during concurrent reindex; uncitable hits are discarded instead of failing
+  the MCP request.
 - Added an explicit authenticated GitHub settings checklist and kept commit,
   push, tag and release operations outside all local automation.
 - Added the `plan`/`apply`/`inspect` operation seam with real create/update/dry-run

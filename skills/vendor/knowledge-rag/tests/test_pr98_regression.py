@@ -191,3 +191,27 @@ class TestBM25StaleChunkIdSkipped:
             rerank_input = call.args[1] if len(call.args) >= 2 else call.kwargs.get("documents", [])
             for entry in rerank_input:
                 assert entry["document"], f"reranker received an entry with empty document: {entry}"
+
+
+class TestSemanticMissingMetadataSkipped:
+    """A transient Chroma row without metadata must not break search."""
+
+    def test_query_skips_semantic_hit_with_missing_metadata(self):
+        o = KnowledgeOrchestrator.__new__(KnowledgeOrchestrator)
+        o.collection = MagicMock()
+        o.collection.query.return_value = {
+            "ids": [["chunk-without-metadata"]],
+            "documents": [["content that cannot be cited safely"]],
+            "metadatas": [[None]],
+            "distances": [[0.1]],
+        }
+        o.bm25_index = MagicMock()
+        o.bm25_index.search.return_value = []
+        o.query_cache = MagicMock()
+        o.query_cache.get.return_value = None
+        o._bm25_initialized = True
+        o._ensure_bm25_index = MagicMock()
+        o._route_by_keywords = MagicMock(return_value=None)
+        o._expand_with_adjacent_chunks = lambda results, window=1: results
+
+        assert o.query("test", max_results=5, hybrid_alpha=1.0) == []
