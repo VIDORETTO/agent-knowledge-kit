@@ -111,8 +111,15 @@ def test_candidate_falls_back_when_bootstrap_no_install_leaves_a_venv_without_pi
     assert bootstrapped.returncode == 0, bootstrapped.stdout + bootstrapped.stderr
 
     environment = dict(os.environ)
-    for name in ("GITHUB_SHA", "GITHUB_SERVER_URL", "GITHUB_REPOSITORY", "GITHUB_RUN_ID", "GITHUB_WORKFLOW"):
-        environment.pop(name, None)
+    environment.update(
+        {
+            "GITHUB_SHA": "synthetic-ci-sha",
+            "GITHUB_SERVER_URL": "https://github.com",
+            "GITHUB_REPOSITORY": "example/project",
+            "GITHUB_RUN_ID": "123",
+            "GITHUB_WORKFLOW": "synthetic-ci",
+        }
+    )
     output = tmp_path / "candidate"
     prepared = subprocess.run(
         [

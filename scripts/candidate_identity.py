@@ -167,7 +167,10 @@ def ci_identity(source_commit: str, digest: str) -> dict[str, Any]:
     """Capture GitHub Actions identity without inventing evidence locally."""
 
     github_sha = os.environ.get("GITHUB_SHA")
-    if not github_sha:
+    # A clean clone deliberately has no commit to bind to the workflow SHA.
+    # Treat that as absent evidence; calling it a mismatch would make the
+    # ordinary clean-clone verification fail merely because it runs in CI.
+    if not github_sha or source_commit == "unversioned-clean-clone":
         return {
             "status": "not-observed",
             "commit": None,

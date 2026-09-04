@@ -33,6 +33,9 @@
   made the fail-closed release identity check an explicit manual CI input;
   incomplete `--no-install` bootstrap environments now fall back to the
   invoking interpreter instead of producing a misleading wheel failure.
+- Unversioned clean-clone candidates now record CI identity as not observed
+  rather than as a false SHA mismatch; release mode still requires a remote
+  commit and matching CI evidence.
 - Added an explicit authenticated GitHub settings checklist and kept commit,
   push, tag and release operations outside all local automation.
 - Added the `plan`/`apply`/`inspect` operation seam with real create/update/dry-run
