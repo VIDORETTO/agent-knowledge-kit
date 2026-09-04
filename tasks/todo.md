@@ -40,8 +40,8 @@
 
 **Gates que exigem ambiente externo**
 
-- [ ] CI remoto no SHA exato do candidate, incluindo Ubuntu/Windows/macOS e
-  Python 3.11–3.13; não concluir localmente sem URL/artefato verificável.
+- [x] CI remoto no SHA exato do candidate, incluindo Ubuntu/Windows/macOS e
+  Python 3.11–3.13; run `33899411357` e artifact vinculado foram verificados.
 - [ ] Estado autenticado de branch protection, required reviewers, secret
   scanning, push protection, Dependabot e permissões de release.
 
@@ -57,7 +57,8 @@
 
 - [x] Repositório correto em `main`, remote
   `https://github.com/VIDORETTO/agent-knowledge-kit`, com
-  `HEAD == origin/main == 0c766d2d7144a8861efe132fbc4c62498a0cfeb6`.
+  baseline inicial `HEAD == origin/main == 0c766d2d7144a8861efe132fbc4c62498a0cfeb6`;
+  o estado final desta fase está registrado abaixo.
 - [x] Working tree recebido contém mudanças rastreadas e novos arquivos; dados,
   corpus, caches, ambientes e estado RAG aparecem apenas como ignorados.
 - [x] Suíte completa final: `227 passed, 2 skipped in 431.95s`; ambos os
@@ -81,9 +82,11 @@
 - [x] Candidate RAG local reconstruído a partir do commit de código enviado,
   com snapshot externo de modelo e re-medição da fonte; o release continua
   fail-closed sem evidência remota/decisão humana.
-- [ ] CI remoto do mesmo SHA/digest, settings autenticadas e decisão humana
-  Chroma. O commit/ref remoto será criado nesta execução; os demais dependem do
-  GitHub e do mantenedor.
+- [x] CI remoto do mesmo SHA/digest: run `33899411357`, artifact do candidate
+  e re-medição com `--source-root .` passaram; integration MCP/stress do mesmo
+  SHA passou no run `33899437593`.
+- [ ] Settings autenticadas do GitHub e decisão humana Chroma; permanecem
+  necessárias antes de tag, release ou publicação.
 
 ### Registro de verificação
 
@@ -109,7 +112,7 @@
 ## Fechamento do checkpoint apos o CI — 2026-09-04
 
 - [x] Preservar os commits que chegaram ao remoto durante a execução e fazer
-  rebase do handoff sobre o `origin/main` mais recente.
+  merge do handoff sobre o `origin/main` mais recente.
 - [x] Executar a suíte completa no `.venv` com versões fixadas: `230 passed,
   2 skipped`; os skips são apenas os testes de symlink indisponível neste
   Windows.
@@ -124,6 +127,28 @@
 - [ ] Revisar settings autenticadas do GitHub e decidir explicitamente os
   quatro CVEs residuais de `chromadb==1.5.9`; sem isso, não criar tag, release
   ou publicar.
+
+## Fechamento da correção de concorrência — 2026-09-04
+
+- [x] Reproduzir a falha restante com TDD: uma linha Chroma com
+  `metadata=None` fazia a consulta semântica quebrar durante reindex.
+- [x] Corrigir o vendor revisado para descartar resultados sem metadados de
+  citação nos caminhos híbrido, FTS5 e similaridade; registrar o downstream
+  patch em `skills/vendor/knowledge-rag/PROVENANCE.json`.
+- [x] Validar o vendor no diretório correto: `761 passed, 6 skipped,
+  5 deselected, 8 xfailed`; os 67 testes focados também passaram.
+- [x] Validar o stress local com o vendor revisado: 370 buscas, quatro
+  warmups, zero erros/warnings, reindex concluído e sem resíduo recuperável.
+- [x] Confirmar CI `33899411357`: 13 jobs verdes, incluindo a matriz quick,
+  clean clone e wheel/candidate.
+- [x] Confirmar Integration `33899437593`: 20.866 buscas concorrentes,
+  zero erros/warnings, reindex bem-sucedido, índice 2 documentos/4 chunks e
+  Recall@5/MRR@5 1,0 na avaliação MCP.
+- [x] Candidate RAG local com snapshot externo, `--profile rag
+  --require-model`, supply-chain e verificação independente passou; todos os
+  bundles foram mantidos fora do Git.
+- [ ] Executar a etapa de publicação: bloqueada corretamente até a decisão
+  humana dos quatro CVEs e a revisão autenticada das settings GitHub.
 
 ### Evidência do diagnóstico adicional
 

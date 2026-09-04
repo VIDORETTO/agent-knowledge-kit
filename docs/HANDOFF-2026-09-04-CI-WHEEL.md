@@ -147,3 +147,47 @@ Continuidade pós-push:
 O commit que contém este handoff deve ser identificado com `git log -1` após o
 push; este documento não repete seu próprio SHA para evitar referência
 circular na identidade do candidate.
+
+## Fechamento da correção de concorrência — 2026-09-04
+
+Durante a execução deste follow-up, o stress remoto ainda falhava porque o
+backend instalado pelo PyPI não era a mesma árvore revisada usada pelo DOCOPS.
+Depois de apontar o harness para `skills/vendor/knowledge-rag`, a reprodução
+local confirmou uma segunda falha real: uma consulta semântica podia receber
+`metadata=None` enquanto o Chroma era reindexado e quebrar antes de produzir
+uma resposta MCP.
+
+A correção final foi implementada no vendor com TDD: o teste
+`TestSemanticMissingMetadataSkipped` falhou com o `AttributeError` original e
+passou após o pipeline passar a descartar linhas sem metadados de citação.
+Os caminhos de consulta híbrida, FTS5 e similaridade também passaram a falhar
+fechados para esse estado transitório; nenhum resultado sem `source` é emitido.
+O patch está descrito em `skills/vendor/knowledge-rag/PROVENANCE.json` e no
+changelog.
+
+Evidência observada para o commit de código enviado:
+
+- suíte raiz: **233 passed**;
+- suíte completa do vendor: **761 passed, 6 skipped, 5 deselected, 8 xfailed**;
+- stress local com vendor revisado: **370 buscas**, quatro warmups, zero erros
+  ou warnings, reindex bem-sucedido e sem resíduo recuperável;
+- CI `33899411357`: todos os 13 jobs passaram, incluindo quick em Ubuntu,
+  Windows e macOS para Python 3.11–3.13, clean clone nos três sistemas e
+  wheel/candidate RAG;
+- Integration `33899437593`: **20.866 buscas** concorrentes, zero erros ou
+  warnings, reindex terminal bem-sucedido e índice final com 2 documentos/4
+  chunks; avaliação MCP com Recall@5/MRR@5 **1,0**;
+- o artifact `candidate-1.1.0-<commit>` do CI passou `verify_candidate.py`
+  tanto isolado quanto com `--source-root .`; o candidate RAG local com
+  `--profile rag --require-model` também passou supply-chain e verificação
+  independente.
+
+Os digests continuam somente nos manifests/identities dos artifacts, para não
+criar referência circular ao modificar esta documentação. Nenhum corpus,
+índice, cache, modelo, ambiente ou artifact gerado foi versionado.
+
+O produto está pronto para revisão de publicação. Ainda não foram criados tag,
+release ou publicação: o modo `--release` permanece fail-closed até um
+mantenedor registrar a decisão sobre os quatro CVEs de `chromadb==1.5.9` e
+confirmar, autenticadamente, branch protection, reviewers, secret scanning,
+push protection e permissões de release.

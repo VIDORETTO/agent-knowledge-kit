@@ -102,3 +102,20 @@
   candidate, pois isso remove o ambiente virtual da invocação.
 - Testar construção de candidate em checkout nativo Linux/WSL, não apenas em
   um venv Windows, para cobrir essa diferença de launcher.
+
+## 2026-09-04 — stress RAG deve usar o backend efetivamente revisado
+
+- O harness de concorrência precisa iniciar exatamente a árvore vendorizada
+  que o operador usa para indexação e avaliação; passar a raiz do repositório
+  como `vendor_root` fez o Python escolher a cópia instalada do PyPI e ocultou
+  a diferença de comportamento.
+- Durante reindex, o Chroma pode expor transitoriamente uma linha com
+  `metadata=None`. O pipeline de busca deve descartar esse hit de forma
+  fail-closed: conteúdo sem `source` não é evidência citável e não deve virar
+  erro MCP nem resultado vazio.
+- Execute testes do vendor a partir do diretório do vendor para que o preset
+  de configuração correto seja carregado; executar a partir do monorepo pode
+  produzir falhas de configuração que não representam a regressão testada.
+- O stress final precisa separar warmups da carga medida e reter somente
+  contagens/redações seguras; a evidência remota final observada foi 20.866
+  buscas, zero erros/warnings, reindex bem-sucedido e zero resíduo recuperável.
