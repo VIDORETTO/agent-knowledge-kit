@@ -36,6 +36,7 @@ _REQUIRED_ASSETS = {
     "docs/CHROMA-RESIDUAL-DECISION.md",
     "docs/DEPENDENCIES.md",
     "docs/RELEASE.md",
+    "docs/RELEASE-NOTES-1.1.0.md",
     "docs/SUPPORT-MATRIX.json",
     "community/CODE_OF_CONDUCT.md",
     "community/CODEOWNERS",

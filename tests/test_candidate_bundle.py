@@ -4,6 +4,8 @@ import sys
 import zipfile
 from pathlib import Path
 
+from scripts.prepare_candidate import _build_wheel
+
 REQUIRED_RELEASE_ASSETS = {
     ".github/CODEOWNERS",
     "CHANGELOG.md",
@@ -13,8 +15,16 @@ REQUIRED_RELEASE_ASSETS = {
     "community/issue-templates/feature_request.yml",
     "docs/DEPENDENCIES.md",
     "docs/RELEASE.md",
+    "docs/RELEASE-NOTES-1.1.0.md",
     "docs/SUPPORT-MATRIX.json",
 }
+
+
+def test_candidate_wheel_build_is_byte_reproducible(tmp_path: Path) -> None:
+    first = _build_wheel(Path.cwd(), Path(sys.executable), tmp_path / "first")
+    second = _build_wheel(Path.cwd(), Path(sys.executable), tmp_path / "second")
+
+    assert first.read_bytes() == second.read_bytes()
 
 
 def test_candidate_bundle_has_new_identity_and_reproducible_release_assets(tmp_path: Path) -> None:

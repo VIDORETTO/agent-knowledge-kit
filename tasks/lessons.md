@@ -1,5 +1,17 @@
 # Lessons
 
+## 2026-09-04 — prontidão, publicação e divulgação são gates diferentes
+
+- Um candidate técnico verde não é uma release pública: commit, digest, CI,
+  tag, registry, canário e anúncio precisam apontar para a mesma identidade.
+- “Sem intervenção” pode eliminar perguntas intermediárias, mas não substitui
+  decisão humana de risco, licença, ownership, credenciais ou autorização de
+  publicação.
+- Para um pacote/CLI/MCP, produção é distribuição verificável; não inventar um
+  deploy de serviço, VPS ou banco quando o produto não os possui.
+- Divulgação em massa deve esperar uma publicação controlada e uma janela de
+  observação; rollback deve preservar a tag e gerar uma nova versão.
+
 ## 2026-08-29 — confirmar o repositório antes de continuar
 
 - Antes de implementar, fazer uma verificação explícita de `cwd`, `origin`, branch e projeto declarado no README/handoff.

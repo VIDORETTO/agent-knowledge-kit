@@ -129,5 +129,13 @@ pendências de autorização humana. Bytes de cache de modelo não entram no
 candidate. Nenhum script de verificação executa commit, tag, push, publicação
 ou release.
 
+O plano completo para fechar os gates, publicar de forma controlada, executar o
+canário e fazer divulgação progressiva está em
+[docs/PRODUCTION-PUBLICITY-PLAN.md](docs/PRODUCTION-PUBLICITY-PLAN.md).
+O registro da execução atual e dos bloqueios humanos está em
+[docs/RELEASE-READINESS-2026-09-04.md](docs/RELEASE-READINESS-2026-09-04.md),
+e as notas para revisão estão em
+[docs/RELEASE-NOTES-1.1.0.md](docs/RELEASE-NOTES-1.1.0.md).
+
 Políticas comunitárias estão em [community/](community/), e a metadata do
 repositório está em [docs/REPOSITORY-METADATA.json](docs/REPOSITORY-METADATA.json).

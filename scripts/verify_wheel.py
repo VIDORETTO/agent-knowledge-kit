@@ -18,6 +18,8 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from docops import __version__  # noqa: E402
 
+_REPRODUCIBLE_SOURCE_DATE_EPOCH = "0"
+
 
 def command_failure_details(completed: subprocess.CompletedProcess[str]) -> str:
     """Keep structured CLI errors visible even when a report is very large."""
@@ -57,6 +59,7 @@ def main(argv: list[str] | None = None) -> int:
             [sys.executable, "-m", "pip", "wheel", "--no-deps", "--wheel-dir", str(wheel_dir), str(root)],
             check=True,
             cwd=root,
+            env={**os.environ, "SOURCE_DATE_EPOCH": _REPRODUCIBLE_SOURCE_DATE_EPOCH},
         )
         wheels = sorted(wheel_dir.glob("*.whl"))
         if len(wheels) != 1:

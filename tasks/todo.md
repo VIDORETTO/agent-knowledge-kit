@@ -1,5 +1,59 @@
 # Registro de autoanálise e especificação pós-1.0
 
+## Plano autônomo de prontidão para produção e divulgação — 2026-09-04
+
+O plano ponta a ponta, com fases, gates, canário, divulgação progressiva,
+rollback e limites de autonomia, está em
+[`docs/PRODUCTION-PUBLICITY-PLAN.md`](../docs/PRODUCTION-PUBLICITY-PLAN.md).
+Esta seção é a checklist de retomada do Goal Mode; ela não transforma gates
+humanos ou publicação externa em ações implícitas.
+
+### Estado de entrada revalidado (baseline do plano)
+
+- [x] `main` limpo e sincronizado em
+  `912599c8dc6ab7bde30e27a2cc27f0c1f1107c41`.
+- [x] CI multiplataforma verde no SHA final: run `33900149915`.
+- [x] Integration RAG/MCP verde no SHA final: run `33900161429`.
+- [x] Candidate local verificado com checksums, SBOM, provenance e identidade;
+  nenhum candidate, cache, corpus ou modelo foi publicado.
+- [ ] Artifact de CI do mesmo SHA/digest final verificado e comparado; o CI
+  observado pertence ao baseline remoto, não às mudanças locais desta execução.
+- [ ] Gate `verify_candidate.py --release` fechado após decisão humana Chroma e
+  evidência autenticada das settings GitHub.
+
+### Plano executável resumido
+
+- [ ] Congelar escopo e canais: GitHub Release como canal canônico e registry
+  somente se houver trusted publishing e ownership verificados.
+- [ ] Reexecutar o runbook completo em clone limpo e gerar candidate final do
+  SHA que será promovido.
+- [ ] Fechar dependências, os quatro advisories do Chroma, licenças,
+  provenance, branch protection, reviewers, CODEOWNERS e permissões de release.
+- [ ] Confirmar CI/Integration, comparar digest/lista/SHA e passar o gate
+  `--release` sem enfraquecer exceções.
+- [ ] Criar tag imutável, construir assets em ambiente limpo, publicar release
+  controlada e validar instalação pelo canal público.
+- [ ] Executar canário, observar 24h, atualizar documentação/metadata e só
+  então ampliar a divulgação para canais previamente autorizados.
+- [ ] Manter rollback por nova versão/yank/correção, sem mover tag nem expor
+  dados derivados; registrar o handoff pós-lançamento.
+
+### Gates que exigem decisão ou autoridade externa
+
+- [ ] Mantenedor registrar `accept`, `mitigate`, `upgrade` ou `remove` em
+  `docs/CHROMA-RESIDUAL-DECISION.md`.
+- [ ] Administrador autenticar e registrar a checklist de settings do GitHub.
+- [ ] Definir/autorizar registry, trusted publisher, conta e canais de
+  divulgação; sem isso o agente prepara artefatos e rascunhos, mas não envia.
+- [ ] Autorizar explicitamente tag, GitHub Release, publicação de pacote e
+  anúncios externos quando essas mutações forem desejadas.
+
+### Critério de encerramento
+
+- [ ] Só marcar produção/divulgação como prontas quando o Definition of Done
+  completo do plano tiver evidência; enquanto houver gate pendente, manter o
+  estado `release-ready-pending-human-gate`.
+
 ## Execução de preparação para commit/push — 2026-09-04
 
 ### Plano executável

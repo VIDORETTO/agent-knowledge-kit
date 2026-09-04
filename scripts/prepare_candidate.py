@@ -39,6 +39,7 @@ _BUNDLE_FILES = (
     ("CONTRIBUTING.md", "CONTRIBUTING.md"),
     ("docs/DEPENDENCIES.md", "docs/DEPENDENCIES.md"),
     ("docs/RELEASE.md", "docs/RELEASE.md"),
+    ("docs/RELEASE-NOTES-1.1.0.md", "docs/RELEASE-NOTES-1.1.0.md"),
     ("docs/CHROMA-RESIDUAL-DECISION.md", "docs/CHROMA-RESIDUAL-DECISION.md"),
     ("docs/SUPPORT-MATRIX.json", "docs/SUPPORT-MATRIX.json"),
     ("docs/REPOSITORY-METADATA.json", "metadata/repository.json"),
@@ -71,6 +72,7 @@ _LOCAL_SOURCE_DIRS = {
     ".scratch",
 }
 _LOCAL_SOURCE_FILES = {".rag_state.json"}
+_REPRODUCIBLE_SOURCE_DATE_EPOCH = "0"
 
 
 def _sha256_file(path: Path) -> str:
@@ -184,6 +186,7 @@ def _build_wheel(root: Path, python: Path, destination: Path) -> Path:
             cwd=str(root),
             check=False,
             capture_output=True,
+            env={**os.environ, "SOURCE_DATE_EPOCH": _REPRODUCIBLE_SOURCE_DATE_EPOCH},
             text=True,
             timeout=180,
         )

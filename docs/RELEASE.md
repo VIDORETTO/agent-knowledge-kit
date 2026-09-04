@@ -1,5 +1,19 @@
 # Release candidate 1.1.0 (not published)
 
+The end-to-end plan from candidate closure through controlled publication,
+post-release canary, rollback and progressive publicity is in
+[`PRODUCTION-PUBLICITY-PLAN.md`](PRODUCTION-PUBLICITY-PLAN.md). This document
+remains the technical gate runbook referenced by that plan.
+
+The prepared, still-unpublished release notes are in
+[`RELEASE-NOTES-1.1.0.md`](RELEASE-NOTES-1.1.0.md). They must be reviewed
+against the final public assets before publication.
+
+The current evidence and pending human gates are recorded in
+[`RELEASE-READINESS-2026-09-04.md`](RELEASE-READINESS-2026-09-04.md). The
+post-release canary/rollback handoff template is
+[`POST-RELEASE-HANDOFF-TEMPLATE.md`](POST-RELEASE-HANDOFF-TEMPLATE.md).
+
 The current publication verdict is recorded in
 `docs/GITHUB-PUBLICATION-AUDIT-2026-09-02.md`. It supersedes the historical
 2026-09-01 audit for release decisions; the candidate remains local until its
@@ -63,7 +77,8 @@ part of the candidate and must report the installed-package provenance.
 
 ## Candidate identity and artifacts
 
-`prepare_candidate.py` builds the wheel with one selected interpreter, audits
+`prepare_candidate.py` builds a byte-reproducible wheel with one selected interpreter,
+using `SOURCE_DATE_EPOCH=0` for archive metadata, audits
 the exact tracked plus non-ignored candidate file set, records `HEAD` and a
 SHA-256 candidate digest, and emits:
 
