@@ -123,10 +123,10 @@ decisão humana registrada; nenhuma exceção fica implícita.
   visíveis no relatório e no material de release quando ainda existirem.
 - [x] Confirmar provenance do vendor/modelo, licença das fixtures e ausência de
   dados derivados no conjunto distribuível.
-- [ ] Com acesso autenticado, verificar branch protection, required checks,
+- [x] Com acesso autenticado, verificar branch protection, required checks,
   reviewers, CODEOWNERS, Dependabot, secret scanning, push protection e
   permissões de release conforme `community/GITHUB-SETTINGS-CHECKLIST.md`.
-- [ ] Registrar links, identidade do administrador e data da revisão; uma
+- [x] Registrar links, identidade do administrador e data da revisão; uma
   inspeção anônima deve permanecer `not verified`.
 
 ### Fase 3 — materializar a release imutável

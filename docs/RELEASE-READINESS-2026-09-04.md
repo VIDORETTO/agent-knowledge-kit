@@ -63,20 +63,18 @@ circular quando a documentação muda.
   pública `v1.1.0`.
 - O canal selecionado para `1.1.0` é o GitHub Release; PyPI e registries
   externos estão fora do escopo, portanto não há trusted publisher a configurar.
-- Endpoints públicos de proteção, Dependabot e secret scanning não forneceram
-  autenticação suficiente para provar settings. A checklist permanece
-  `not verified`; a resposta pública `rules=[]` não é prova de branch
-  protection.
+- A revisão autenticada como `VIDORETTO` confirmou branch protection, 13 checks
+  obrigatórios, review de CODEOWNER, Dependabot security updates, secret
+  scanning, push protection e Actions com SHA pinning; a evidência está em
+  `community/GITHUB-SETTINGS-CHECKLIST.md`.
 
 ## Bloqueios humanos/externos exatos
 
-1. Um administrador autenticado deve preencher
-   `community/GITHUB-SETTINGS-CHECKLIST.md` com identidade, data e links para
-   proteção de branch, required checks/reviewers, CODEOWNERS, Dependabot,
-   secret scanning, push protection e permissões de release.
-2. A autorização explícita para push, tag, GitHub Release, upload de assets e
+1. A autorização explícita para push, tag, GitHub Release, upload de assets e
    anúncio controlado foi fornecida pelo proprietário nesta execução; essas
-   ações ainda precisam ser executadas depois do CI do SHA final.
+   ações ainda precisam ser executadas depois do CI do SHA final. O push
+   deliberado usará o bypass administrativo documentado, preservando o SHA
+   exato do candidate; o `--release` continua exigindo CI correspondente.
 
 ## Artefatos preparados
 

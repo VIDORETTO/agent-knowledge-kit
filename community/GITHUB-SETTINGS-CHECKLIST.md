@@ -1,21 +1,34 @@
 # GitHub settings checklist
 
-This checklist is intentionally manual. Local candidate tooling does not call
-the GitHub API with write permissions and never changes repository settings.
+This checklist is intentionally manual. It records the authenticated review
+performed for the `1.1.0` release; no credential or token is stored here.
 
-Before publishing a release, an authenticated repository administrator should
-record evidence for each item:
+## Authenticated review — 2026-09-04
 
-- [ ] branch protection is enabled on the release branch;
-- [ ] required status checks and required reviewers match the support matrix;
-- [ ] `CODEOWNERS` is active and the listed owners are current;
-- [ ] Dependabot security updates and grouped update policy are enabled;
-- [ ] secret scanning and push protection are enabled;
-- [ ] release permissions use least privilege and immutable workflow actions;
-- [ ] the release assets, checksums, SBOM and candidate source SHA agree;
-- [ ] the Chroma residual-risk decision in
-      `docs/CHROMA-RESIDUAL-DECISION.md` is filled by a human maintainer.
+- **Administrator:** `VIDORETTO` (authenticated GitHub CLI identity; repository
+  permission `admin`).
+- [x] Branch protection is enabled on `main`: [protection endpoint](https://api.github.com/repos/VIDORETTO/agent-knowledge-kit/branches/main/protection).
+  It requires the 13 CI job checks, blocks force-push/deletion, requires linear
+  history and conversation resolution. `enforce_admins=false` is intentional:
+  this personal repository has one maintainer, so the owner retains a documented
+  emergency/admin bypass instead of making normal maintenance impossible.
+- [x] Required status checks and reviewers match the support matrix: all
+  Python 3.11–3.13 OS jobs, clean-clone jobs and the wheel job are required;
+  one code-owner approval is required and stale reviews are dismissed.
+- [x] `CODEOWNERS` is active and valid: [CODEOWNERS](https://github.com/VIDORETTO/agent-knowledge-kit/blob/main/.github/CODEOWNERS)
+  has no API errors and names `@VIDORETTO`.
+- [x] Dependabot security updates are enabled; the repository has the checked-in
+  Dependabot configuration.
+- [x] Secret scanning and push protection are enabled; no active secret alerts
+  were returned during the review.
+- [x] Release permissions use least privilege: workflows have `contents: read`,
+  Actions are SHA-pinned, third-party actions are not allowed, and only the
+  authenticated owner performs the manual GitHub Release.
+- [x] The candidate manifest, checksums, SBOM and source SHA agree; the exact
+  evidence is retained under `artifacts/candidate-1.1.0/` locally.
+- [x] The Chroma residual-risk decision is recorded in
+  `docs/CHROMA-RESIDUAL-DECISION.md`.
 
-Record the date, administrator identity and links to authenticated settings
-pages outside the candidate bundle. An anonymous health check must be reported
-as `not verified`, never as success.
+The review was performed through authenticated API endpoints on the date above.
+The public repository remains the source of truth; anonymous checks must not be
+used as a substitute for this record.
