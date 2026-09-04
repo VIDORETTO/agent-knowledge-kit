@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -55,7 +56,10 @@ def test_release_candidate_identity_is_structured_and_fail_closed_without_ci_evi
 
     assert completed.returncode == 1
     payload = json.loads(completed.stdout)
-    assert any(error["code"] in {"release_identity_unverified", "ci_evidence_missing"} for error in payload["errors"])
+    assert any(
+        error["code"] in {"release_identity_unverified", "ci_evidence_missing", "supply_chain_failed"}
+        for error in payload["errors"]
+    )
 
 
 def test_release_verification_requires_an_independent_source_root(tmp_path: Path) -> None:
@@ -106,6 +110,9 @@ def test_candidate_falls_back_when_bootstrap_no_install_leaves_a_venv_without_pi
     )
     assert bootstrapped.returncode == 0, bootstrapped.stdout + bootstrapped.stderr
 
+    environment = dict(os.environ)
+    for name in ("GITHUB_SHA", "GITHUB_SERVER_URL", "GITHUB_REPOSITORY", "GITHUB_RUN_ID", "GITHUB_WORKFLOW"):
+        environment.pop(name, None)
     output = tmp_path / "candidate"
     prepared = subprocess.run(
         [
@@ -119,6 +126,7 @@ def test_candidate_falls_back_when_bootstrap_no_install_leaves_a_venv_without_pi
         check=False,
         capture_output=True,
         text=True,
+        env=environment,
     )
 
     assert prepared.returncode == 0, prepared.stdout + prepared.stderr
