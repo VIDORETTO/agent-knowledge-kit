@@ -36,7 +36,8 @@ circular quando a documentação muda.
   registrou 758 pass e 3 incompatibilidades de formatos/configuração, sem
   alterar o vendor nem o perfil do produto.
 - Build do wheel agora é byte-reprodutível: o builder fixa
-  `SOURCE_DATE_EPOCH=0` e há teste de igualdade byte a byte.
+  `SOURCE_DATE_EPOCH=315532800` (primeiro timestamp representável por ZIP) e
+  há teste de igualdade byte a byte.
 
 ## Evidência negativa preservada
 

@@ -18,7 +18,10 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from docops import __version__  # noqa: E402
 
-_REPRODUCIBLE_SOURCE_DATE_EPOCH = "0"
+# ZIP archives cannot encode timestamps before 1980.  Using the first valid
+# ZIP timestamp keeps isolated pip builds reproducible on Windows as well as
+# POSIX platforms.
+_REPRODUCIBLE_SOURCE_DATE_EPOCH = "315532800"
 
 
 def command_failure_details(completed: subprocess.CompletedProcess[str]) -> str:

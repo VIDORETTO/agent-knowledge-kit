@@ -72,7 +72,10 @@ _LOCAL_SOURCE_DIRS = {
     ".scratch",
 }
 _LOCAL_SOURCE_FILES = {".rag_state.json"}
-_REPRODUCIBLE_SOURCE_DATE_EPOCH = "0"
+# ZIP archives cannot encode timestamps before 1980.  Using the first valid
+# ZIP timestamp keeps isolated pip builds reproducible on Windows as well as
+# POSIX platforms.
+_REPRODUCIBLE_SOURCE_DATE_EPOCH = "315532800"
 
 
 def _sha256_file(path: Path) -> str:

@@ -45,7 +45,7 @@ git diff --check
 python scripts/verify_clean_clone.py --bootstrap
 python scripts/verify_wheel.py --core
 python scripts/verify_wheel.py --require-rag
-SOURCE_DATE_EPOCH=0 python -m pip wheel --no-deps --wheel-dir dist .
+SOURCE_DATE_EPOCH=315532800 python -m pip wheel --no-deps --wheel-dir dist .
 python scripts/generate_supply_chain.py --root . --wheel dist/<wheel>.whl --output artifacts/supply-chain --profile core
 python scripts/verify_supply_chain.py --root . --evidence artifacts/supply-chain
 python scripts/audit_release.py --tracked-only --json
@@ -83,7 +83,8 @@ the public Golden gate.
 ## Candidate identity and artifacts
 
 `prepare_candidate.py` builds a byte-reproducible wheel with one selected interpreter,
-using `SOURCE_DATE_EPOCH=0` for archive metadata, audits
+using `SOURCE_DATE_EPOCH=315532800` (the first timestamp representable by ZIP)
+for archive metadata, audits
 the exact tracked plus non-ignored candidate file set, records `HEAD` and a
 SHA-256 candidate digest, and emits:
 
