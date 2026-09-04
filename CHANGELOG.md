@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+- Closed post-1.0 reliability tickets 23–29 locally: candidate identity and
+  source remeasurement, public-seam coverage, crash-recoverable promotion,
+  executed support/bootstrap checks, community assets, named metrics and
+  repeatable concurrent RAG stress evidence.
+- Added effective transitive-resolution and vendor provenance evidence while
+  preserving raw `pip-audit` findings separately from the narrow local Chroma
+  residual policy; release still requires the human decision artifact.
+- Bound the dependency exception to `chromadb==1.5.9`, retained raw audit
+  stdout/stderr/exit evidence, and limited resolver evidence to the lock-rooted
+  transitive closure instead of unrelated interpreter packages.
+- Removed model-cache bytes from candidate bundles while retaining a verified
+  external snapshot manifest/digest, and redacted queries and local paths from
+  public evaluation, smoke, doctor and stress reports.
+- Made clean-clone verification use a clone-owned isolated environment and made
+  concurrent reindex stress distinguish recoverable residue from retained
+  successful attempt history.
+- Replaced Windows `os.kill(pid, 0)` lease probing with
+  `OpenProcess`/`GetExitCodeProcess`; a separate reader can no longer interrupt
+  its live writer while checking lease ownership.
+- Made supply-chain resolution profile-aware: a core candidate may omit only
+  the optional `knowledge-rag` root, while version drift, other missing roots
+  and an incomplete explicit RAG profile fail independent verification.
+- The package workflow now retains the complete candidate and identity evidence
+  as an artifact named with the workflow commit SHA for later review.
+- Added an explicit authenticated GitHub settings checklist and kept commit,
+  push, tag and release operations outside all local automation.
 - Added the `plan`/`apply`/`inspect` operation seam with real create/update/dry-run
   lifecycle semantics, staged transactional promotion, resumable phase receipts,
   and a recoverable single-writer lease.

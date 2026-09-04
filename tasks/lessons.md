@@ -5,3 +5,73 @@
 - Antes de implementar, fazer uma verificação explícita de `cwd`, `origin`, branch e projeto declarado no README/handoff.
 - Se houver mais de um checkout relacionado, não tratar o handoff de um repositório como autorização para alterar outro.
 - Antes de publicar, conferir o commit remoto, o workflow do próprio repositório e a página GitHub que o usuário está visualizando.
+
+## 2026-09-03 — probes determinísticos em Windows e gates reais
+
+- Nunca use o resultado de um clean clone iniciado antes da última correção;
+  reexecute o clone e os gates depois de fechar o snapshot do candidato.
+- No Windows, trate o PID do próprio processo como vivo antes de consultar
+  `os.kill`; erros Win32 podem ser ambíguos e provocar recuperação indevida do
+  próprio lease.
+- Exclua estado local ignorado ao copiar o clean clone/candidato e ordene a
+  lista de arquivos em POSIX; o worktree e o clone sem `.git` precisam medir o
+  mesmo conteúdo distribuível.
+- Preserve o resultado cru do `pip-audit` separado da allowlist; um wrapper
+  estrito com residual aceito não deve ser descrito como auditoria limpa.
+- Para gates longos, use processo destacado com logs e valide o PID/comando
+  antes de iniciar uma nova execução.
+
+## 2026-09-04 — identidade sem referência circular
+
+- Nunca copie o digest do candidate de volta para um arquivo que participa do
+  conjunto medido; a documentação precisa apontar para o manifest do bundle,
+  sem se auto-referenciar.
+- Se uma ferramenta externa falhar antes de produzir JSON (por exemplo,
+  resolução de requirements no Python tolerado), preserve a falha como
+  evidência de gate vermelho e não a classifique como auditoria limpa.
+
+## 2026-09-04 — evidência CI persistente e redigida
+
+- Um workflow que executa um gate mas descarta seu output não deixa evidência
+  auditável; o job deve reter o candidate com nome vinculado a
+  `${{ github.sha }}` e falhar se o artefato não existir.
+- Resultados de integração devem usar uma lista explícita de arquivos seguros;
+  nunca fazer upload do diretório RAG inteiro, que pode conter banco, cache de
+  modelo ou dados do corpus.
+- O checker da matriz deve verificar esses marcadores no job real, para que a
+  retenção não dependa apenas de uma revisão visual do YAML.
+
+## 2026-09-04 — gates devem medir o artefato certo
+
+- Um checker de workflow precisa analisar passos executáveis e paths de
+  artefato, ignorando comentários e `if: false`; a presença textual de um nome
+  de gate não prova execução nem retenção segura.
+- Consultas são dados sensíveis mesmo sem token. Relatórios de doctor, smoke,
+  avaliação e stress devem publicar somente códigos, contagens e diagnósticos
+  estruturados redigidos.
+- A evidência de resolução deve ser o fechamento das raízes do lock, não todo
+  pacote incidental instalado no interpretador usado para gerar o candidate.
+- Faça a auditoria do snapshot de fonte antes de criar o ambiente dentro do
+  clean clone, ou exclua explicitamente apenas o ambiente criado pelo próprio
+  gate; caso contrário a verificação acusa o seu próprio bootstrap.
+- Em stress concorrente, espere readers ficarem operacionais antes de iniciar o
+  writer e não conte o warm-up como carga. Registros terminais bem-sucedidos são
+  histórico de auditoria; somente staging, backup ou tentativa recuperável são
+  resíduos que reprovam o gate.
+- Nunca use `os.kill(pid, 0)` para consultar liveness no Windows: um reader pode
+  enviar um evento de console ao writer e interromper o processo correto. Use
+  `OpenProcess`/`GetExitCodeProcess` e trate falha de verificação como owner vivo.
+  O teste de regressão deve usar um subprocesso real e confirmar que ele continua
+  vivo depois da consulta.
+
+## 2026-09-04 — perfis opcionais precisam ser explícitos na evidência
+
+- Um lock agregado pode conter raízes de vários perfis; o verificador não deve
+  exigir um componente opcional no core nem ignorar ausências por nome sem
+  registrar o perfil medido.
+- Separar o perfil de dependências (`core`/`rag`) da exigência de snapshot de
+  modelo. Optionalidade permite ausência, nunca aceitar uma versão divergente
+  quando o pacote estiver presente.
+- Reexecutar o clone limpo completo depois de corrigir gates de candidate; a
+  suíte local com RAG instalado pode esconder acoplamentos a dependências
+  opcionais.

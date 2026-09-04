@@ -26,8 +26,21 @@ jobs:
       - name: Validate package
         run: python -m docops validate artifacts/acme --json
       - name: Evaluate the reviewed Golden Set through MCP
-        run: python -m docops evaluate --package artifacts/acme --cases golden-set/test-cases-fixture.json --adapter mcp --runtime-root . --json
+        run: python -m docops evaluate --package artifacts/acme --cases golden-set/test-cases-fixture.json --adapter mcp --runtime-root . --json > artifacts/acme/evaluation.json
       - name: MCP smoke
-        run: python scripts/mcp_smoke.py "authentication retries"
+        run: python scripts/mcp_smoke.py "authentication retries" > artifacts/acme/mcp-smoke.log
       - name: Concurrent search during reindex
-        run: python scripts/test_reindex_concurrency.py --package artifacts/acme
+        run: python scripts/test_reindex_concurrency.py --package artifacts/acme --readers 4 --min-searches 40 --seconds 10 > artifacts/acme/concurrency.json
+      - name: Retain redacted integration evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: integration-evidence-${{ github.sha }}
+          path: |
+            artifacts/acme/evaluation.json
+            artifacts/acme/mcp-smoke.log
+            artifacts/acme/concurrency.json
+            artifacts/acme/manifest.json
+            artifacts/acme/rag/index.json
+          if-no-files-found: error
+          retention-days: 30

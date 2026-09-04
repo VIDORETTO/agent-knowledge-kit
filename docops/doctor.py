@@ -43,7 +43,7 @@ class DoctorReport:
     def to_dict(self) -> dict[str, object]:
         return {
             "schema_version": 1,
-            "project_root": str(self.project_root),
+            "project_root": ".",
             "ok": self.ok,
             "checks": self.checks,
             "capabilities": self.capabilities,
@@ -110,9 +110,23 @@ def discover_python(
     return PythonDiscovery(Path(sys.executable).resolve(), "runtime")
 
 
-def _file_check(path: Path, description: str) -> dict[str, object]:
+def _display_path(path: Path, project_root: Path) -> str:
+    """Return an actionable path label without disclosing a private root."""
+
+    try:
+        relative = path.resolve().relative_to(project_root.resolve())
+    except ValueError:
+        return path.name or "<external>"
+    return relative.as_posix() or "."
+
+
+def _file_check(path: Path, description: str, *, project_root: Path) -> dict[str, object]:
     exists = path.is_file()
-    result: dict[str, object] = {"ok": exists, "path": str(path), "description": description}
+    result: dict[str, object] = {
+        "ok": exists,
+        "path": _display_path(path, project_root),
+        "description": description,
+    }
     if not exists:
         result["hint"] = f"Create {path.name} in the project root."
     return result
@@ -131,13 +145,17 @@ def run_doctor(
     checks: dict[str, dict[str, object]] = {
         "python": {
             "ok": python.exists,
-            "path": str(python.path),
+            "path": _display_path(python.path, root),
             "source": python.source,
             "version": f"{sys.version_info.major}.{sys.version_info.minor}",
         },
-        "project_metadata": _file_check(root / "pyproject.toml", "project metadata"),
-        "dependency_lock": _file_check(root / "requirements.lock", "locked dependencies"),
-        "operator_skill": _file_check(root / "skills" / "doc-to-rag-operator" / "SKILL.md", "operator Agent Skill"),
+        "project_metadata": _file_check(root / "pyproject.toml", "project metadata", project_root=root),
+        "dependency_lock": _file_check(root / "requirements.lock", "locked dependencies", project_root=root),
+        "operator_skill": _file_check(
+            root / "skills" / "doc-to-rag-operator" / "SKILL.md",
+            "operator Agent Skill",
+            project_root=root,
+        ),
     }
     config_path = root / "config.yaml"
     if config_path.is_file():
@@ -175,7 +193,7 @@ def run_doctor(
             "ok": rag_ok or not rag_required,
             "status": "available" if rag_ok else "missing",
             "required": rag_required,
-            "python": str(rag_python) if rag_python else None,
+            "python": _display_path(rag_python, root) if rag_python else None,
             "hint": "Run bootstrap with --rag to install knowledge-rag." if not rag_ok else None,
         }
         capabilities = {

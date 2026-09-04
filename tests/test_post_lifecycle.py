@@ -1,3 +1,4 @@
+# seam-scope: compatibility-infrastructure (public lifecycle coverage lives in test_public_seams.py)
 from __future__ import annotations
 
 import json

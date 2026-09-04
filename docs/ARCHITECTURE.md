@@ -76,6 +76,22 @@ O avaliador mantém o scorer lexical como diagnóstico nomeado. O adapter em
 memória serve ao TDD; o gate de release usa `--adapter mcp`, que exige um
 pacote realmente indexado e registra perfil, corpus, top-k e resultados.
 
+Antes do primeiro rename, `apply()` grava um journal local de promoÃ§Ã£o com o
+nome do staging, backup, hash do plano e fase (`prepared`, `active-moved` ou
+`active-installed`). Se o processo morrer entre os renames, a prÃ³xima chamada
+pÃºblica reaproveita o journal sob o lease, valida a geraÃ§Ã£o anterior e a
+restaura; o staging vÃ¡lido permanece retomÃ¡vel. `inspect()` classifica o caso
+como `stable`, `recoverable`, `incomplete` ou `writer_busy`, sem expor caminho
+privado, corpus ou traceback. Um owner local comprovadamente morto pode ser
+reclamado imediatamente; locks de host remoto conservam a janela stale.
+
+`rag/index.json` usa mÃ©tricas nomeadas: `corpus_documents` Ã© a quantidade
+de documentos aceitos pelo operador, `operator_chunks` Ã© a estimativa de
+chunks calculada antes do backend e `backend_total_chunks`/
+`backend_total_documents` sÃ£o estatÃ­sticas devolvidas pelo knowledge-rag (ou
+`null` quando o RAG nÃ£o foi executado). NÃ£o hÃ¡ um alias `chunks` na geraÃ§Ã£o
+nova, portanto valores diferentes nÃ£o podem ser confundidos.
+
 ## Limites deliberados
 
 Browser rendering, OCR, autenticação de fonte e confirmação de licença não são

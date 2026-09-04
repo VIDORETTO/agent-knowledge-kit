@@ -73,6 +73,7 @@ explícita de divergência. A skill passou o validator Claude sem warnings.
 | 2026-08-28 | dev + v3.4.0 | 0,9500 | 1,0000 | baseline histórico pós-update |
 | 2026-08-28 | FastAPI + aliases BM25 + reranker ligado | 0,6690 | 0,9286 | medição intermediária; abaixo da meta de MRR |
 | 2026-08-28 | FastAPI + aliases BM25 + reranker desligado | **0,8595** | **1,0000** | configuração final do piloto |
+| 2026-09-03 | FastAPI official docs snapshot + hybrid search, reranker desligado | **0,9048** | **1,0000** | 14/14 casos; gate CLI passou com limiares MRR 0,70 e Recall 0,85 |
 
 Após mudanças no corpus, repetir o comando, registrar os números aqui e
 reavaliar se a meta de MRR ou Recall deixou de ser atendida.

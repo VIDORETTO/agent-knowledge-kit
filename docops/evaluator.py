@@ -322,7 +322,7 @@ def evaluate_package(
                     reciprocal_ranks.append(0.0)
             evaluated.append(
                 {
-                    "query": redact_text(query),
+                    "query": "<redacted-query>",
                     "expected_filepath": safe_expected,
                     "kind": kind,
                     "route": route,

@@ -1,3 +1,4 @@
+# seam-scope: implementation-infrastructure (runtime discovery unit tests)
 from __future__ import annotations
 
 import json

@@ -1192,7 +1192,7 @@ def _write_artifacts(stage: Path, plan_value: OperationPlan) -> None:
 
 
 def _write_index(stage: Path, plan_value: OperationPlan) -> dict[str, Any]:
-    chunk_count = sum(
+    operator_chunks = sum(
         max(1, (len(str(entry.get("content", ""))) + 949) // 950)
         for entry in (_thaw(item) for item in plan_value.entries)
         if entry.get("status") == "accepted" and entry.get("content")
@@ -1206,14 +1206,29 @@ def _write_index(stage: Path, plan_value: OperationPlan) -> dict[str, Any]:
                 (rag_sync_result.error or {}).get("message", "knowledge-rag indexing failed"),
                 phase="index",
             )
+    backend_stats = rag_sync_result.stats if rag_sync_result is not None else {}
+    backend_total_chunks = (
+        backend_stats.get("total_chunks") if isinstance(backend_stats.get("total_chunks"), int) else None
+    )
+    backend_total_documents = (
+        backend_stats.get("total_documents") if isinstance(backend_stats.get("total_documents"), int) else None
+    )
     index_payload: dict[str, Any] = {
         "schema_version": 1,
         "status": "ready" if plan_value.records else "empty",
         "backend": "knowledge-rag",
         "mode": "indexed" if rag_sync_result is not None and rag_sync_result.ok else "corpus-ready",
         "profile": "compact",
-        "documents": len(plan_value.records),
-        "chunks": chunk_count,
+        "corpus_documents": len(plan_value.records),
+        "operator_chunks": operator_chunks,
+        "backend_total_documents": backend_total_documents,
+        "backend_total_chunks": backend_total_chunks,
+        "metrics": {
+            "corpus_documents": len(plan_value.records),
+            "operator_chunks": operator_chunks,
+            "backend_total_documents": backend_total_documents,
+            "backend_total_chunks": backend_total_chunks,
+        },
         "source_version": plan_value.resolution.selected.version if plan_value.resolution.selected else None,
         "language": plan_value.resolution.selected.language if plan_value.resolution.selected else None,
         "source_state": ".docops/state.json",
@@ -1495,6 +1510,8 @@ def _build_stage(plan_value: OperationPlan, stage: Path) -> tuple[dict[str, Any]
 
 
 _PROMOTION_RETRY_ATTEMPTS = 80
+_PROMOTION_JOURNAL_VERSION = 1
+_PROMOTION_FAILPOINT_EXIT_CODE = 86
 
 
 def _replace_with_retry(source: Path, destination: Path) -> None:
@@ -1510,20 +1527,325 @@ def _replace_with_retry(source: Path, destination: Path) -> None:
             time.sleep(0.025)
 
 
-def _promote(stage: Path, output: Path, backup_name: str) -> Path | None:
+def _promotion_journal_path(output: Path) -> Path:
+    return output.parent / f".{output.name}.docops.promotion.json"
+
+
+def _clear_promotion_journal(output: Path) -> None:
+    journal = _promotion_journal_path(output)
+    if journal.is_symlink():
+        raise OperationFailure(
+            "unsafe_promotion_journal",
+            "promotion journal must not be a symbolic link",
+            phase="promote",
+        )
+    if journal.exists():
+        journal.unlink()
+
+
+def _write_promotion_journal(
+    output: Path,
+    *,
+    stage: Path,
+    backup: Path | None,
+    plan_hash: str,
+    phase: str,
+    had_active: bool,
+    active_generation_valid: bool,
+    stage_generation_valid: bool,
+) -> None:
+    journal = _promotion_journal_path(output)
+    if journal.is_symlink() or (journal.exists() and not journal.is_file()):
+        raise OperationFailure(
+            "unsafe_promotion_journal",
+            "promotion journal must be a regular file",
+            phase="promote",
+        )
+    write_json_atomic(
+        journal,
+        {
+            "schema_version": _PROMOTION_JOURNAL_VERSION,
+            "output_name": output.name,
+            "stage_name": stage.name,
+            "backup_name": backup.name if backup is not None else None,
+            "plan_hash": plan_hash,
+            "phase": phase,
+            "had_active": had_active,
+            "active_generation_valid": active_generation_valid,
+            "stage_generation_valid": stage_generation_valid,
+            "updated_at": utc_now(),
+        },
+    )
+
+
+def _promotion_failpoint(name: str) -> None:
+    """Exit only at an explicit test seam used to reproduce crash windows."""
+
+    if os.environ.get("DOCOPS_TEST_PROMOTION_FAILPOINT") == name:
+        os._exit(_PROMOTION_FAILPOINT_EXIT_CODE)
+
+
+def _opaque_residue_id(path: Path) -> str:
+    """Return a stable public identifier without exposing a private basename."""
+
+    digest = hashlib.sha256(path.name.encode("utf-8", errors="replace")).hexdigest()
+    return f"residue-{digest[:12]}"
+
+
+def _public_recovery_snapshot(snapshot: Mapping[str, Any]) -> dict[str, Any]:
+    """Remove filesystem member names needed only by internal recovery."""
+
+    return {key: value for key, value in snapshot.items() if key not in {"stage_name", "backup_name"}}
+
+
+def _read_promotion_journal(output: Path) -> dict[str, Any] | None:
+    journal = _promotion_journal_path(output)
+    if not journal.exists() and not journal.is_symlink():
+        return None
+    if journal.is_symlink() or not journal.is_file():
+        return {"_invalid": "promotion journal is not a regular file"}
+    try:
+        value = json.loads(journal.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        return {"_invalid": f"promotion journal could not be read: {exc}"}
+    if not isinstance(value, dict):
+        return {"_invalid": "promotion journal must contain an object"}
+    return value
+
+
+def _promotion_member(output: Path, name: Any, prefix: str) -> Path | None:
+    if not isinstance(name, str) or not name or Path(name).name != name or not name.startswith(prefix):
+        return None
+    return output.parent / name
+
+
+def _valid_generation(root: Path | None) -> bool:
+    if root is None or root.is_symlink() or not root.is_dir():
+        return False
+    try:
+        return validate_package(root).ok
+    except (OSError, ValueError, UnicodeError, json.JSONDecodeError):
+        return False
+
+
+def _promotion_recovery_snapshot(root: Path, *, now: float | None = None) -> dict[str, Any]:
+    """Describe a journaled or legacy promotion without mutating the tree."""
+
+    timestamp = now if now is not None else time.time()
+    journal = _read_promotion_journal(root)
+    if journal is not None and "_invalid" in journal:
+        return {"status": "incomplete", "phase": None, "error": redact_text(journal["_invalid"])}
+    if journal is not None:
+        phase = journal.get("phase")
+        stage = _promotion_member(root, journal.get("stage_name"), f".{root.name}.staging-")
+        backup_name = journal.get("backup_name")
+        backup = _promotion_member(root, backup_name, f".{root.name}.backup-") if backup_name else None
+        if (
+            journal.get("schema_version") != _PROMOTION_JOURNAL_VERSION
+            or journal.get("output_name") != root.name
+            or not isinstance(journal.get("plan_hash"), str)
+            or not journal.get("plan_hash")
+            or phase not in {"prepared", "active-moved", "active-installed"}
+            or stage is None
+            or (backup_name is not None and backup is None)
+        ):
+            return {"status": "incomplete", "phase": phase, "error": "promotion journal fields are invalid"}
+        stage_exists = bool(stage and stage.is_dir() and not stage.is_symlink())
+        backup_exists = bool(backup and backup.is_dir() and not backup.is_symlink())
+        if phase in {"prepared", "active-moved"} and journal.get("stage_generation_valid") is True:
+            # The writer validated the staged generation before recording this
+            # journal.  Avoid reopening it on every reader inspection while
+            # the next rename is waiting; Windows may deny a directory move
+            # while another process has a file open inside that tree.
+            stage_valid = stage_exists
+        else:
+            stage_valid = _valid_generation(stage)
+        if phase == "active-moved" and journal.get("active_generation_valid") is True:
+            # The backup is the exact directory that was validated before the
+            # first rename.  Its validity is a journaled fact for this phase;
+            # recovery still revalidates it before restoring it.
+            backup_valid = backup_exists
+        else:
+            backup_valid = _valid_generation(backup)
+        active_valid = _valid_generation(root)
+        if active_valid and phase == "active-installed":
+            status = "recoverable"
+        elif stage_valid or backup_valid or active_valid:
+            status = "recoverable"
+        else:
+            status = "incomplete"
+        return {
+            "status": status,
+            "phase": phase,
+            "plan_hash": journal["plan_hash"],
+            "had_active": bool(journal.get("had_active")),
+            "stage_name": stage.name,
+            "backup_name": backup.name if backup is not None else None,
+            "stage": {
+                "present": bool(stage and (stage.exists() or stage.is_symlink())),
+                "valid": stage_valid,
+                "age_seconds": _residue_age(stage, timestamp) if stage is not None else None,
+            },
+            "backup": {
+                "present": bool(backup and (backup.exists() or backup.is_symlink())),
+                "valid": backup_valid,
+                "age_seconds": _residue_age(backup, timestamp) if backup is not None else None,
+            },
+            "active_valid": active_valid,
+        }
+
+    # Versions before the journal fix could leave a valid backup with no
+    # active directory.  Recognise only generated-name backups and valid
+    # packages, keeping arbitrary user directories out of recovery.
+    if not root.exists() and root.parent.is_dir():
+        prefix = f".{root.name}.backup-"
+        candidates = [
+            path
+            for path in root.parent.iterdir()
+            if path.name.startswith(prefix) and not path.is_symlink() and _valid_generation(path)
+        ]
+        if candidates:
+            candidate = max(candidates, key=lambda path: path.stat().st_mtime)
+            return {
+                "status": "recoverable",
+                "phase": "legacy-backup",
+                "backup": {
+                    "present": True,
+                    "valid": True,
+                    "age_seconds": _residue_age(candidate, timestamp),
+                },
+                "backup_name": candidate.name,
+                "active_valid": False,
+            }
+    return {"status": "stable" if _valid_generation(root) else "none", "phase": None}
+
+
+def _recover_interrupted_promotion(output: Path) -> dict[str, Any]:
+    """Restore a valid generation and leave a valid staged generation resumable."""
+
+    snapshot = _promotion_recovery_snapshot(output)
+    if snapshot.get("status") != "recoverable":
+        return {"ok": snapshot.get("status") != "incomplete", "recovered": False, **snapshot}
+
+    journal = _read_promotion_journal(output)
+    stage: Path | None = None
+    backup: Path | None = None
+    if journal is not None and "_invalid" not in journal:
+        stage = _promotion_member(output, journal.get("stage_name"), f".{output.name}.staging-")
+        backup_name = journal.get("backup_name")
+        backup = _promotion_member(output, backup_name, f".{output.name}.backup-") if backup_name else None
+    elif snapshot.get("backup_name"):
+        backup = output.parent / str(snapshot["backup_name"])
+
+    try:
+        if _valid_generation(output):
+            if backup is not None and backup.exists() and not backup.is_symlink():
+                _remove_generated_path(backup)
+            _clear_promotion_journal(output)
+            return {"ok": True, "recovered": True, "action": "active-preserved", **snapshot}
+        if _valid_generation(backup):
+            if output.exists() or output.is_symlink():
+                _remove_generated_path(output)
+            _replace_with_retry(backup, output)
+            if not _valid_generation(output):
+                raise OperationFailure(
+                    "promotion_recovery_validation_failed",
+                    "restored generation failed validation",
+                    phase="promote",
+                )
+            _clear_promotion_journal(output)
+            return {"ok": True, "recovered": True, "action": "previous-generation-restored", **snapshot}
+        if _valid_generation(stage):
+            if output.exists() or output.is_symlink():
+                _remove_generated_path(output)
+            _replace_with_retry(stage, output)
+            if not _valid_generation(output):
+                raise OperationFailure(
+                    "promotion_recovery_validation_failed",
+                    "staged generation failed validation",
+                    phase="promote",
+                )
+            _clear_promotion_journal(output)
+            return {"ok": True, "recovered": True, "action": "staged-generation-installed", **snapshot}
+    except (OSError, OperationFailure) as exc:
+        return {
+            "ok": False,
+            "recovered": False,
+            "code": getattr(exc, "code", "promotion_recovery_failed"),
+            "error": redact_text(str(exc)),
+            **snapshot,
+        }
+    return {
+        "ok": False,
+        "recovered": False,
+        "code": "promotion_recovery_incomplete",
+        "error": "no valid generation was available for promotion recovery",
+        **snapshot,
+    }
+
+
+def _promote(stage: Path, output: Path, backup_name: str, *, plan_hash: str) -> Path | None:
     if output.is_symlink():
         raise OperationFailure("unsafe_output_path", "output directory must not be a symbolic link", phase="promote")
     backup: Path | None = None
-    if output.exists():
+    had_active = output.exists()
+    active_generation_valid = _valid_generation(output) if had_active else False
+    stage_generation_valid = _valid_generation(stage)
+    if had_active:
         backup = output.parent / backup_name
         if backup.exists():
-            shutil.rmtree(backup)
+            _remove_generated_path(backup)
+    _write_promotion_journal(
+        output,
+        stage=stage,
+        backup=backup,
+        plan_hash=plan_hash,
+        phase="prepared",
+        had_active=had_active,
+        active_generation_valid=active_generation_valid,
+        stage_generation_valid=stage_generation_valid,
+    )
+    _promotion_failpoint("before-active-to-backup")
+    if had_active:
         _replace_with_retry(output, backup)
+        _promotion_failpoint("after-active-to-backup-before-journal")
+        _write_promotion_journal(
+            output,
+            stage=stage,
+            backup=backup,
+            plan_hash=plan_hash,
+            phase="active-moved",
+            had_active=had_active,
+            active_generation_valid=active_generation_valid,
+            stage_generation_valid=stage_generation_valid,
+        )
+        _promotion_failpoint("after-active-to-backup")
     try:
         _replace_with_retry(stage, output)
+        _promotion_failpoint("after-stage-to-active-before-journal")
+        _write_promotion_journal(
+            output,
+            stage=stage,
+            backup=backup,
+            plan_hash=plan_hash,
+            phase="active-installed",
+            had_active=had_active,
+            active_generation_valid=active_generation_valid,
+            stage_generation_valid=stage_generation_valid,
+        )
+        _promotion_failpoint("after-stage-to-active")
     except Exception:
-        if backup is not None and backup.exists() and not output.exists():
-            _replace_with_retry(backup, output)
+        try:
+            if backup is not None and backup.exists() and not output.exists():
+                _replace_with_retry(backup, output)
+        except OSError:
+            # Keep the journal when rollback itself cannot complete.  The
+            # next public operation can still diagnose or recover it.
+            pass
+        try:
+            _clear_promotion_journal(output)
+        except (OSError, OperationFailure):
+            pass
         raise
     return backup
 
@@ -1542,12 +1864,87 @@ def _remove_generated_path(path: Path) -> None:
 def _restore_after_failed_promotion(output: Path, backup: Path | None, *, promoted: bool) -> None:
     if not promoted:
         return
-    if backup is not None and backup.exists():
-        if output.exists() or output.is_symlink():
+    try:
+        if backup is not None and backup.exists():
+            if output.exists() or output.is_symlink():
+                _remove_generated_path(output)
+            os.replace(backup, output)
+        elif output.exists() or output.is_symlink():
             _remove_generated_path(output)
-        os.replace(backup, output)
-    elif output.exists() or output.is_symlink():
-        _remove_generated_path(output)
+    except OSError:
+        # Do not mask the original apply failure.  The journal remains as a
+        # recovery receipt and the next public operation can retry safely.
+        return
+    try:
+        _clear_promotion_journal(output)
+    except (OSError, OperationFailure):
+        # A leftover journal is safer than claiming that rollback completed.
+        return
+
+
+def _recover_before_apply(plan_value: OperationPlan) -> dict[str, Any] | None:
+    output = plan_value.request.options.output_dir
+    try:
+        snapshot = _promotion_recovery_snapshot(output)
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        return {
+            "ok": False,
+            "recovered": False,
+            "code": "promotion_recovery_inspection_failed",
+            "error": redact_text(str(exc)),
+            "status": "incomplete",
+            "phase": None,
+        }
+    if snapshot.get("status") != "recoverable":
+        return None
+    options = plan_value.request.options
+    try:
+        output.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return {
+            "ok": False,
+            "recovered": False,
+            "code": "output_parent_unavailable",
+            "error": redact_text(str(exc)),
+            **snapshot,
+        }
+    lease = PackageLease(
+        output,
+        policy=options.lease_policy,
+        wait_seconds=options.lease_timeout_seconds,
+        stale_after_seconds=options.stale_lease_seconds,
+    )
+    try:
+        lease.acquire()
+    except LeaseBusyError as exc:
+        return {
+            "ok": False,
+            "recovered": False,
+            "code": "writer_busy",
+            "error": redact_text(str(exc)),
+            **snapshot,
+        }
+    except OSError as exc:
+        return {
+            "ok": False,
+            "recovered": False,
+            "code": "lease_unavailable",
+            "error": redact_text(str(exc)),
+            **snapshot,
+        }
+    try:
+        try:
+            return _recover_interrupted_promotion(output)
+        except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+            return {
+                "ok": False,
+                "recovered": False,
+                "code": "promotion_recovery_failed",
+                "error": redact_text(str(exc)),
+                **snapshot,
+            }
+    finally:
+        lease.release()
 
 
 def apply(plan_value: OperationPlan) -> PipelineResult:
@@ -1557,6 +1954,35 @@ def apply(plan_value: OperationPlan) -> PipelineResult:
         raise TypeError("apply expects an OperationPlan returned by plan")
     operation_started = time.monotonic()
     output = plan_value.request.options.output_dir
+    recovery = _recover_before_apply(plan_value)
+    if recovery is not None and not recovery.get("ok"):
+        code = str(recovery.get("code", "promotion_recovery_failed"))
+        outcome = _timed_outcome(
+            _outcome(
+                "blocked" if code == "writer_busy" else "failed",
+                code,
+                "recover",
+                "promotion recovery could not produce a valid generation",
+                exit_code=3 if code == "writer_busy" else 1,
+            ),
+            operation_started,
+        )
+        errors = [{"code": code, "message": str(recovery.get("error", outcome["message"]))}]
+        _record_attempt(output, plan_value, outcome, phase="recover", errors=errors)
+        return _failure_result(plan_value, outcome, errors)
+    if recovery is not None and recovery.get("recovered"):
+        try:
+            plan_value = plan(plan_value.request)
+        except Exception as exc:
+            outcome = _timed_outcome(
+                _outcome(
+                    "failed", "plan_refresh_failed", "recover", "could not refresh the plan after recovery", exit_code=1
+                ),
+                operation_started,
+            )
+            errors = [{"code": outcome["code"], "message": redact_text(exc)}]
+            _record_attempt(output, plan_value, outcome, phase="recover", errors=errors)
+            return _failure_result(plan_value, outcome, errors)
     if plan_value.blockers:
         outcome = _timed_outcome(
             _outcome(
@@ -1677,7 +2103,7 @@ def apply(plan_value: OperationPlan) -> PipelineResult:
         phase = "prepare"
         _build_stage(plan_value, stage)
         phase = "promote"
-        backup = _promote(stage, output, f".{output.name}.backup-{plan_value.plan_id}")
+        backup = _promote(stage, output, f".{output.name}.backup-{plan_value.plan_id}", plan_hash=plan_value.plan_hash)
         promoted = True
         validation = validate_package(output)
         if not validation.ok:
@@ -1718,6 +2144,7 @@ def apply(plan_value: OperationPlan) -> PipelineResult:
         warnings = list(
             dict.fromkeys([*manifest.get("warnings", []), *(warning["message"] for warning in validation.warnings)])
         )
+        _clear_promotion_journal(output)
         if backup is not None and backup.exists():
             _remove_generated_path(backup)
             backup = None
@@ -1774,14 +2201,39 @@ def _inspect_once(package_root: Path | str) -> dict[str, Any]:
     root = Path(os.path.abspath(os.fspath(Path(package_root).expanduser())))
     now = time.time()
     lease = _lease_summary(root)
-    lease_active = lease["status"] == "active"
+    lease_active = lease["status"] == "active" and lease.get("owner_alive") is not False
+    try:
+        recovery = _promotion_recovery_snapshot(root, now=now)
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        recovery = {
+            "status": "incomplete",
+            "phase": None,
+            "error": redact_text(str(exc)),
+        }
     managed, reason = _managed_package(root)
+    inspection_root = root
+    if not managed and recovery.get("status") == "recoverable":
+        # A directory promotion cannot replace a non-empty destination on
+        # every supported filesystem.  During the short rename window the
+        # last valid generation lives at the journaled backup path.  Inspect
+        # that generation as the logical active view so public readers never
+        # receive a false "unmanaged"/invalid result.
+        if recovery.get("active_valid"):
+            managed, reason = _managed_package(root)
+        if not managed:
+            backup = _promotion_member(root, recovery.get("backup_name"), f".{root.name}.backup-")
+            backup_evidence = recovery.get("backup")
+            backup_valid = isinstance(backup_evidence, Mapping) and backup_evidence.get("valid") is True
+            if backup_valid:
+                managed = True
+                reason = "promotion_recoverable"
+                inspection_root = backup
     manifest: dict[str, Any] = {}
     validation: dict[str, Any] | None = None
     if managed:
         try:
-            manifest = read_manifest(root / "manifest.json")
-            validation = validate_package(root).to_dict()
+            manifest = read_manifest(inspection_root / "manifest.json")
+            validation = validate_package(inspection_root).to_dict()
         except (OSError, ValueError, UnicodeError, json.JSONDecodeError) as exc:
             validation = {
                 "schema_version": 1,
@@ -1859,11 +2311,14 @@ def _inspect_once(package_root: Path | str) -> dict[str, Any]:
                 }
             )
     readiness = manifest.get("readiness", {}) if isinstance(manifest, dict) else {}
+    if lease_active and recovery.get("status") == "recoverable":
+        recovery = {**recovery, "status": "writer_busy"}
     return {
         "schema_version": 1,
         "managed": managed,
         "reason": reason,
         "active": {
+            "source": "active" if inspection_root == root else "recovery-backup",
             "status": manifest.get("status") if manifest else None,
             "outcome": manifest.get("outcome") if manifest else None,
             "readiness": readiness,
@@ -1873,6 +2328,7 @@ def _inspect_once(package_root: Path | str) -> dict[str, Any]:
         "staging": stages,
         "backups": backups,
         "attempts": attempts,
+        "recovery": recovery,
         "residues": {"staging": stages, "backups": backups, "attempts": attempts},
     }
 
@@ -1894,6 +2350,7 @@ def _lease_summary(root: Path) -> dict[str, Any]:
         return {"status": "absent", "owner": None, "age_seconds": None}
     owner = "unknown"
     started_at = 0.0
+    pid = 0
     try:
         raw = json.loads(lock.read_text(encoding="utf-8"))
         if isinstance(raw, dict):
@@ -1910,6 +2367,7 @@ def _lease_summary(root: Path) -> dict[str, Any]:
         "status": "active",
         "owner": owner,
         "age_seconds": round(max(0.0, time.time() - started_at), 3) if started_at > 0 else None,
+        "owner_alive": PackageLease._pid_alive(pid) if pid > 0 else None,
     }
 
 
@@ -1929,16 +2387,51 @@ def inspect(package_root: Path | str) -> dict[str, Any]:
     """
 
     root = Path(os.path.abspath(os.fspath(Path(package_root).expanduser())))
-    deadline = time.monotonic() + _INSPECTION_SETTLE_SECONDS
+    started = time.monotonic()
+    deadline = started + _INSPECTION_SETTLE_SECONDS
+
+    def finish(report: dict[str, Any], *, timed_out: bool) -> dict[str, Any]:
+        recovery = report.get("recovery")
+        if isinstance(recovery, Mapping):
+            report["recovery"] = _public_recovery_snapshot(recovery)
+        report["inspection"] = {
+            "status": "timed_out" if timed_out else "completed",
+            "code": "reader_busy" if timed_out else "completed",
+            "waited_seconds": round(max(0.0, time.monotonic() - started), 3),
+        }
+        return report
+
     while True:
+        # Do not open the active generation while a live writer is preparing
+        # or promoting it.  On Windows even a short-lived read handle can
+        # deny the directory rename; the writer lease is the public
+        # read/write coordination seam, so wait before validating files.
+        lease = _lease_summary(root)
+        writer_active = lease.get("status") == "active" and lease.get("owner_alive") is not False
+        if writer_active and time.monotonic() < deadline:
+            time.sleep(0.01)
+            continue
         report = _inspect_once(root)
         active = report.get("active", {})
         validation = active.get("validation") if isinstance(active, Mapping) else None
         stable = report.get("managed") is True and isinstance(validation, Mapping) and validation.get("ok") is True
-        if stable or time.monotonic() >= deadline:
-            return report
+        recovery = report.get("recovery")
+        report_lease = report.get("lease")
+        report_writer_active = (
+            isinstance(report_lease, Mapping)
+            and report_lease.get("status") == "active"
+            and report_lease.get("owner_alive") is not False
+        )
+        if (stable and not report_writer_active) or (
+            not report_writer_active
+            and isinstance(recovery, Mapping)
+            and recovery.get("status") in {"recoverable", "incomplete"}
+        ):
+            return finish(report, timed_out=False)
+        if time.monotonic() >= deadline:
+            return finish(report, timed_out=report_writer_active)
         if not _writer_lock_present(root) and report.get("managed") is not True:
-            return report
+            return finish(report, timed_out=False)
         time.sleep(0.01)
 
 
@@ -1986,21 +2479,89 @@ def cleanup(
     preserved: list[dict[str, str]] = []
     errors: list[dict[str, str]] = []
     now = time.time()
+    try:
+        recovery = _promotion_recovery_snapshot(root, now=now)
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        lease.release()
+        return {
+            "schema_version": 1,
+            "ok": False,
+            "code": "cleanup_failed",
+            "removed": [],
+            "preserved": [{"type": "promotion-journal", "status": "inspection-failed"}],
+            "errors": [{"code": "cleanup_failed", "message": redact_text(str(exc))}],
+        }
+    promotion_journal = _promotion_journal_path(root)
+    journal_present = promotion_journal.exists() or promotion_journal.is_symlink()
+    protected_residue_names = {
+        name for name in (recovery.get("stage_name"), recovery.get("backup_name")) if isinstance(name, str) and name
+    }
 
     def remove(path: Path, residue_type: str, status: str) -> None:
         try:
             _remove_generated_path(path)
-            removed.append({"type": residue_type, "id": path.name, "status": status})
+            removed.append({"type": residue_type, "id": _opaque_residue_id(path), "status": status})
         except OSError as exc:
             errors.append({"code": "cleanup_failed", "message": redact_text(str(exc))})
-            preserved.append({"type": residue_type, "id": path.name, "status": "error"})
+            preserved.append({"type": residue_type, "id": _opaque_residue_id(path), "status": "error"})
 
     try:
         parent = root.parent
         if parent.is_dir():
             staging_prefix = f".{root.name}.staging-"
-            for candidate in sorted(parent.iterdir()):
-                if not candidate.name.startswith(staging_prefix) or not (candidate.is_dir() or candidate.is_symlink()):
+            staging_candidates = [
+                candidate
+                for candidate in sorted(parent.iterdir())
+                if candidate.name.startswith(staging_prefix) and (candidate.is_dir() or candidate.is_symlink())
+            ]
+            backup_prefix = f".{root.name}.backup-"
+            backup_candidates = [
+                candidate
+                for candidate in sorted(parent.iterdir())
+                if candidate.name.startswith(backup_prefix) and (candidate.is_dir() or candidate.is_symlink())
+            ]
+            journal_incomplete = recovery.get("status") == "incomplete" and journal_present
+
+            def best_candidate(candidates: list[Path], *, staging: bool) -> Path | None:
+                safe = [candidate for candidate in candidates if candidate.is_dir() and not candidate.is_symlink()]
+                if not safe:
+                    return None
+                recoverable: list[Path] = []
+                for candidate in safe:
+                    if _valid_generation(candidate):
+                        recoverable.append(candidate)
+                        continue
+                    if staging:
+                        plan_path = candidate / ".docops" / "plan.json"
+                        try:
+                            saved = json.loads(plan_path.read_text(encoding="utf-8"))
+                        except (OSError, UnicodeError, json.JSONDecodeError):
+                            saved = {}
+                        if (
+                            not _contains_symlink(candidate)
+                            and isinstance(saved, dict)
+                            and isinstance(saved.get("plan_hash"), str)
+                            and bool(saved["plan_hash"])
+                        ):
+                            recoverable.append(candidate)
+                pool = recoverable or safe
+                return min(pool, key=lambda candidate: _residue_age(candidate, now))
+
+            incomplete_stage = best_candidate(staging_candidates, staging=True) if journal_incomplete else None
+            incomplete_backup = best_candidate(backup_candidates, staging=False) if journal_incomplete else None
+
+            for candidate in staging_candidates:
+                if candidate == incomplete_stage:
+                    preserved.append(
+                        {
+                            "type": "staging",
+                            "id": _opaque_residue_id(candidate),
+                            "status": "journal-incomplete-recovery-candidate",
+                        }
+                    )
+                    continue
+                if candidate.name in protected_residue_names:
+                    preserved.append({"type": "staging", "id": _opaque_residue_id(candidate), "status": "recoverable"})
                     continue
                 age_seconds = _residue_age(candidate, now)
                 plan_path = candidate / ".docops" / "plan.json"
@@ -2016,19 +2577,28 @@ def cleanup(
                     and bool(saved["plan_hash"])
                 )
                 if valid_plan and age_seconds <= retention_seconds:
-                    preserved.append({"type": "staging", "id": candidate.name, "status": "resumable"})
+                    preserved.append({"type": "staging", "id": _opaque_residue_id(candidate), "status": "resumable"})
                 elif valid_plan:
                     remove(candidate, "staging", "expired")
                 else:
                     remove(candidate, "staging", "orphan")
 
-            backup_prefix = f".{root.name}.backup-"
-            for candidate in sorted(parent.iterdir()):
-                if not candidate.name.startswith(backup_prefix) or not (candidate.is_dir() or candidate.is_symlink()):
+            for candidate in backup_candidates:
+                if candidate == incomplete_backup:
+                    preserved.append(
+                        {
+                            "type": "backup",
+                            "id": _opaque_residue_id(candidate),
+                            "status": "journal-incomplete-recovery-candidate",
+                        }
+                    )
+                    continue
+                if candidate.name in protected_residue_names:
+                    preserved.append({"type": "backup", "id": _opaque_residue_id(candidate), "status": "recoverable"})
                     continue
                 age_seconds = _residue_age(candidate, now)
                 if age_seconds <= retention_seconds:
-                    preserved.append({"type": "backup", "id": candidate.name, "status": "recoverable"})
+                    preserved.append({"type": "backup", "id": _opaque_residue_id(candidate), "status": "recoverable"})
                 else:
                     remove(candidate, "backup", "expired")
 
@@ -2042,11 +2612,13 @@ def cleanup(
                 for index, candidate in enumerate(attempt_files):
                     age_seconds = _residue_age(candidate, now)
                     if age_seconds <= retention_seconds and index < keep_attempts:
-                        preserved.append({"type": "attempt", "id": candidate.name, "status": "retained"})
+                        preserved.append({"type": "attempt", "id": _opaque_residue_id(candidate), "status": "retained"})
                     else:
                         remove(candidate, "attempt", "expired" if age_seconds > retention_seconds else "over-limit")
                 if not any(attempt_dir.iterdir()):
                     attempt_dir.rmdir()
+            if recovery.get("status") in {"recoverable", "incomplete"}:
+                preserved.append({"type": "promotion-journal", "status": str(recovery["status"])})
     except OSError as exc:
         errors.append({"code": "cleanup_failed", "message": redact_text(str(exc))})
     finally:

@@ -238,7 +238,7 @@ def main() -> int:
                     results[0].get("search_method", "-") if results and isinstance(results[0], dict) else "-"
                 )
                 print(
-                    f"    search_knowledge OK — query={redact_text(data.get('query', ''))!r} "
+                    "    search_knowledge OK — query='<redacted-query>' "
                     f"results={len(results)} "
                     f"result_count={result_count} "
                     f"search_method={redact_text(search_method)}"

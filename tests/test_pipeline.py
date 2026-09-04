@@ -1,3 +1,4 @@
+# seam-scope: compatibility-infrastructure (legacy pipeline adapter characterization)
 from __future__ import annotations
 
 import json

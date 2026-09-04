@@ -21,8 +21,10 @@ instalação, testes, changelog e auditoria. A cada release e no workflow de
 integração:
 
 ```text
-python scripts/audit_dependencies.py --requirements requirements.lock --local --strict
 python -m pip check
+python -m pip_audit --requirement requirements.lock --format json
+python scripts/audit_dependencies.py --requirements requirements.lock --local --strict \
+  --evidence-dir artifacts/dependency-audit
 ```
 
 O gate reprova qualquer vulnerabilidade fora da allowlist explícita. Hoje a
@@ -38,11 +40,12 @@ Um advisory novo do Chroma reprova automaticamente o CI.
 MCP `stdio` como padrão. Isso é um risco residual documentado, não uma
 declaração de ausência de vulnerabilidades.
 
-Na revalidação de 2026-09-02, o `pip-audit` cru em um venv limpo Python 3.12
-retornou código 1, com 128 dependências resolvidas, um pacote vulnerável e os
-quatro advisories do Chroma. O wrapper local retorna `ok=true` somente porque a
-allowlist por pacote/CVE é estreita e vinculada a esse threat model. Os dois
-resultados devem continuar separados em qualquer relatório de release.
+Na revalidação final de 2026-09-04, o `pip-audit` cru retornou código 1 para
+um pacote vulnerável e exatamente os quatro advisories do Chroma. O wrapper
+local retornou `ok=true` somente porque a allowlist é vinculada simultaneamente
+a `chromadb==1.5.9` e aos quatro IDs; uma versão diferente ou advisory novo
+reprova. O diretório de evidência preserva stdout, stderr e exit code crus das
+auditorias do lock e do ambiente local, separados do resumo de política.
 
 O pacote vendorizado é uma cópia revisada de `knowledge-rag`; não se deve
 atualizá-lo automaticamente a partir de `main`. O processo é: escolher uma
@@ -71,17 +74,46 @@ fixtures e pelo CI.
 
 O lock de entrada é `requirements.lock`. Para cada candidato, a ferramenta
 offline abaixo materializa o hash do lock e de cada linha, o inventário SPDX,
-o digest do wheel, a árvore vendorizada e os snapshots de modelo fornecidos:
+o digest do wheel, a árvore vendorizada e a provenance dos snapshots de modelo
+fornecidos:
 
 ```text
 python scripts/generate_supply_chain.py --root . --wheel dist/<wheel>.whl \
-  --model-cache models_cache --output artifacts/supply-chain --require-model
+  --model-cache models_cache --output artifacts/supply-chain \
+  --profile rag --require-model
 python scripts/verify_supply_chain.py --root . --evidence artifacts/supply-chain
 ```
 
-`supply-chain.json` mantém a política por perfil: Chroma é somente
+Os bytes de `models_cache/` nunca entram no bundle. Quando `--model-cache` é
+fornecido, a evidência guarda somente uma lista determinística de arquivos,
+digests e identidade do snapshot externo. `supply-chain.json` mantém a política
+por perfil: Chroma é somente
 `PersistentClient`, os quatro CVEs (`CVE-2026-45829`, `CVE-2026-45830`,
 `CVE-2026-45831`, `CVE-2026-45833`) são risco residual explícito, e HTTP do
 Chroma, `trust_remote_code` e repositórios remotos de modelo não são
-permitidos. A ausência de um snapshot de modelo só é aceita no perfil core;
-um candidato RAG usa `--require-model`.
+permitidos. A ausência de um snapshot de modelo só é aceita quando
+`--require-model` não foi solicitado. O perfil de dependências é independente:
+o padrão é `--profile core`; um candidato RAG usa
+`--profile rag --require-model`.
+
+## Resolução efetiva e provenance
+
+`requirements.lock` continua sendo a entrada direta agregada, portável entre os
+perfis. Cada evidência registra `core` ou `rag` e inclui `locks.resolution` com o fechamento transitivo
+observado por `pip inspect --local`, limitado às raízes exatas de
+`requirements.lock`. Isso evita misturar pacotes incidentais do interpretador
+com o perfil auditado. Dependências declaradas, markers, ausências/divergências
+das raízes e o digest canônico são verificados; a evidência declara honestamente
+que essa resolução continua ligada ao Python e à plataforma observados. No
+perfil core, apenas `knowledge-rag` pode estar ausente; no perfil RAG todas as
+raízes são obrigatórias, e uma versão divergente sempre reprova. Para
+publicar em mais de um perfil, gere e anexe uma evidência por combinação de
+Python/OS.
+
+O vendor `knowledge-rag` é fixado em `v4.8.5` e no commit upstream
+`f531148b0d5fe479e7f0a104daf21d8fde7d3189`, com licença, lista de arquivos e
+digest verificados. A evidência é transportável no bundle (`evidence/`), não
+depende de `artifacts/` ignorado. O arquivo
+[`docs/CHROMA-RESIDUAL-DECISION.md`](CHROMA-RESIDUAL-DECISION.md) permanece um
+gate: o raw audit e o allowlist são relatados separadamente, e a decisão
+humana precisa estar preenchida antes de um release.

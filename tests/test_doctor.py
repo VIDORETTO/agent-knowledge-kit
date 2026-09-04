@@ -1,3 +1,4 @@
+# seam-scope: implementation-infrastructure (doctor unit tests)
 from __future__ import annotations
 
 from pathlib import Path
@@ -27,7 +28,8 @@ def test_doctor_reports_portable_capabilities_as_json_ready_data(tmp_path: Path)
     assert report.ok
     payload = report.to_dict()
     assert payload["schema_version"] == 1
-    assert payload["project_root"] == str(tmp_path.resolve())
+    assert payload["project_root"] == "."
+    assert payload["checks"]["project_metadata"]["path"] == "pyproject.toml"
     assert payload["capabilities"]["rag"] == "skipped"
     assert payload["checks"]["python"]["ok"] is True
 

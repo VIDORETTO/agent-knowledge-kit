@@ -1,5 +1,122 @@
 # Registro de autoanálise e especificação pós-1.0
 
+## Execução de preparação para commit/push — 2026-09-04
+
+### Plano executável
+
+- [x] Confirmar antes de qualquer alteração: cwd, branch, remote, `HEAD`,
+  `origin/main`, working tree e arquivos ignorados; preservar todas as mudanças
+  recebidas do usuário.
+- [x] Ler integralmente instruções, lições, documentação normativa, tickets
+  19–29, workflows, schemas e superfícies públicas relacionadas.
+- [x] Revalidar o baseline atual sem confiar em resultados históricos: versão,
+  metadata, lista distribuível, suíte, Ruff, formato, contratos, support matrix,
+  public seams, release audit e `git diff --check`.
+- [x] Auditar os tickets 19–29 por dependência técnica e confirmar gaps reais
+  em promoção/recovery, identidade do candidate, supply chain/CVEs, suporte,
+  workflows/community e observabilidade/stress.
+- [x] Para cada gap local confirmado, executar TDD estrito no seam público:
+  teste focado RED, GREEN mínimo de causa-raiz, classe relacionada e regressão.
+- [x] Reexecutar os gates locais completos: bootstrap/doctor, pytest, Ruff,
+  compileall, contratos, matriz, public seams, clean clone, wheels core/RAG,
+  `pip check`, raw `pip-audit`, wrapper strict, supply chain, auditorias,
+  vendor security/chaos, MCP/Golden/fixture, stress e metadata/workflows.
+- [ ] Gerar, depois do commit, um candidate novo em `artifacts/` e verificar lista/digest/identidade,
+  auditoria, supply chain, re-medição da fonte e modo release fail-closed.
+- [x] Atualizar docs, tickets, changelog, auditoria, este registro e lessons com
+  apenas evidência observada nesta execução; revisar elegância e diff final.
+- [x] Confirmar working tree pronto, criar um único commit e fazer push para
+  `origin/main`, conforme autorização explícita posterior do usuário. Tag,
+  GitHub Release e publicação continuam fora do escopo.
+
+### Classificação de pendências e evidência
+
+**Pendências locais implementáveis**
+
+- [x] Corrigir somente gaps reproduzidos por testes/gates atuais, sem reabrir
+  conclusões históricas por suposição.
+- [x] Eliminar warning inesperado, workaround frágil, drift documental ou gate
+  local vermelho encontrado durante a revalidação.
+
+**Gates que exigem ambiente externo**
+
+- [ ] CI remoto no SHA exato do candidate, incluindo Ubuntu/Windows/macOS e
+  Python 3.11–3.13; não concluir localmente sem URL/artefato verificável.
+- [ ] Estado autenticado de branch protection, required reviewers, secret
+  scanning, push protection, Dependabot e permissões de release.
+
+**Decisões do mantenedor humano**
+
+- [ ] Registrar `accept`, `mitigate`, `upgrade` ou `remove` para o residual
+  Chroma; manter release fail-closed enquanto a decisão estiver pendente.
+- [x] Commit e push foram autorizados explicitamente pelo usuário em 2026-09-04.
+- [ ] Autorizar separadamente tag, GitHub Release e publicação; nenhuma dessas
+  ações está autorizada nesta execução.
+
+**Evidência já confirmada nesta execução**
+
+- [x] Repositório correto em `main`, remote
+  `https://github.com/VIDORETTO/agent-knowledge-kit`, com
+  `HEAD == origin/main == 0c766d2d7144a8861efe132fbc4c62498a0cfeb6`.
+- [x] Working tree recebido contém mudanças rastreadas e novos arquivos; dados,
+  corpus, caches, ambientes e estado RAG aparecem apenas como ignorados.
+- [x] Suíte completa final: `227 passed, 2 skipped in 431.95s`; ambos os
+  skips são a capacidade de symlink indisponível neste host Windows.
+- [x] A race real que interrompia a suíte foi reproduzida: no Windows,
+  `os.kill(pid, 0)` usado por um reader enviava um evento de console ao writer.
+  A correção usa `OpenProcess`/`GetExitCodeProcess`; o teste focado passou e a
+  classe lifecycle/reliability/recovery fechou com `27 passed`.
+- [x] Raw `pip-audit` saiu 1 para quatro CVEs de `chromadb==1.5.9`; wrapper
+  strict saiu 0 com residual=4/unresolved=0 e evidência crua preservada.
+- [x] Wheels core/RAG, supply-chain, auditorias tracked/candidate, Golden/MCP e
+  três execuções do stress concorrente passaram no estado implementado.
+- [x] O clean clone final criou venv próprio com core+formats+dev, passou doctor,
+  auditoria de release e a suíte inteira: `227 passed, 2 skipped in 184.77s`.
+- [x] O gate de supply chain agora declara perfil `core` ou `rag`: somente a
+  ausência de `knowledge-rag` é opcional no core; qualquer outra ausência ou
+  qualquer versão divergente reprova, e o perfil RAG exige a raiz completa.
+
+**Evidência ainda ausente ou externa**
+
+- [ ] Candidate final reconstruído a partir do commit enviado, com perfil RAG,
+  snapshot externo de modelo, re-medição da fonte e release fail-closed.
+- [ ] CI remoto do mesmo SHA/digest, settings autenticadas e decisão humana
+  Chroma. O commit/ref remoto será criado nesta execução; os demais dependem do
+  GitHub e do mantenedor.
+
+### Registro de verificação
+
+- [x] TDD red → green → verificação registrado para cada mudança nova.
+- [x] Revisão final de privacidade, arquivos proibidos, status e pendências antes
+  do commit/push.
+
+## Execução Goal Mode — revalidação e implementação — 2026-09-03
+
+**Estado inicial revalidado:** `HEAD == origin/main == 0c766d2d7144a8861efe132fbc4c62498a0cfeb6`, working tree limpo, Python local 3.14.2 (tolerado), `171 passed, 2 skipped`, Ruff/format/contratos/matriz verdes. Os skips são exclusivamente a capacidade de criar symlink neste host Windows.
+
+**Seams públicos aprovados:** raiz `docops`, CLI/JSON, pacote ativo/`inspect()`, repositório candidate/auditor, wheel instalado, fixtures externas/processos MCP e concorrência observável. Nenhum teste novo deve importar helpers privados, verificar call count ou ordem interna.
+
+### Plano executável
+
+- [x] 23 — fechar identidade candidate: digest/lista/SHA, modo release fail-closed, evidência CI transportável e invalidação após mutação.
+- [x] 24 — migrar caracterizações relevantes para a raiz/CLI e isolar compatibilidade legada.
+- [x] 25 — tornar promoção recuperável após interrupção entre transições, com `inspect()`/`cleanup()` seguros e limites de filesystem documentados.
+- [x] 26 — tornar resolução/provenance verificáveis, separar raw `pip-audit` do wrapper e registrar decisão explícita para os quatro CVEs Chroma.
+- [x] 27 — ligar claims a jobs/perfis executados e tornar clean clone/bootstrap acionável e reproduzível.
+- [x] 28 — completar verificador local de metadata/assets/community e checklist humana de settings, sem mutações GitHub.
+- [x] 29 — desambiguar métricas de chunks e fortalecer stress concorrente com carga mínima repetível, resíduos e warnings separados.
+- [x] Executar red → green → gate proporcional em cada ticket, nessa ordem, atualizando ticket, spec, docs e changelog quando necessário.
+- [x] Reexecutar os gates locais em clone limpo e wheel core/RAG; classificar honestamente skips, limitações ambientais e residual de CVEs.
+- [ ] Encerrar a release somente após decisão humana Chroma, identidade remota/CI do mesmo SHA e settings autenticadas; não fazer commit, push, tag, release ou publicação nesta tarefa.
+
+### Registro de verificação desta execução
+
+- Baseline completo: `rtk python -m pytest -q` → `171 passed, 2 skipped`.
+- Gates rápidos: `rtk python -m ruff check docops tests scripts`, `rtk python -m ruff format --check docops tests scripts`, `rtk python scripts/check_contracts.py --json` e `rtk python scripts/check_support_matrix.py --json` → PASS.
+- Próximo red: teste público de identidade do candidate que exige referência verificável para modo release e detecta mutação pós-digest.
+- SPEC-23 red → green: `tests/test_candidate_identity.py` começou falhando sem `identity` e sem `--source-root`; após `scripts/candidate_identity.py`, re-medição, CI identity e supply-chain binding, o alvo passou (`4 passed`).
+- SPEC-23 revisão: o modo `--release` permanece fechado sem working tree limpo, ref remota verificada e evidência GitHub Actions. A publicação/CI remoto real depende de um commit posterior e continua proibida nesta execução.
+
 ## Auditoria real atual — plano documental — 2026-09-02
 
 **Status:** auditoria concluída; documentos revisados; tickets 23–29
@@ -26,8 +143,8 @@ intencionalmente não implementados.
   tickets 23–29 ordenados por blocker, aceite e dependência.
 - [x] Revalidar os documentos gerados e registrar o resultado final nesta
   seção.
-- [ ] Implementar tickets 23–29 — próximo modelo, em uma etapa posterior e
-  separada desta auditoria.
+- [x] Implementar tickets 23–29 — concluído posteriormente no ciclo Goal Mode
+  de 2026-09-03; esta linha registra o histórico da auditoria, não uma pendência.
 
 ### Revisão da auditoria atual
 
@@ -469,6 +586,41 @@ falhas silenciosas do gate.
 ## Pendências e limites honestos
 
 - [x] Nenhum commit, push, tag, publicação ou release foi executado nesta tarefa.
+
+## Revisão Goal Mode — evidência final local — 2026-09-04
+
+- [x] Implementação local dos tickets 23–29 concluída e revalidada contra os
+  seams públicos; o checkout preserva o working tree sem commit/push/tag.
+- [x] Suíte completa no estado final: `184 passed, 2 skipped`; os dois skips são
+  exclusivamente a capacidade de criar symlink neste host Windows.
+- [x] Clean clone atual: doctor, release audit e `184 passed, 2 skipped`, sem
+  `.rag_state.json`, corpus adquirido ou outro estado local no clone.
+- [x] Ruff lint/format, compileall, contratos, public-seams, support matrix,
+  diff-check e release audit tracked/candidate: PASS.
+- [x] Wheel core e RAG: PASS; o wheel RAG executou adapter MCP e registrou
+  `knowledge-rag==4.8.5` como runtime instalado.
+- [x] RAG/MCP real: estado local `164` arquivos e servidor `170` documentos /
+  `3296` chunks; Golden FastAPI `Recall@5=1.0`, `MRR@5=0.9048`; fixture MCP
+  `Recall@5=1.0`, `MRR@5=1.0`; stress com quatro readers/10s/40 buscas obteve
+  `202` buscas, zero erros/warnings e estado final consistente.
+- [x] Security/privacidade: vendor security/chaos PASS (`142 passed, 7 skipped,
+  5 xfailed`); auditorias não imprimem corpus, tokens ou caminhos privados.
+- [x] Dependências: `pip check` PASS; o wrapper strict PASS com allowlist
+  estreita e provenance verificável. O raw `pip-audit` permanece explicitamente
+  vermelho: a auditoria JSON preserva quatro advisories sem fix para
+  `chromadb==1.5.9`, e a invocação direta por requirements no Python 3.14
+  também terminou com falha de resolução de `python-docx`; nenhum resultado
+  vermelho foi mascarado como auditoria limpa.
+- [x] Candidate local final: `artifacts/candidate-goal-final7` passou a
+  verificação normal e supply-chain independente; o manifest/identity do
+  bundle registra o digest calculado, `source_commit` local e estado
+  `working-tree-candidate`. `--release` falha fechadamente sem CI remoto e
+  sem decisão humana. O digest não é repetido nesta fonte para evitar uma
+  referência circular entre a documentação e a identidade do candidato.
+- [ ] Release/publicação: ainda requer decisão humana sobre o residual Chroma,
+  commit/ref remoto e CI do mesmo digest, além da revisão autenticada de
+  settings GitHub. Esses gates não podem ser inventados nem executados sob a
+  proibição explícita de commit/push/release desta tarefa.
 - [x] O CI declara a matriz Python 3.11–3.13 e runners Ubuntu/Windows/macOS;
   a execução local desta rodada ocorreu no Windows com Python 3.14 tolerado.
 - [x] A decisão sobre o residual de Chroma, licença de novos corpora e eventual
@@ -501,7 +653,9 @@ significa que os tickets 23–29 foram implementados.
 - [x] 18: o teste de lease observou 9 requests, acima do limite 6; a
   revalidação agora usa snapshot/fingerprint sem readquirir o corpus sob lease.
 - [x] 19: o reader separado observou a janela de rename e a suíte reproduziu
-  `WinError 5`; retry de promoção e inspect estável fecharam a garantia pública.
+  `WinError 5`; o red revelou que `inspect()` lia a geração durante o lease.
+  O green final faz o reader esperar o writer antes de abrir arquivos; retry e
+  inspect estável fecham a garantia pública no Windows.
 - [x] 20: o teste de bundle iniciou sem gerador; generator/verifier agora
   produzem e validam locks, hashes, SBOM, vendor/model provenance e allowlist.
 - [x] 21: o checker de suporte iniciou sem CLI; matriz, workflows, wrappers,

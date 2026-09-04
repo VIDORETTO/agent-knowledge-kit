@@ -12,6 +12,39 @@ empacotamento, segurança, dependências, GitHub e a integração RAG/MCP local.
 push, tag, publicação ou release. Os arquivos de documentação produzidos nesta
 etapa são mudanças locais e ainda não constituem a release.
 
+## Adendo de implementação local — 2026-09-04
+
+Os tickets 23–29 foram implementados e revalidados no working tree depois da
+auditoria histórica abaixo. O candidato agora tem identidade e re-medição da
+fonte, recovery pós-crash, seams públicos verificáveis, resolução de
+dependências limitada ao fechamento do lock, evidência crua de `pip-audit`,
+bootstrap isolado, assets locais de comunidade, métricas nomeadas e stress
+concorrente fail-closed. Consultas, paths locais e diagnósticos de backend são
+redigidos nas superfícies públicas. Snapshots externos de modelo são registrados
+por manifest/digest e seus bytes não são distribuídos.
+
+A suíte completa final passou com `227 passed, 2 skipped in 431.95s`. Os
+dois skips são limitações explícitas de criação de symlink neste Windows. A
+falha intermitente de reader/writer foi localizada no uso de `os.kill(pid, 0)`
+como probe Windows e corrigida com consulta Win32 sem envio de sinal.
+Depois da correção de perfil da supply chain, o clean clone final passou com
+`227 passed, 2 skipped in 184.77s` em seu próprio venv core+formats+dev.
+
+Este adendo não transforma o working tree em release. A revalidação anônima
+do GitHub em 2026-09-04 encontrou `main` em
+`0c766d2d7144a8861efe132fbc4c62498a0cfeb6`, branch sem proteção pública,
+descrição/homepage/topics vazios, community health 71%, `v1.0.0` sem assets e
+nenhum CI do digest/SHA deste candidato. Settings de segurança protegidos não
+podem ser provados anonimamente. A decisão humana sobre os quatro CVEs do
+`chromadb==1.5.9` continua pendente. Portanto, o veredito de publicação segue
+**fail-closed**. O commit que contém este adendo foi autorizado para push em
+`origin/main`; tag, GitHub Release, publicação e mutação de settings não foram
+autorizados.
+
+As notas e lacunas descritas abaixo pertencem ao snapshot de auditoria de
+2026-09-02. Para o estado implementado, prevalecem este adendo, os tickets
+23–29 e a evidência final registrada em `tasks/todo.md`.
+
 ## Como ler o relatório
 
 - **Fato** é algo observado em arquivo, saída de comando ou API pública do
@@ -238,3 +271,75 @@ compatibilidade.
 Os detalhes normativos estão em `docs/POST-1.0-IMPROVEMENT-SPEC.md`, os ciclos
 em `docs/POST-1.0-TDD-PLAN.md` e os tickets executáveis em
 `.scratch/post-1-0-reliability/issues/`.
+
+## Revalidação Goal Mode — 2026-09-03
+
+Esta seção atualiza o estado executável sem apagar o relatório histórico acima.
+Os tickets 23–29 foram implementados no working tree e revalidados por seams
+públicos, CLI/JSON, subprocessos reais, candidate bundle e MCP local.
+
+### Evidência local observada
+
+- identidade do candidate: digest e lista determinística de arquivos, vínculo
+  com commit/CI, re-medição por `--source-root` e modo release fail-closed;
+- seams públicos: `tests/test_public_seams.py`, `tests/SEAMS.md` e checker
+  estático sem imports privados nos novos testes;
+- promoção: failpoints reais em subprocesso entre os renames e após a troca,
+  recuperação por journal, `inspect()` classificável e cleanup conservador;
+- supply chain: resolução transitiva do interpretador, SBOM/checksums, vendor
+  com ref/commit/licença/digest e auditoria crua separada da allowlist;
+- suporte: claims correlacionados com jobs/gates, preflight/bootstrap de clone
+  explícitos e skips de capacidade visíveis;
+- comunidade: metadata/assets/arquivos reconhecidos localmente e checklist de
+  settings autenticadas sem qualquer mutação GitHub;
+- observabilidade: métricas nomeadas e stress RAG real com quatro readers,
+  10 segundos, mínimo de 40 buscas, estado final e resíduos.
+
+### Revalidação final dos gates — 2026-09-04
+
+- O clean clone final criou um venv próprio com core+formats+dev, passou
+  preflight/doctor, auditoria de release e a suíte completa: `227 passed, 2
+  skipped in 184.77s`; os skips são exclusivamente a capacidade de criar
+  symlink no host Windows.
+- O working tree passou Ruff, format, compileall, contratos, public-seams,
+  matriz de suporte, `pip check`, auditoria de release tracked/candidate e
+  verificação independente do supply chain; os wheels core e RAG passaram. O
+  candidate local `artifacts/candidate-goal-final7` foi verificado; o
+  `candidate-identity.json` do bundle é a fonte do digest calculado e do
+  `source_commit=0c766d2d7144a8861efe132fbc4c62498a0cfeb6`. O digest não é
+  duplicado nesta auditoria para não criar uma referência circular na
+  identidade do candidato.
+- A workflow `package` agora retém esse diretório já auditado como artifact
+  `candidate-1.1.0-${GITHUB_SHA}`, incluindo arquivos ocultos, com erro se a
+  evidência não existir; isso preserva a prova do CI sem publicar a release.
+- O MCP real respondeu handshake, `tools/list` com 13 ferramentas e busca
+  híbrida. O Golden FastAPI passou com Recall@5 `1.0` / MRR@5 `0.9048`; o
+  fixture MCP passou com `1.0` / `1.0`; o stress obteve 202 buscas em 10s,
+  quatro readers, sem erros/warnings e sem resíduos finais.
+- O `pip-audit` cru continua vermelho: a auditoria JSON preserva exatamente os
+  quatro advisories do `chromadb==1.5.9`; a invocação direta por requirements no
+  Python 3.14 também terminou com falha de resolução de `python-docx`. O wrapper
+  strict passa somente pela allowlist exata e continua reportando esse residual;
+  isso permanece um bloqueio humano, não uma auditoria limpa.
+- A evidência de supply chain agora vincula explicitamente o perfil `core` ou
+  `rag` ao fechamento observado. No core, somente `knowledge-rag` pode estar
+  ausente; versões divergentes e qualquer outra ausência reprovam. O perfil RAG
+  exige todas as raízes, enquanto `--require-model` controla separadamente a
+  presença do snapshot externo.
+
+### Limites que permanecem deliberadamente abertos
+
+1. O `pip-audit` cru continua vermelho enquanto `chromadb==1.5.9` reportar
+   `CVE-2026-45829`, `CVE-2026-45830`, `CVE-2026-45831` e `CVE-2026-45833`.
+   O wrapper strict passa somente pela allowlist exata e pelo threat model
+   local; isso não é um audit limpo. A decisão de aceitar, mitigar, atualizar
+   ou remover está pendente em `docs/CHROMA-RESIDUAL-DECISION.md`.
+2. O commit que contém este registro foi autorizado para push em `origin/main`;
+   seu SHA deve ser conferido no próprio histórico Git. CI do mesmo SHA,
+   branch protection, reviewers, Dependabot, secret scanning, push protection
+   e assets públicos ainda devem ser confirmados por mantenedor autenticado
+   conforme `community/GITHUB-SETTINGS-CHECKLIST.md`. Tag, GitHub Release e
+   publicação não foram autorizados.
+
+Portanto, o resultado local é implementado e auditável, mas o candidato não é
+apresentado como release-ready até esses gates externos serem concluídos.

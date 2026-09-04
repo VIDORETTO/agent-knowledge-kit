@@ -73,13 +73,51 @@ class PackageLease:
     def _pid_alive(pid: int) -> bool:
         if pid <= 0:
             return False
+        if os.name == "nt":
+            # Never use ``os.kill(pid, 0)`` as a Windows liveness probe.  A
+            # separate reader probing its writer can deliver a console-control
+            # event to the target process.  Query the kernel handle directly;
+            # uncertainty is treated as alive so a lease is never reclaimed
+            # from an owner that could not be verified.
+            if pid == os.getpid():
+                return True
+            try:
+                import ctypes
+
+                kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+                open_process = kernel32.OpenProcess
+                open_process.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32]
+                open_process.restype = ctypes.c_void_p
+                handle = open_process(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+                if not handle:
+                    # ERROR_INVALID_PARAMETER/ERROR_NOT_FOUND mean that the
+                    # PID no longer exists; access denied and every other
+                    # result are deliberately treated as alive because an
+                    # unverifiable owner must never be reclaimed.
+                    return ctypes.get_last_error() not in {87, 1168}
+                get_exit_code = kernel32.GetExitCodeProcess
+                get_exit_code.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint32)]
+                get_exit_code.restype = ctypes.c_int
+                close_handle = kernel32.CloseHandle
+                close_handle.argtypes = [ctypes.c_void_p]
+                close_handle.restype = ctypes.c_int
+                exit_code = ctypes.c_uint32()
+                if not get_exit_code(handle, ctypes.byref(exit_code)):
+                    close_handle(handle)
+                    return True
+                close_handle(handle)
+                return exit_code.value == 259  # STILL_ACTIVE
+            except (AttributeError, OSError):
+                return True
         try:
             os.kill(pid, 0)
         except PermissionError:
             # The process may exist even when this account cannot inspect it;
             # an unverifiable owner is never safe to reclaim.
             return True
-        except (OSError, ProcessLookupError):
+        except ProcessLookupError:
+            return False
+        except OSError:
             return False
         return True
 
@@ -118,7 +156,14 @@ class PackageLease:
                 return True
             except OSError:
                 return False
-        if existing.age_seconds < self.stale_after_seconds or self._pid_alive(existing.pid):
+        owner_is_local = existing.hostname == socket.gethostname()
+        if self._pid_alive(existing.pid):
+            return False
+        # A dead local owner cannot still be writing. Reclaiming it
+        # immediately closes the crash-recovery window; remote-host locks
+        # retain the configured stale window because local PID probes do not
+        # establish ownership of another machine.
+        if not owner_is_local and existing.age_seconds < self.stale_after_seconds:
             return False
         try:
             self.path.unlink()

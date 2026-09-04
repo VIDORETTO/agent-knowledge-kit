@@ -76,7 +76,12 @@ class InMemoryRetrievalAdapter:
             "adapter": "memory",
             "mode": "gate",
             "profile": self.profile,
-            "corpus": {"documents": len(self.documents)},
+            "corpus": {
+                "corpus_documents": len(self.documents),
+                "operator_chunks": None,
+                "backend_total_documents": None,
+                "backend_total_chunks": None,
+            },
         }
 
     def close(self) -> None:
@@ -263,8 +268,10 @@ class McpRetrievalAdapter:
             "profile": index.get("profile") or index.get("embedding_profile") or "unknown",
             "version": self.server_info.get("version") or runtime_provenance(self.runtime_root).get("backend_version"),
             "corpus": {
-                "documents": index.get("documents", 0),
-                "chunks": index.get("chunks", 0),
+                "corpus_documents": index.get("corpus_documents", index.get("documents", 0)),
+                "operator_chunks": index.get("operator_chunks", index.get("chunks", 0)),
+                "backend_total_documents": index.get("backend_total_documents"),
+                "backend_total_chunks": index.get("backend_total_chunks"),
             },
         }
 

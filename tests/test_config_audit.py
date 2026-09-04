@@ -1,3 +1,4 @@
+# seam-scope: implementation-infrastructure (config policy unit tests)
 from __future__ import annotations
 
 from pathlib import Path

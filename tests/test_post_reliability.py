@@ -1,6 +1,9 @@
+# seam-scope: compatibility-infrastructure (lease characterization only)
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -53,25 +56,33 @@ def test_stale_dead_package_lease_can_be_reclaimed_without_killing_processes(tmp
     assert not lock.exists()
 
 
-def test_lease_does_not_reclaim_a_stale_lock_when_pid_identity_is_unverifiable(tmp_path: Path, monkeypatch) -> None:
+def test_lease_does_not_reclaim_or_interrupt_a_live_child_process(tmp_path: Path) -> None:
     package = tmp_path / "package"
     package.parent.mkdir(parents=True, exist_ok=True)
     lock = package.parent / ".package.docops.writer.lock"
-    lock.write_text(
-        json.dumps(
-            {"schema_version": 1, "pid": 12345, "started_at": time.time() - 1000, "hostname": "fixture", "token": "old"}
-        ),
-        encoding="utf-8",
-    )
+    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        lock.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "pid": child.pid,
+                    "started_at": time.time() - 1000,
+                    "hostname": "fixture",
+                    "token": "old",
+                }
+            ),
+            encoding="utf-8",
+        )
 
-    def deny_pid_probe(_pid: int, _signal: int) -> None:
-        raise PermissionError("pid probe denied")
+        with pytest.raises(LeaseBusyError):
+            PackageLease(package, stale_after_seconds=10).acquire()
 
-    monkeypatch.setattr("docops.lease.os.kill", deny_pid_probe)
-    with pytest.raises(LeaseBusyError):
-        PackageLease(package, stale_after_seconds=10).acquire()
-
-    assert lock.is_file()
+        assert lock.is_file()
+        assert child.poll() is None
+    finally:
+        child.terminate()
+        child.wait(timeout=10)
 
 
 def test_concurrent_applies_leave_one_complete_generation(tmp_path: Path) -> None:

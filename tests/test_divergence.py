@@ -1,3 +1,4 @@
+# seam-scope: implementation-infrastructure (divergence characterization)
 from __future__ import annotations
 
 from pathlib import Path

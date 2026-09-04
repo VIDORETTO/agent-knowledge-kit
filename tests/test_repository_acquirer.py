@@ -1,3 +1,4 @@
+# seam-scope: implementation-infrastructure (network boundary fixtures)
 from __future__ import annotations
 
 import subprocess

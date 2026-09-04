@@ -1,3 +1,4 @@
+# seam-scope: implementation-infrastructure (format normalizer unit tests)
 from __future__ import annotations
 
 import json

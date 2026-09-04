@@ -22,6 +22,83 @@ def test_doctor_command_emits_machine_readable_report(tmp_path: Path) -> None:
     report = json.loads(completed.stdout)
     assert report["ok"] is True
     assert report["capabilities"]["harness"] == "external Agent Skills + MCP"
+    assert str(tmp_path.resolve()) not in completed.stdout
+    assert report["project_root"] == "."
+    assert report["checks"]["project_metadata"]["path"] == "pyproject.toml"
+    assert report["checks"]["dependency_lock"]["path"] == "requirements.lock"
+
+
+def test_evaluate_command_never_emits_the_golden_query(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "guide.md").write_text("# Confidential roadmap\nMerger milestones.\n", encoding="utf-8")
+    output = tmp_path / "package"
+    created = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "docops",
+            "run",
+            str(source),
+            "--output",
+            str(output),
+            "--slug",
+            "privacy",
+            "--license",
+            "MIT",
+            "--json",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert created.returncode == 0, created.stdout + created.stderr
+    query = "customer-merger-confidential-roadmap"
+    cases = tmp_path / "cases.json"
+    cases.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "reviewed": True,
+                "cases": [
+                    {
+                        "query": query,
+                        "expected_filepath": "guide.md",
+                        "kind": "factual",
+                        "reviewed": True,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    evaluated = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "docops",
+            "evaluate",
+            "--package",
+            str(output),
+            "--cases",
+            str(cases),
+            "--adapter",
+            "lexical",
+            "--recall-threshold",
+            "0",
+            "--mrr-threshold",
+            "0",
+            "--json",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert evaluated.returncode == 0, evaluated.stdout + evaluated.stderr
+    assert query not in evaluated.stdout
+    assert json.loads(evaluated.stdout)["cases"][0]["query"] == "<redacted-query>"
 
 
 def test_resolve_and_run_commands_are_consumable_by_a_harness(tmp_path: Path) -> None:

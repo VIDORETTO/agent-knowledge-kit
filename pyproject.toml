@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "consulta-documentacao"
 version = "1.1.0"
-description = "Portable agent skills, source acquisition, RAG orchestration and package validation"
+description = "Portable, deterministic documentation-to-knowledge orchestration with optional local RAG/MCP."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"

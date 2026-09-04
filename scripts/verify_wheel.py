@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import shutil
@@ -18,7 +19,16 @@ if str(PROJECT_ROOT) not in sys.path:
 from docops import __version__  # noqa: E402
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--core", action="store_true", help="exercise the installed wheel without the optional RAG backend"
+    )
+    mode.add_argument(
+        "--require-rag", action="store_true", help="require the installed wheel to complete the real RAG/MCP path"
+    )
+    args = parser.parse_args(argv)
     root = PROJECT_ROOT
     with tempfile.TemporaryDirectory(prefix="docops-wheel-") as temporary:
         workspace = Path(temporary)
@@ -64,7 +74,7 @@ def main() -> int:
         # instead of rebuilt because its upstream packaging metadata includes
         # duplicate data entries on some hatchling versions.
         reviewed_backend = root / "skills" / "vendor" / "knowledge-rag"
-        if reviewed_backend.is_dir():
+        if reviewed_backend.is_dir() and not args.core:
             shutil.copytree(reviewed_backend / "mcp_server", target_dir / "mcp_server")
         environment = dict(os.environ)
         inherited_pythonpath = environment.get("PYTHONPATH", "")
@@ -73,6 +83,8 @@ def main() -> int:
         # operator and the optional MCP backend.  The environment variable is
         # intentionally scoped to this temporary subprocess environment.
         environment["DOCOPS_RAG_PYTHON"] = str(sys.executable)
+        if args.core:
+            environment["DOCOPS_SKIP_RAG"] = "1"
         subprocess.run(
             [sys.executable, "-c", f"import docops; assert docops.__version__ == {__version__!r}; "],
             check=True,
@@ -94,20 +106,27 @@ def main() -> int:
             ),
             encoding="utf-8",
         )
-        rag_probe = subprocess.run(
-            [
-                sys.executable,
-                "-c",
-                "import mcp_server.server",
-            ],
-            check=False,
-            cwd=workspace,
-            env=environment,
-            capture_output=True,
-            text=True,
-        )
-        rag_available = rag_probe.returncode == 0
-        require_rag = environment.get("DOCOPS_REQUIRE_WHEEL_RAG", "").strip().casefold() in {"1", "true", "yes"}
+        if args.core:
+            rag_available = False
+        else:
+            rag_probe = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    "import mcp_server.server",
+                ],
+                check=False,
+                cwd=workspace,
+                env=environment,
+                capture_output=True,
+                text=True,
+            )
+            rag_available = rag_probe.returncode == 0
+        require_rag = args.require_rag or environment.get("DOCOPS_REQUIRE_WHEEL_RAG", "").strip().casefold() in {
+            "1",
+            "true",
+            "yes",
+        }
         if require_rag and not rag_available:
             raise RuntimeError("wheel RAG gate requested but knowledge-rag is not installed in the test interpreter")
         adapter = "mcp" if rag_available else "memory"

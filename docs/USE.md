@@ -56,6 +56,12 @@ configuração existente. Para indexar de fato no servidor local, acrescente
 `--index-rag`; sem essa opção o `rag/index.json` fica em modo `corpus-ready`,
 pronto para o processo MCP.
 
+`rag/index.json` uses named metrics: `corpus_documents` counts documents
+accepted by the operator; `operator_chunks` is the local estimate before the
+backend; `backend_total_documents` and `backend_total_chunks` are totals
+observed from knowledge-rag, or `null` when real indexing was not executed.
+The current generator does not emit the ambiguous `documents`/`chunks` aliases.
+
 ## Atualização legada
 
 `scripts/update_rag.py` continua disponível para o corpus de trabalho legado:

@@ -1,3 +1,4 @@
+# seam-scope: compatibility-infrastructure (redaction/adapter fixtures)
 from __future__ import annotations
 
 import io
@@ -6,7 +7,7 @@ import json
 import pytest
 
 from docops.mcp_client import JsonRpcMcpClient, McpEofError
-from docops.observability import redact_diagnostic, redact_report
+from docops.observability import exception_diagnostic, redact_diagnostic, redact_report
 
 
 def test_mcp_diagnostic_is_structured_limited_and_never_echoes_canaries() -> None:
@@ -34,9 +35,12 @@ def test_report_redacts_paths_and_corpus_content_in_structured_metadata() -> Non
         }
     )
 
-    assert report["query"] == "token=<redacted>"
+    assert report["query"] == "<redacted-query>"
     assert report["path"] == "<local-path>"
     assert report["content"] == "<redacted-content>"
+
+    ordinary = redact_report({"query": "customer-merger-confidential-roadmap"})
+    assert ordinary["query"] == "<redacted-query>"
 
 
 def test_report_redacts_canaries_in_unclassified_string_fields() -> None:
@@ -94,3 +98,25 @@ def test_mcp_pipe_write_failure_is_reported_as_eof() -> None:
 
     assert caught.value.code == "mcp_eof"
     assert caught.value.exit_code == 19
+
+
+def test_exception_diagnostics_distinguish_timeout_from_eof_without_echoing_details() -> None:
+    from docops.mcp_client import McpTimeoutError
+
+    timeout = exception_diagnostic(McpTimeoutError("private timeout query"))
+    eof = exception_diagnostic(McpEofError("private EOF query", exit_code=23))
+
+    assert timeout == {
+        "code": "mcp_timeout",
+        "severity": "error",
+        "category": "protocol",
+        "redacted": True,
+    }
+    assert eof == {
+        "code": "mcp_eof",
+        "severity": "error",
+        "category": "protocol",
+        "redacted": True,
+        "process_exit_code": 23,
+    }
+    assert "private" not in json.dumps([timeout, eof])

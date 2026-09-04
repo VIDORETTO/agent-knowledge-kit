@@ -16,7 +16,8 @@ _WINDOWS_PATH = re.compile(r"(?i)(?<![A-Za-z0-9])(?:[A-Z]:\\|[A-Z]:/)[^\s\"']+")
 _POSIX_PATH = re.compile(r"(?<![\w])/(?:Users|home|private|tmp|var|workspace)/[^\s\"']+")
 _MESSAGE_KEYS = {"message", "reason", "detail", "hint", "error"}
 _PATH_KEYS = {"path", "source_path", "directory", "documents_dir", "data_dir", "models_cache_dir", "cwd"}
-_SOURCE_KEYS = {"source", "url", "uri", "query", "command"}
+_SOURCE_KEYS = {"source", "url", "uri", "command"}
+_QUERY_KEYS = {"query"}
 _CONTENT_KEYS = {"content", "text", "raw", "stdout", "stderr"}
 _CORPUS_KEYS = {"corpus", "document_text", "document_content"}
 
@@ -68,6 +69,25 @@ def redact_diagnostic(line: str) -> dict[str, Any]:
     }
 
 
+def exception_diagnostic(exc: BaseException, *, fallback_code: str = "operation_failed") -> dict[str, Any]:
+    """Classify an operational exception without retaining its message."""
+
+    declared_code = getattr(exc, "code", None)
+    code = str(declared_code) if isinstance(declared_code, str) and declared_code else fallback_code
+    if isinstance(exc, TimeoutError) and not declared_code:
+        code = "operation_timeout"
+    event: dict[str, Any] = {
+        "code": code,
+        "severity": "error",
+        "category": "protocol" if code.startswith("mcp_") else "operation",
+        "redacted": True,
+    }
+    exit_code = getattr(exc, "exit_code", None)
+    if isinstance(exit_code, int) and not isinstance(exit_code, bool):
+        event["process_exit_code"] = exit_code
+    return event
+
+
 def redact_report(value: Any) -> Any:
     """Redact operational text fields while preserving report structure."""
 
@@ -79,6 +99,8 @@ def redact_report(value: Any) -> Any:
                 result[str(key)] = "<redacted-content>"
             elif normalized_key in _CORPUS_KEYS and isinstance(item, str):
                 result[str(key)] = "<redacted-corpus>"
+            elif normalized_key in _QUERY_KEYS:
+                result[str(key)] = None if item is None else "<redacted-query>"
             elif normalized_key in _MESSAGE_KEYS or normalized_key in _PATH_KEYS or normalized_key in _SOURCE_KEYS:
                 result[str(key)] = None if item is None else redact_text(item)
             else:

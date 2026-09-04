@@ -5,8 +5,10 @@
   "license": "MIT",
   "upstream": "https://github.com/lyonzin/knowledge-rag",
   "source": "reviewed vendored release tree",
+  "upstream_ref": "v4.8.5",
+  "upstream_commit": "f531148b0d5fe479e7f0a104daf21d8fde7d3189",
   "refresh_policy": "manual review and digest regeneration; never auto-sync main",
-  "digest_authority": "artifacts/supply-chain/supply-chain.json",
+  "digest_authority": "candidate evidence/supply-chain.json",
   "model_policy": "external runtime snapshots require an explicit digest",
   "security_policy": "local PersistentClient only; no Chroma HTTP API, remote model repository, or trust_remote_code"
 }

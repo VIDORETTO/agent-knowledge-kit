@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -18,6 +18,14 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from docops.release_audit import audit_release  # noqa: E402
+from docops.runtime import venv_directory  # noqa: E402
+from scripts.candidate_identity import (  # noqa: E402
+    candidate_digest,
+    git_commit,
+    git_files,
+    inspect_identity,
+    sha256_file,
+)
 from scripts.generate_supply_chain import generate as generate_supply_chain  # noqa: E402
 from scripts.verify_candidate import verify as verify_candidate  # noqa: E402
 from scripts.verify_supply_chain import verify as verify_supply_chain  # noqa: E402
@@ -27,14 +35,19 @@ _BUNDLE_FILES = (
     ("CHANGELOG.md", "CHANGELOG.md"),
     ("LICENSE", "LICENSE"),
     ("SECURITY.md", "SECURITY.md"),
+    ("CODE_OF_CONDUCT.md", "CODE_OF_CONDUCT.md"),
+    ("CONTRIBUTING.md", "CONTRIBUTING.md"),
     ("docs/DEPENDENCIES.md", "docs/DEPENDENCIES.md"),
     ("docs/RELEASE.md", "docs/RELEASE.md"),
+    ("docs/CHROMA-RESIDUAL-DECISION.md", "docs/CHROMA-RESIDUAL-DECISION.md"),
     ("docs/SUPPORT-MATRIX.json", "docs/SUPPORT-MATRIX.json"),
     ("docs/REPOSITORY-METADATA.json", "metadata/repository.json"),
     ("community/CODE_OF_CONDUCT.md", "community/CODE_OF_CONDUCT.md"),
     ("community/GOVERNANCE.md", "community/GOVERNANCE.md"),
     ("community/MAINTAINERS.md", "community/MAINTAINERS.md"),
     ("community/SUPPORT.md", "community/SUPPORT.md"),
+    ("community/GITHUB-SETTINGS-CHECKLIST.md", "community/GITHUB-SETTINGS-CHECKLIST.md"),
+    (".github/CODEOWNERS", ".github/CODEOWNERS"),
     (".github/CODEOWNERS", "community/CODEOWNERS"),
     (".github/ISSUE_TEMPLATE/bug_report.yml", "community/issue-templates/bug_report.yml"),
     (".github/ISSUE_TEMPLATE/feature_request.yml", "community/issue-templates/feature_request.yml"),
@@ -57,29 +70,20 @@ _LOCAL_SOURCE_DIRS = {
     "models_cache",
     ".scratch",
 }
+_LOCAL_SOURCE_FILES = {".rag_state.json"}
 
 
 def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
+    return sha256_file(path)
 
 
 def _git_files(root: Path) -> list[str]:
-    completed = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
-        check=False,
-        capture_output=True,
-        timeout=30,
-    )
-    if completed.returncode:
+    values = git_files(root)
+    if values is None:
         raise RuntimeError("Git could not enumerate the candidate files")
-    values = [item for item in completed.stdout.decode("utf-8", errors="replace").split("\0") if item]
     if not values:
         raise RuntimeError("the candidate must contain at least one Git file")
-    return sorted(set(values))
+    return values
 
 
 def _distributable_files(root: Path) -> list[str]:
@@ -88,12 +92,18 @@ def _distributable_files(root: Path) -> list[str]:
         if not path.is_file() or path.is_symlink():
             continue
         relative = path.relative_to(root)
+        if relative.as_posix() in _LOCAL_SOURCE_FILES:
+            continue
         if any(part in _LOCAL_SOURCE_DIRS or part.endswith(".egg-info") for part in relative.parts):
             continue
         files.append(relative.as_posix())
     if not files:
         raise RuntimeError("the clean source tree has no distributable files")
-    return files
+    # ``Path`` ordering is platform-specific (and Windows uses separators
+    # that do not match the POSIX paths written to the manifest).  Sort the
+    # serialized representation so a clean clone and a Git worktree produce
+    # the same identity order.
+    return sorted(files)
 
 
 def _source_files(root: Path) -> tuple[list[str], str]:
@@ -103,15 +113,8 @@ def _source_files(root: Path) -> tuple[list[str], str]:
 
 
 def _git_commit(root: Path) -> str:
-    completed = subprocess.run(
-        ["git", "-C", str(root), "rev-parse", "HEAD"],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    commit = completed.stdout.strip()
-    if completed.returncode or not commit:
+    commit = git_commit(root)
+    if not commit:
         raise RuntimeError("the candidate must have a readable Git HEAD")
     return commit
 
@@ -135,17 +138,10 @@ def _assert_output_is_external_or_ignored(root: Path, output: Path) -> None:
 
 
 def _candidate_digest(root: Path, relative_files: Iterable[str]) -> str:
-    digest = hashlib.sha256()
-    for value in sorted(relative_files):
-        relative = Path(value)
-        path = (root / relative).resolve()
-        if path.is_symlink() or not path.is_file():
-            raise RuntimeError("the candidate contains a missing or symbolic-link file")
-        digest.update(relative.as_posix().encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(_sha256_file(path).encode("ascii"))
-        digest.update(b"\n")
-    return digest.hexdigest()
+    try:
+        return candidate_digest(root, relative_files)
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
 
 
 def _copy_file(source: Path, destination: Path) -> None:
@@ -224,6 +220,14 @@ def _display_output(path: Path, root: Path) -> str:
         return path.name
 
 
+def _candidate_python(root: Path, explicit: Path | None) -> Path:
+    if explicit is not None:
+        return explicit
+    relative = Path("Scripts/python.exe") if os.name == "nt" else Path("bin/python")
+    project_python = venv_directory(root) / relative
+    return project_python if project_python.is_file() else Path(sys.executable)
+
+
 def _attestation_status() -> dict[str, Any]:
     cosign = shutil.which("cosign")
     if cosign:
@@ -248,6 +252,8 @@ def build_candidate(
     python: Path,
     model_cache: Path | None = None,
     require_model: bool = False,
+    profile: str = "core",
+    release: bool = False,
 ) -> dict[str, Any]:
     root = root.expanduser().resolve()
     output = output.expanduser().resolve()
@@ -260,6 +266,15 @@ def build_candidate(
 
     relative_files, source_commit = _source_files(root)
     source_candidate_digest = _candidate_digest(root, relative_files)
+    identity = inspect_identity(root, relative_files, source_candidate_digest, verify_remote=release)
+    if release and (
+        identity["state"] != "commit-candidate"
+        or identity["remote_evidence"] != "verified"
+        or identity["ci"].get("status") != "observed"
+        or identity["ci"].get("commit") != source_commit
+        or identity["ci"].get("candidate_digest") != source_candidate_digest
+    ):
+        raise RuntimeError("release candidate requires a clean remote commit and matching CI evidence")
     candidate_audit = audit_release(root, candidate_files=relative_files)
     if not candidate_audit.ok:
         _write_json(output / "candidate-audit.json", candidate_audit.to_dict())
@@ -277,7 +292,7 @@ def build_candidate(
     vendor_destination = output / "provenance" / "vendor" / "knowledge-rag"
     _copy_candidate_vendor(root, relative_files, vendor_destination)
 
-    model_destination: Path | None = None
+    model_source: Path | None = None
     if model_cache is not None:
         model_source = model_cache.expanduser().resolve()
         if not model_source.is_dir() or model_source.is_symlink():
@@ -285,8 +300,6 @@ def build_candidate(
         for path in model_source.rglob("*"):
             if path.is_symlink():
                 raise RuntimeError("model snapshots containing symbolic links are not reproducible")
-        model_destination = output / "provenance" / "model-cache"
-        shutil.copytree(model_source, model_destination)
 
     wheel_destination = output / "wheel"
     wheel = _build_wheel(root, python, wheel_destination)
@@ -298,11 +311,14 @@ def build_candidate(
         root=output,
         wheel=wheel,
         output=output / "evidence",
-        model_cache=model_destination,
+        model_cache=model_source,
         python=python,
         require_model=require_model,
+        profile=profile,
         lock_path=lock_destination,
         vendor_root=vendor_destination,
+        source_commit=source_commit,
+        source_candidate_digest=source_candidate_digest,
     )
     if not evidence.get("ok"):
         raise RuntimeError("candidate supply-chain evidence contains errors")
@@ -316,22 +332,24 @@ def build_candidate(
             **candidate_audit.to_dict(),
             "source_commit": source_commit,
             "source_candidate_digest": source_candidate_digest,
+            "source_files": relative_files,
+            "identity": identity,
         },
     )
+    _write_json(output / "candidate-identity.json", identity)
     assets = [relative for relative in _bundle_files(output) if relative != "candidate-manifest.json"]
     manifest = {
         "schema_version": 1,
         "kind": "docops-release-candidate",
         "status": "candidate",
+        "profile": profile,
         "version": version,
         "source_commit": source_commit,
-        "source_state": (
-            "working-tree-candidate; digest covers the exact Git candidate file set"
-            if source_commit != "unversioned-clean-clone"
-            else "unversioned clean-clone snapshot; digest covers the distributable file set"
-        ),
+        "source_state": identity["state"],
         "source_candidate_digest": source_candidate_digest,
         "source_files": relative_files,
+        "identity": identity,
+        "ci": identity["ci"],
         "candidate_audit": candidate_audit.to_dict(),
         "wheel": {
             "path": _display_output(wheel, output),
@@ -371,8 +389,10 @@ def build_candidate(
         "schema_version": 1,
         "ok": True,
         "version": version,
+        "profile": profile,
         "source_commit": source_commit,
         "source_candidate_digest": source_candidate_digest,
+        "identity": identity,
         "candidate_audit": candidate_audit.to_dict(),
         "bundle_verification": verification,
         "output": _display_output(output, root),
@@ -385,15 +405,23 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--python", type=Path, help="interpreter used for wheel and resolver evidence")
     parser.add_argument("--model-cache", type=Path)
+    parser.add_argument("--profile", choices=("core", "rag"), default="core")
     parser.add_argument("--require-model", action="store_true")
+    parser.add_argument(
+        "--release",
+        action="store_true",
+        help="require a clean remotely reachable commit and matching GitHub Actions evidence",
+    )
     args = parser.parse_args(argv)
     try:
         report = build_candidate(
             root=args.root,
             output=args.output,
-            python=args.python or Path(sys.executable),
+            python=_candidate_python(args.root.expanduser().resolve(), args.python),
             model_cache=args.model_cache,
             require_model=args.require_model,
+            profile=args.profile,
+            release=args.release,
         )
     except (OSError, UnicodeError, ValueError, RuntimeError, subprocess.SubprocessError, zipfile.BadZipFile) as exc:
         print(

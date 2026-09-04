@@ -280,13 +280,68 @@ def validate_package(package_root: Path | str) -> ValidationResult:
                 file_count = sum(1 for path in docs if path.is_file() and not path.is_symlink())
                 if file_count < 1:
                     _error(errors, "empty_rag", "rag/documents must contain at least one source")
+                metric_names = {
+                    "corpus_documents",
+                    "operator_chunks",
+                    "backend_total_documents",
+                    "backend_total_chunks",
+                }
+                uses_named_metrics = "corpus_documents" in index or isinstance(index.get("metrics"), dict)
+                if uses_named_metrics:
+                    metrics = index.get("metrics") if isinstance(index.get("metrics"), dict) else {}
+                    for name in metric_names:
+                        if name not in index or name not in metrics or index[name] != metrics[name]:
+                            _error(
+                                errors,
+                                "rag_metrics_invalid",
+                                f"rag/index.json metric is missing or inconsistent: {name}",
+                            )
+                    if index.get("corpus_documents") != file_count:
+                        _error(
+                            errors, "rag_document_count", "rag/index.json corpus_documents does not match rag/documents"
+                        )
+                    if (
+                        isinstance(index.get("corpus_documents"), bool)
+                        or not isinstance(index.get("corpus_documents"), int)
+                        or index["corpus_documents"] < 1
+                    ):
+                        _error(errors, "rag_document_count_invalid", "rag/index.json corpus_documents must be positive")
+                    if (
+                        isinstance(index.get("operator_chunks"), bool)
+                        or not isinstance(index.get("operator_chunks"), int)
+                        or index["operator_chunks"] < 1
+                    ):
+                        _error(errors, "rag_operator_chunks_invalid", "rag/index.json operator_chunks must be positive")
+                    for name in ("backend_total_documents", "backend_total_chunks"):
+                        value = index.get(name)
+                        if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 0):
+                            _error(
+                                errors,
+                                "rag_backend_metric_invalid",
+                                f"rag/index.json {name} must be a non-negative integer or null",
+                            )
+                    if "chunks" in index or "documents" in index:
+                        _error(
+                            errors, "rag_ambiguous_metrics", "named RAG metrics must not use legacy ambiguous aliases"
+                        )
+                    rag_documents_count = index.get("corpus_documents")
+                    rag_operator_chunks = index.get("operator_chunks")
+                else:
+                    rag_documents_count = index.get("documents", file_count)
+                    rag_operator_chunks = index.get("chunks", 0)
                 checks["rag"] = {
                     "ok": file_count > 0,
                     "path": "rag",
-                    "documents": index.get("documents", file_count),
-                    "chunks": index.get("chunks", 0),
+                    "corpus_documents": rag_documents_count,
+                    "operator_chunks": rag_operator_chunks,
+                    "backend_total_documents": index.get("backend_total_documents"),
+                    "backend_total_chunks": index.get("backend_total_chunks"),
                 }
-                if isinstance(index.get("documents"), int) and index["documents"] != file_count:
+                if (
+                    not uses_named_metrics
+                    and isinstance(index.get("documents"), int)
+                    and index["documents"] != file_count
+                ):
                     _error(errors, "rag_document_count", "rag/index.json documents count does not match rag/documents")
                 if isinstance(manifest.get("entries"), list) and not (rag_dir / "sources.json").is_file():
                     _error(errors, "missing_sources_manifest", "rag/sources.json is required for generated packages")

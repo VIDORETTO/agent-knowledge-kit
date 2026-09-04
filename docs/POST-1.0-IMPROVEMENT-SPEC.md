@@ -1,12 +1,25 @@
 # Especificação de profissionalização pós-1.0
 
-**Status:** pronta para implementação após a auditoria atual; tickets 23–29
-propostos e ainda não implementados
+**Status:** implementação local Goal Mode concluída em 2026-09-03; a liberação
+permanece bloqueada apenas por evidência remota/autenticada e decisão humana
+explicitamente registradas
 
 **Base factual:** `docs/GITHUB-PUBLICATION-AUDIT-2026-09-02.md`
 
 **Método:** achados confirmados → especificação → tickets ordenados → plano
-TDD. Esta etapa documental não implementa código.
+TDD → implementação vertical → gates reproduzíveis. O working tree contém a
+implementação local e conserva a separação entre evidência observada e decisão
+de release.
+
+## Estado da execução Goal Mode — 2026-09-03
+
+Os tickets 23–29 foram implementados localmente na ordem de dependência e têm
+testes, documentação e evidência nos próprios tickets. Permanecem dois gates
+fora da autoridade desta execução: (1) um commit/CI remoto no mesmo SHA do
+candidato, pois commit/push/publicação foram proibidos; e (2) a decisão do
+mantenedor sobre o residual dos quatro CVEs do Chroma, mantida como
+`pending-maintainer-decision` em `docs/CHROMA-RESIDUAL-DECISION.md`. Isso não é
+apresentado como release-ready.
 
 ## Problem Statement
 
@@ -275,6 +288,8 @@ Aceite mínimo:
   referenciados;
 - wheel, checksums e SBOM aparecem como assets da release, sem corpus/índice/
   token/model cache;
+- os jobs públicos de pacote e integração retêm, vinculada a `${GITHUB_SHA}`,
+  a evidência auditada do candidate e somente os resultados RAG redigidos;
 - CODEOWNERS, branch protection, revisão obrigatória, secret scanning,
   push-protection e Dependabot são verificados por um mantenedor autenticado;
 - nenhuma ferramenta local faz a mutação dessas settings como parte do gate.
@@ -308,7 +323,9 @@ Aceite mínimo:
 | 6 | 28 — GitHub/community/assets | Publica identidade, assets e expectativas somente após gates técnicos | 23, 26, 27 |
 | 7 | 29 — métricas/stress | Fecha a evidência operacional e pode usar todos os seams estabilizados | 24, 25, 27 |
 
-Nenhum ticket desta tabela foi implementado nesta auditoria.
+Todos os tickets 23–29 têm implementação local nesta execução. A tabela segue
+como a ordem normativa; a evidência de cada tracer está nos tickets e em
+`tasks/todo.md`.
 
 ### 6. Decisões de compatibilidade e segurança
 

@@ -1,7 +1,7 @@
 # Plano TDD para profissionalização pós-1.0
 
-**Status:** pronto para o modelo implementador; tickets 23–29 ainda não
-iniciados
+**Status:** execução Goal Mode concluída localmente em 2026-09-03; release
+remains blocked by explicit remote and human gates
 
 **Disciplina:** red → green por tracer bullet vertical; review/refactor somente
 depois do green
@@ -17,9 +17,9 @@ implementação no working tree antes desta auditoria; não se deve repetir seus
 reds históricos como se fossem falhas atuais. O objetivo presente é fechar
 lacunas confirmadas, sem implementar nada durante a auditoria documental.
 
-O primeiro modelo implementador deve preservar o working tree, ler
-`AGENTS.md`, `RTK.md`, `tasks/lessons.md`, a spec e este plano, e manter a
-proibição de commit/push/tag/release até receber autorização separada.
+A execução implementadora preservou o working tree, leu as instruções e manteve
+a proibição de commit/push/tag/release. Os reds, greens e gates observados
+estão registrados nos tickets 23–29 e em `tasks/todo.md`.
 
 ## 2. Seams públicos aprovados
 
@@ -189,7 +189,9 @@ CONTRIBUTING, issue/PR; release assets; checksum/SBOM; CODEOWNERS; branch rules;
 secret scanning/push protection/Dependabot.
 
 **Gate:** candidate audit, bundle verifier, README/link check, health check
-público e revisão autenticada antes de qualquer publicação humana.
+público, retenção do candidate no artifact `candidate-1.1.0-${GITHUB_SHA}` e
+retenção dos resultados RAG redigidos no artifact de integração; revisão
+autenticada antes de qualquer publicação humana.
 
 ### 29 — Métricas e stress operacional
 
@@ -208,7 +210,7 @@ audit. O relatório continua redigido.
 
 ## 6. Gating global e encerramento
 
-Depois de cada ticket:
+Depois de cada ticket (cumprido nesta execução):
 
 1. registrar o red e o green no ticket;
 2. executar o gate proporcional e a regressão do seam público;

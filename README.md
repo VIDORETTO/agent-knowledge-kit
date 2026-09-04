@@ -38,6 +38,10 @@ execução manual deste candidato foi comprovada no Windows; Linux/macOS ficam
 exercitados pela matriz do CI e não são apresentados como validação manual
 local.
 
+## Matriz de suporte
+
+A matriz normativa está em [docs/SUPPORT-MATRIX.json](docs/SUPPORT-MATRIX.json).
+
 ## Um fluxo completo
 
 O mesmo protocolo aceita pasta, arquivo, URL de página, URL de repositório ou
@@ -98,6 +102,14 @@ O contrato detalhado e a ordem de implementação estão em
 [docs/ROADMAP-GITHUB-PRODUTO.md](docs/ROADMAP-GITHUB-PRODUTO.md). A arquitetura
 executável está descrita em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## Comunidade e metadata
+
+O [Code of Conduct](CODE_OF_CONDUCT.md), a [contribuição](CONTRIBUTING.md),
+as políticas em [community/](community/) e o [checklist manual de settings do
+GitHub](community/GITHUB-SETTINGS-CHECKLIST.md) são distribuídos e nunca
+alterados automaticamente. A metadata do repositório está em
+[docs/REPOSITORY-METADATA.json](docs/REPOSITORY-METADATA.json).
+
 ## Candidato 1.1.0
 
 Este working tree identifica-se como candidato técnico, não como uma release
@@ -106,11 +118,14 @@ publicada. Para materializar e verificar o conjunto exato de arquivos:
 ```text
 python scripts/prepare_candidate.py --root . --output artifacts/candidate-1.1.0
 python scripts/verify_candidate.py --root artifacts/candidate-1.1.0
+python scripts/verify_candidate.py --root artifacts/candidate-1.1.0 --source-root .
 ```
 
 O bundle registra o commit base, o digest do candidato, wheel, checksums, SBOM,
-proveniência do vendor/modelo e as pendências de autorização humana. Nenhum
-script de verificação executa commit, tag, push, publicação ou release.
+proveniência do vendor, manifest/digest do snapshot externo de modelo e as
+pendências de autorização humana. Bytes de cache de modelo não entram no
+candidate. Nenhum script de verificação executa commit, tag, push, publicação
+ou release.
 
 Políticas comunitárias estão em [community/](community/), e a metadata do
 repositório está em [docs/REPOSITORY-METADATA.json](docs/REPOSITORY-METADATA.json).

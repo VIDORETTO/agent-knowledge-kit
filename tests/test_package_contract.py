@@ -1,3 +1,4 @@
+# seam-scope: implementation-infrastructure (validator fixtures; public package contract)
 from __future__ import annotations
 
 import json

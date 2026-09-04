@@ -1,3 +1,4 @@
+# seam-scope: implementation-infrastructure (resolver unit tests)
 from __future__ import annotations
 
 import json
