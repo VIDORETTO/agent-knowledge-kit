@@ -1077,6 +1077,12 @@ def _receipt_valid(
     )
 
 
+def _phase_duration_ms(started: float) -> float:
+    """Return a positive serialized duration even on coarse monotonic clocks."""
+
+    return max(round((time.monotonic() - started) * 1000, 3), 0.001)
+
+
 def _run_phase(
     checkpoint: CheckpointStore,
     phase: str,
@@ -1102,7 +1108,7 @@ def _run_phase(
             "input_hash": input_hash,
             "output_hash": _paths_digest(stage, effective_paths),
             "paths": list(effective_paths),
-            "duration_ms": round((time.monotonic() - started) * 1000, 3),
+            "duration_ms": _phase_duration_ms(started),
             "completed_at": utc_now(),
         },
     )

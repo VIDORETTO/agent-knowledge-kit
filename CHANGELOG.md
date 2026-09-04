@@ -36,6 +36,8 @@
 - Unversioned clean-clone candidates now record CI identity as not observed
   rather than as a false SHA mismatch; release mode still requires a remote
   commit and matching CI evidence.
+- Phase receipts keep a positive millisecond floor on coarse monotonic clocks,
+  preserving the measured-duration contract across supported operating systems.
 - Added an explicit authenticated GitHub settings checklist and kept commit,
   push, tag and release operations outside all local automation.
 - Added the `plan`/`apply`/`inspect` operation seam with real create/update/dry-run
