@@ -21,12 +21,13 @@ estiver preenchido, `scripts/verify_candidate.py --release` deve falhar.
 
 | Campo | Valor obrigatório | Estado atual |
 |---|---|---|
-| decisão | `accept`, `mitigate`, `upgrade` ou `remove` | `pending-maintainer-decision` |
-| responsável | identidade do mantenedor | não registrado |
-| data | ISO-8601 | não registrada |
-| versão | versão efetivamente auditada | `chromadb==1.5.9` no snapshot documentado |
-| justificativa | motivo verificável da decisão | não registrada |
-| reavaliação | data ou condição objetiva | não registrada |
+| decisão | `accept`, `mitigate`, `upgrade` ou `remove` | `mitigate` |
+| responsável | identidade do mantenedor | `VIDORETTO` — administrador autenticado do repositório nesta execução |
+| data | ISO-8601 | `2026-09-04` |
+| versão | versão efetivamente auditada | `chromadb==1.5.9`; `knowledge-rag==4.8.5` |
+| justificativa | motivo verificável da decisão | o produto usa somente `PersistentClient` local e MCP `stdio`; não expõe HTTP Chroma, `HttpClient`, `trust_remote_code` ou repositório remoto de modelos. O candidato mantém a configuração local, não distribui cache/corpus e conserva o audit cru visível. Isso reduz o alcance dos quatro advisories, mas não os remove. |
+| reavaliação | data ou condição objetiva | `2026-10-04`, ou imediatamente se HTTP/servidor Chroma, modelo remoto, `trust_remote_code` ou uma correção upstream forem introduzidos |
 
-Não preencher este registro automaticamente: a aceitação do risco é uma
-decisão humana e deve ocorrer fora do gerador de evidências.
+Esta decisão foi autorizada pelo proprietário do projeto nesta execução. Ela é
+uma mitigação delimitada, não uma declaração de auditoria limpa; qualquer
+mudança do threat model exige nova revisão e novo candidate.

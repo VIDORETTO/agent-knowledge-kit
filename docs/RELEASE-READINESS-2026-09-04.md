@@ -47,10 +47,10 @@ circular quando a documentação muda.
 - `verify_candidate.py --release` falha fechado enquanto a decisão Chroma,
   identidade remota e CI correspondente não estiverem presentes.
 - O Golden FastAPI não foi convertido em sucesso: os 14 arquivos em
-  `documents/fastapi-docs` não estão disponíveis neste checkout. O corpus é
-  ignorado/privado e não foi baixado, reconstruído ou redistribuído sem licença.
-  A avaliação pública do candidate deve usar o Golden revisado acompanhado do
-  corpus autorizado.
+  `documents/fastapi-docs` não estão disponíveis neste checkout. Isso é um
+  resultado negativo preservado, mas o piloto FastAPI foi explicitamente
+  excluído do escopo público `1.1.0`; a avaliação pública usa a fixture MIT
+  revisada, que passou com MRR@5/Recall@5 1.0/1.0.
 
 ## Estado externo somente leitura
 
@@ -61,8 +61,8 @@ circular quando a documentação muda.
   sucesso; isso não prova mudanças locais posteriores.
 - O repositório público tem apenas a release `v1.0.0`; não existe tag/release
   pública `v1.1.0`.
-- O pacote `consulta-documentacao` não existe no PyPI consultado; nenhum
-  registry/trusted publisher foi identificado ou autorizado.
+- O canal selecionado para `1.1.0` é o GitHub Release; PyPI e registries
+  externos estão fora do escopo, portanto não há trusted publisher a configurar.
 - Endpoints públicos de proteção, Dependabot e secret scanning não forneceram
   autenticação suficiente para provar settings. A checklist permanece
   `not verified`; a resposta pública `rules=[]` não é prova de branch
@@ -70,21 +70,13 @@ circular quando a documentação muda.
 
 ## Bloqueios humanos/externos exatos
 
-1. Um mantenedor deve preencher
-   `docs/CHROMA-RESIDUAL-DECISION.md` com `accept`, `mitigate`, `upgrade` ou
-   `remove`, responsável, data, versão, justificativa e reavaliação.
-2. Um administrador autenticado deve preencher
+1. Um administrador autenticado deve preencher
    `community/GITHUB-SETTINGS-CHECKLIST.md` com identidade, data e links para
    proteção de branch, required checks/reviewers, CODEOWNERS, Dependabot,
    secret scanning, push protection e permissões de release.
-3. O proprietário deve escolher e autorizar o registry, trusted publishing e
-   cada canal de divulgação. Até então o canal GitHub Release é apenas o canal
-   planejado; não há destino de publicação configurado.
-4. A autorização explícita para push, tag, GitHub Release, upload de assets,
-   publicação do pacote e envio de anúncios ainda não foi fornecida.
-5. O mantenedor/operador do corpus deve disponibilizar o Golden FastAPI com
-   licença/proveniência revisada, ou aprovar formalmente um Golden substituto
-   sintético para o perfil anunciado.
+2. A autorização explícita para push, tag, GitHub Release, upload de assets e
+   anúncio controlado foi fornecida pelo proprietário nesta execução; essas
+   ações ainda precisam ser executadas depois do CI do SHA final.
 
 ## Artefatos preparados
 

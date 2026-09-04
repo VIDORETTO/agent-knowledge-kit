@@ -20,6 +20,12 @@ estado local do usuário. Não entram na release nem em uma divulgação públic
 Se o produto ganhar um serviço hospedado no futuro, isso exigirá um plano de
 deploy separado para a infraestrutura correspondente.
 
+Para o candidate `1.1.0`, o contrato público é o CLI genérico com RAG local
+opcional e a fixture sintética MIT revisada. O piloto FastAPI e seu Golden Set
+dependem de um corpus privado sem licença de redistribuição neste checkout;
+eles ficam fora do escopo anunciado desta versão e não serão baixados,
+reconstruídos ou publicados.
+
 “Divulgação em massa” só começa depois do canário pós-publicação. O anúncio
 deve promover o pacote e seus limites reais; não deve prometer LLM, provedor,
 suporte universal de harnesses ou auditoria de dependências sem vulnerabilidades.
@@ -76,8 +82,8 @@ qualquer publicação.
 - [x] Manter `1.1.0` como candidate e não reutilizar a identidade `v1.0.0`.
 - [x] Definir GitHub como fonte canônica do código, documentação e evidência.
 - [x] Manter GitHub Release como canal público principal de notas e assets.
-- [ ] Verificar se `consulta-documentacao` tem um registry autorizado e
-  configurado; usar PyPI somente com publicação confiável/least privilege.
+- [x] Escolher GitHub Release como o único canal de distribuição de `1.1.0`;
+  PyPI e outros registries ficam fora do escopo desta versão.
 - [x] Confirmar que não serão publicados corpus adquirido, índices, caches,
   snapshots de modelo, tokens, logs de usuário ou caminhos privados.
 - [x] Registrar o critério de divulgação: release pública verificável,
@@ -93,7 +99,8 @@ resultados.
 - [x] Reexecutar, em clone limpo, o runbook de `docs/RELEASE.md` com os perfis
   `core` e `rag` conforme o escopo do lançamento.
 - [x] Rodar auditoria de release, contratos, suporte, workflows, wheel,
-  supply-chain, MCP, Golden Set e stress sem suprimir saídas vermelhas.
+  supply-chain, MCP, Golden Set da fixture MIT e stress sem suprimir saídas
+  vermelhas; o Golden FastAPI privado não é gate do escopo anunciado.
 - [x] Gerar um novo candidate fora do Git e verificar manifesto, lista,
   checksums, SBOM, provenance, licença, `publication=false` e `source_commit`.
 - [ ] Fazer push do commit candidato apenas com autorização explícita e aguardar
@@ -110,7 +117,7 @@ decisão humana registrada; nenhuma exceção fica implícita.
   repetir lock, vendor, wheel, RAG/MCP, segurança e candidate completos.
 - [x] Se a atualização não for viável, aplicar mitigação verificável ou reduzir
   o escopo do perfil RAG; não chamar isso de auditoria limpa.
-- [ ] Um mantenedor preencher `docs/CHROMA-RESIDUAL-DECISION.md` com decisão,
+- [x] Um mantenedor preencher `docs/CHROMA-RESIDUAL-DECISION.md` com decisão,
   responsável, data, versão, justificativa e reavaliação.
 - [x] Auditar dependências cruas e wrapper, mantendo os quatro advisories
   visíveis no relatório e no material de release quando ainda existirem.
@@ -198,7 +205,7 @@ processo de concluído, estes itens precisam ter evidência válida:
 | Gate humano/externo | Por que existe | Evidência aceita |
 |---|---|---|
 | Residual Chroma | aceitar ou alterar risco é decisão do mantenedor | registro completo em `docs/CHROMA-RESIDUAL-DECISION.md` |
-| Licença/proveniência | conteúdo de terceiros pode ser protegido | manifesto e revisão do conjunto distribuível |
+| Licença/proveniência | conteúdo de terceiros pode ser protegido | fixture MIT e vendor/model provenance no candidate; piloto FastAPI explicitamente excluído |
 | GitHub governance | configurações protegidas não são provadas anonimamente | checklist autenticado com identidade/data/links |
 | Canal/conta de publicação | registry e redes podem pertencer a terceiros | configuração de trusted publishing e escopo autorizado |
 | Comunicação externa | “massa” depende de audiência, contas e mensagem | destinos/cópia aprovados ou canais do próprio projeto |

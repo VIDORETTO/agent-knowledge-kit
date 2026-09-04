@@ -25,9 +25,8 @@ provider, hosted service or API key.
 
 ## Installation after publication
 
-The registry and trusted-publishing identity are not configured yet. Once a
-maintainer approves a channel, install the exact downloaded wheel and verify
-its checksum before use:
+This version is distributed only through its GitHub Release. After the release
+is public, download the exact wheel asset and verify its checksum before use:
 
 ```text
 python -m pip install consulta_documentacao-1.1.0-py3-none-any.whl

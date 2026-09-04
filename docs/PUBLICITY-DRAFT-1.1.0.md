@@ -31,8 +31,7 @@ pacote e avaliar as consultas revisadas.
 
 ## Destinos e aprovação
 
-O primeiro destino previsto é o próprio GitHub (Release, README/changelog e
-comunidade do projeto). Registry e canais externos permanecem sem identidade,
-ownership e trusted publishing verificados. O mantenedor deve preencher os
-destinos, audiência, horário, responsável e autorização no handoff antes do
-envio.
+O único destino desta versão é o próprio GitHub Release, com README/changelog
+coerentes no repositório. Registry e canais externos ficam explicitamente fora
+do escopo; não haverá anúncio para contas externas. O responsável deve
+confirmar o horário e a janela de observação no handoff antes do envio.
