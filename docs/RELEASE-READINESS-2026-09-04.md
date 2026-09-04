@@ -28,7 +28,7 @@ circular quando a documentação muda.
   chunks.
 - MCP smoke: **pass**, handshake `2024-11-05`, backend `4.8.5`, 13 tools;
   consultas e conteúdo permaneceram redigidos.
-- Stress de reindex concorrente: **pass**, 10 s, 4 readers, 35.407 buscas,
+- Stress de reindex concorrente: **pass**, 10 s, 4 readers, 33.125 buscas,
   zero erros/warnings, reindex terminal e zero resíduo recuperável.
 - Vendor security: **173 passed, 3 skipped, 7 xfailed**. A suíte upstream
   completa não é um gate do `config.yaml` do produto: seus testes de preset
