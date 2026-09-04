@@ -21,7 +21,7 @@
   compileall, contratos, matriz, public seams, clean clone, wheels core/RAG,
   `pip check`, raw `pip-audit`, wrapper strict, supply chain, auditorias,
   vendor security/chaos, MCP/Golden/fixture, stress e metadata/workflows.
-- [ ] Gerar, depois do commit, um candidate novo em `artifacts/` e verificar lista/digest/identidade,
+- [x] Gerar, depois do commit, um candidate novo em `artifacts/` e verificar lista/digest/identidade,
   auditoria, supply chain, re-medição da fonte e modo release fail-closed.
 - [x] Atualizar docs, tickets, changelog, auditoria, este registro e lessons com
   apenas evidência observada nesta execução; revisar elegância e diff final.
@@ -700,3 +700,37 @@ significa que os tickets 23–29 foram implementados.
 - [x] Nenhum commit, push, tag, publish ou release foi executado. A assinatura,
   branch/release protections, licença de corpus e decisão sobre o residual
   Chroma continuam como revisão humana antes de qualquer publicação.
+
+## Follow-up do CI Linux após o commit `7916083` — 2026-09-04
+
+- [x] Reproduzir no Linux/Python 3.12 a falha do job wheel do run
+  `33887455346` e capturar os erros completos de validação.
+- [x] Manter o cache FastEmbed fora da árvore distribuível do pacote em todos
+  os sistemas, com regressão automatizada.
+- [x] Melhorar o diagnóstico do gate do wheel para preservar erros estruturados
+  sem depender dos últimos 2.000 caracteres do stdout.
+- [x] Executar testes focados, suíte/gates proporcionais e os smokes reais dos
+  wheels no Windows; o wheel RAG foi executado com o runtime exigido.
+- [x] Atualizar documentação/revisão com a evidência local final e preparar o
+  commit/push corretivo desta execução. Não criar tag nem release.
+- [ ] Confirmar no GitHub o novo CI do mesmo SHA depois do push; a execução
+  remota e suas plataformas continuam evidência externa.
+
+### Evidência final local deste follow-up
+
+- `python -m pytest -q`: **228 passed, 2 skipped em 419,82s**; ambos os skips
+  são a capacidade de criar symlink neste host Windows.
+- Testes focados (`test_pipeline.py`, `test_rag_sync.py` e
+  `test_verify_wheel.py`): **21 passed, 1 skipped**.
+- Ruff lint/formato, contratos, matriz de suporte, workflows, public seams,
+  `compileall` e `git diff --check`: **PASS**.
+- Auditoria de release: **PASS**, 401 arquivos tracked e 403 arquivos no
+  candidate set.
+- `pip check` no `.venv` do projeto: **PASS**.
+- `verify_wheel.py --core`: **PASS**, `adapter=memory`, `rag=false`.
+- `verify_wheel.py --require-rag` no `.venv` do projeto: **PASS**,
+  `adapter=mcp`, `rag=true`.
+- A tentativa paralela dos wheels foi descartada por corrida nos diretórios
+  `build/` compartilhados; a repetição sequencial passou. Os diretórios
+  `build/` e `consulta_documentacao.egg-info/` foram removidos antes da
+  repetição por serem artefatos gerados e ignorados.

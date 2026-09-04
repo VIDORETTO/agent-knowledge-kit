@@ -68,6 +68,9 @@ def test_local_folder_produces_valid_skill_router_rag_and_manifest(tmp_path: Pat
     assert (output / "router" / "SKILL.md").is_file()
     assert (output / "harness.json").is_file()
     assert (output / "config.yaml").is_file()
+    config_text = (output / "config.yaml").read_text(encoding="utf-8")
+    assert "models_cache_dir: ~/.cache/docops/models" in config_text
+    assert "rag/models_cache" not in config_text
     assert (output / "rag" / "documents" / "guide.md").is_file()
     manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["artifacts"]["config"] == "config.yaml"

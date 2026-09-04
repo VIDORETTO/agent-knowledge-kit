@@ -95,7 +95,9 @@ python -m docops config-audit config/network.yaml --json
 O auditor exige autenticação, rate limit, métricas e logging JSON para `sse` e
 `streamable-http`, e o servidor recusa iniciar se o bearer token estiver
 ausente. Não coloque esse arquivo no Git. O perfil RAG usa `PersistentClient`
-local e o cache de modelos fica em `models_cache/`, que é ignorado.
+local. O cache de modelos fica fora do pacote, em
+`~/.cache/docops/models`; ele é estado de execução e nunca integra o artefato
+distribuível.
 
 ## Avaliação
 

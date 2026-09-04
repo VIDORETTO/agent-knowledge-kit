@@ -36,7 +36,7 @@ def package_rag_config() -> dict[str, Any]:
         "paths": {
             "documents_dir": "./rag/documents",
             "data_dir": "./rag/data",
-            "models_cache_dir": "./rag/models_cache",
+            "models_cache_dir": "~/.cache/docops/models",
         },
         "documents": {
             "supported_formats": [

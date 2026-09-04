@@ -16,13 +16,13 @@ def _runtime_root(tmp_path: Path) -> Path:
     return runtime
 
 
-def test_package_rag_config_is_relative_and_local_only(tmp_path: Path) -> None:
+def test_package_rag_config_keeps_model_cache_outside_distributable_artifacts() -> None:
     config = package_rag_config()
 
     assert config["paths"] == {
         "documents_dir": "./rag/documents",
         "data_dir": "./rag/data",
-        "models_cache_dir": "./rag/models_cache",
+        "models_cache_dir": "~/.cache/docops/models",
     }
     assert config["server"]["transport"] == "stdio"
     assert config["server"]["auth"]["bearer_token"] == ""

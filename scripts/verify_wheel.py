@@ -19,6 +19,24 @@ if str(PROJECT_ROOT) not in sys.path:
 from docops import __version__  # noqa: E402
 
 
+def command_failure_details(completed: subprocess.CompletedProcess[str]) -> str:
+    """Keep structured CLI errors visible even when a report is very large."""
+
+    try:
+        payload = json.loads(completed.stdout)
+    except (json.JSONDecodeError, TypeError):
+        return f"stdout={completed.stdout[-2000:]} stderr={completed.stderr[-2000:]}"
+    if not isinstance(payload, dict):
+        return f"stdout={completed.stdout[-2000:]} stderr={completed.stderr[-2000:]}"
+    diagnostic = {
+        "errors": payload.get("errors", []),
+        "outcome": payload.get("outcome"),
+    }
+    if completed.stderr:
+        diagnostic["stderr_tail"] = completed.stderr[-2000:]
+    return json.dumps(diagnostic, ensure_ascii=False, sort_keys=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
@@ -172,9 +190,7 @@ def main(argv: list[str] | None = None) -> int:
                 command, check=False, cwd=workspace, env=environment, capture_output=True, text=True
             )
             if completed.returncode:
-                raise RuntimeError(
-                    f"wheel end-to-end command failed: {command}: {completed.stdout[-2000:]} {completed.stderr[-2000:]}"
-                )
+                raise RuntimeError(f"wheel end-to-end command failed: {command}: {command_failure_details(completed)}")
             if command[3] == "evaluate":
                 try:
                     parsed = json.loads(completed.stdout)

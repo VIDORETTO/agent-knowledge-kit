@@ -26,6 +26,8 @@
   and an incomplete explicit RAG profile fail independent verification.
 - The package workflow now retains the complete candidate and identity evidence
   as an artifact named with the workflow commit SHA for later review.
+- Kept the FastEmbed model cache outside generated packages and preserved
+  structured wheel-gate errors when large CLI reports fail.
 - Added an explicit authenticated GitHub settings checklist and kept commit,
   push, tag and release operations outside all local automation.
 - Added the `plan`/`apply`/`inspect` operation seam with real create/update/dry-run

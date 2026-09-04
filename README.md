@@ -113,7 +113,9 @@ alterados automaticamente. A metadata do repositório está em
 ## Candidato 1.1.0
 
 Este working tree identifica-se como candidato técnico, não como uma release
-publicada. Para materializar e verificar o conjunto exato de arquivos:
+publicada. O checkpoint para retomar o follow-up do CI do wheel RAG está em
+[docs/HANDOFF-2026-09-04-CI-WHEEL.md](docs/HANDOFF-2026-09-04-CI-WHEEL.md).
+Para materializar e verificar o conjunto exato de arquivos:
 
 ```text
 python scripts/prepare_candidate.py --root . --output artifacts/candidate-1.1.0

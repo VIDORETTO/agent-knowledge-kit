@@ -75,3 +75,22 @@
 - Reexecutar o clone limpo completo depois de corrigir gates de candidate; a
   suíte local com RAG instalado pode esconder acoplamentos a dependências
   opcionais.
+
+## 2026-09-04 — caches de runtime não pertencem ao artefato
+
+- Execute pelo menos um smoke RAG em Linux com cache frio: no Windows, a
+  ausência de symlinks do snapshot pode ocultar contaminação do pacote.
+- Cache de modelo é estado externo de execução. A configuração portátil deve
+  apontá-lo para fora da árvore distribuível, sem persistir caminho absoluto
+  da máquina.
+- Gates que consomem CLIs JSON devem extrair `errors` e `outcome` do documento
+  estruturado; truncar apenas o final do stdout pode apagar a causa-raiz.
+
+## 2026-09-04 — smokes de wheel não compartilham estado de build
+
+- Não executar `verify_wheel.py --core` e `--require-rag` em paralelo no mesmo
+  checkout: o backend de build usa diretórios `build/` compartilhados e uma
+  corrida pode produzir um `WinError 2` que não é falha do produto.
+- Distinguir o interpretador global do ambiente RAG do projeto; um gate RAG
+  deve apontar para o `.venv` que contém o backend e registrar explicitamente
+  `adapter=mcp`, `rag=true`.
