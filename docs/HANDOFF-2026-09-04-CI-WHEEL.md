@@ -26,9 +26,29 @@ parado na análise do CI desse commit:
 - permanece pendente a decisão humana sobre os quatro CVEs residuais de
   `chromadb==1.5.9`.
 
-## Correção e estado local atual
+## Resultado do primeiro push e correcao adicional encontrada no CI
 
-A correção em andamento faz duas coisas relacionadas à causa raiz:
+O primeiro push desta continuacao criou o run `33891442751` para o commit
+corretivo. O job `wheel / Python 3.12` passou pela construcao, smoke RAG,
+candidate, supply chain e re-medicao de identidade; somente a etapa final de
+release falhou de forma esperada por `human_decision_pending`.
+
+Os jobs quick e clean-clone ainda reprovaram os testes do candidate, com a
+mesma assinatura ja observada no CI do commit `7916083`: a rotina resolvia
+`bin/python` de um venv POSIX para o interpretador de sistema e perdia o `pip`
+instalado no venv. A reproducao em um checkout nativo Linux/WSL confirmou a
+causa. A correcao adicional em `scripts/prepare_candidate.py` conserva o
+launcher do venv e apenas o torna absoluto, sem resolver symlinks.
+
+Depois desse run, `origin/main` avancou por cinco commits do mesmo fluxo:
+`1a9fcfa` (runtime do candidate e gate de release manual), `7598016` (fallback
+para bootstrap sem `pip`), `754960f` (isolamento do teste de identidade),
+`1c034a2` (identidade de clone sem Git) e `9d236ce` (durações positivas nos
+recibos de fase). Todos foram preservados no rebase deste checkpoint.
+
+## Correções e estado local atual
+
+A primeira correção faz duas coisas relacionadas à causa raiz:
 
 1. `docops/rag_sync.py` gera `models_cache_dir: ~/.cache/docops/models`, fora
    da árvore do pacote. O cache é estado de execução, não artefato
@@ -36,6 +56,10 @@ A correção em andamento faz duas coisas relacionadas à causa raiz:
 2. `scripts/verify_wheel.py` extrai `errors` e `outcome` do JSON de uma CLI que
    falhou, preservando o diagnóstico estruturado mesmo quando o relatório é
    maior que o limite de saída.
+
+A correção adicional preserva launchers POSIX de ambientes virtuais durante a
+construção do candidate; `Path.resolve()` não é usado para o interpretador
+selecionado.
 
 Há regressões para a configuração renderizada pelo pipeline e para o
 diagnóstico do verificador em `tests/test_pipeline.py`, `tests/test_rag_sync.py`
@@ -47,13 +71,26 @@ e `tests/test_verify_wheel.py`. A documentação operacional foi alinhada em
 
 - Identidade inicial confirmada: `main`, `HEAD == origin/main`, base
   `7916083df3e930cdaff1e40968040d90ac8e9428`.
+- O run `33891442751`, no primeiro commit corretivo, confirmou o caminho feliz
+  do pacote RAG e deixou apenas o bloqueio humano do modo release; os demais
+  jobs falharam nos testes de candidate antes da correção adicional descrita
+  acima.
+- A falha do candidate foi reproduzida em Linux/WSL: um launcher
+  `.../.venv/bin/python` é symlink para `/usr/bin/python3.12`, que não tinha
+  `pip`; preservar o caminho do launcher elimina essa perda de ambiente.
 - Testes focados executados:
   `python -m pytest -q tests/test_pipeline.py tests/test_rag_sync.py tests/test_verify_wheel.py` —
   `21 passed, 1 skipped`; o skip é a criação de symlink indisponível neste
   host Windows.
-- Suíte completa executada com o Python local tolerado 3.14.2:
+- A suíte anterior, executada com o Python local tolerado 3.14.2, ficou em
   `228 passed, 2 skipped in 419.82s`; os skips são os testes de symlink
   `tests/test_package_contract.py` e `tests/test_pipeline.py` neste Windows.
+- A suíte atual, executada no `.venv` do projeto com as versões fixadas,
+  passou em `230 passed, 2 skipped in 424.88s`; os mesmos dois skips de symlink
+  permanecem esperados neste Windows.
+- Os testes atuais de candidate e identidade passaram no `.venv`:
+  `10 passed in 100.16s`, incluindo o fallback de um venv criado com
+  `--no-install` e sem `pip`.
 - Ruff lint, Ruff format, contratos, matriz de suporte, workflows, public seams,
   `compileall` e `git diff --check` passaram.
 - `audit_release.py --tracked-only --json` passou com 401 arquivos e
@@ -63,10 +100,11 @@ e `tests/test_verify_wheel.py`. A documentação operacional foi alinhada em
   projeto.
 - Wheel core passou em sequência com `adapter=memory`, `rag=false`; wheel RAG
   passou em sequência com o `.venv` do projeto, `adapter=mcp`, `rag=true`.
-- Depois do commit local, um candidate RAG novo foi gerado e verificado
-  independentemente com sucesso. A identidade registra
-  `local-commit-candidate` e remote evidence não observada; o digest deve ser
-  lido de `candidate-identity.json`, sem ser copiado para este documento.
+- Antes da rebase sobre os cinco commits remotos, um candidate RAG novo foi
+  gerado e verificado independentemente com sucesso. Ele pertence ao SHA
+  anterior e está obsoleto; o candidate deve ser regenerado depois do commit
+  final deste checkpoint. O digest deve ser lido de `candidate-identity.json`,
+  sem ser copiado para este documento.
 - Uma primeira tentativa paralela dos dois wheels foi descartada: o core teve
   `WinError 2` por corrida nos diretórios de build compartilhados e o RAG foi
   iniciado no interpretador global sem o backend. Após remover somente os
@@ -74,15 +112,17 @@ e `tests/test_verify_wheel.py`. A documentação operacional foi alinhada em
 
 ## Estado após o commit local
 
-O diff foi revisado, o commit corretivo foi criado e o candidate local foi
-regenerado/verificado depois dele. Em um computador novo, confirme o estado
-sincronizado com `git log -1`, `git rev-parse HEAD`, `git rev-parse
-origin/main` e `git status --short`.
+O diff foi revisado, o primeiro commit corretivo foi criado e enviado, e os
+cinco commits que avançaram o remoto foram preservados. A correção adicional
+dos launchers POSIX e este handoff estão incluídos no commit local deste
+checkpoint, aguardando o push final; em um computador novo, confirme o estado
+sincronizado com `git log -1`, `git rev-parse HEAD`, `git rev-parse origin/main`
+e `git status --short`.
 
 Continuidade pós-push:
 
 - conferir que `origin/main` aponta para o novo `HEAD` e aguardar o CI do mesmo
-  SHA, em especial o job `package` Linux/Python 3.12;
+  SHA, em especial os jobs quick/clean-clone e `package` Linux/Python 3.12;
 - considerar o candidate gerado pelo CI como o novo candidate, pois qualquer
   bundle anterior baseado em `7916083` não representa esta correção;
 - manter release/tag/publicação bloqueadas até o CI do novo SHA, a revisão
