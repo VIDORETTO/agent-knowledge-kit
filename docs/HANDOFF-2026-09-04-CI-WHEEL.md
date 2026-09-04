@@ -1,5 +1,24 @@
 # Handoff de continuidade — follow-up do CI do wheel RAG
 
+> **Snapshot atual desta execução (2026-09-04):** esta seção é a referência
+> operacional vigente; as seções abaixo preservam o histórico do checkpoint.
+>
+> - `HEAD` local: `e4d69f4e1592df196a2b9a0bf1927b9114bd3d41`; working tree limpo;
+>   `origin/main` ainda aponta para `912599c8dc6ab7bde30e27a2cc27f0c1f1107c41`.
+> - O candidate `1.1.0` final está em `artifacts/candidate-1.1.0/`; leia
+>   `candidate-manifest.json` e `candidate-identity.json` para o SHA e digest
+>   exatos, evitando referência circular neste handoff.
+> - A suíte raiz passou com **234 testes**, o clone limpo passou com **234
+>   testes**, o wheel core/RAG e o supply-chain independente passaram, e o
+>   smoke/stress RAG final passou sem erros ou warnings.
+> - `verify_candidate.py` normal e com `--source-root .` passaram. O modo
+>   `--release` continua falhando fechado por ausência de ref/CI do mesmo SHA e
+>   pela decisão humana pendente sobre o residual Chroma.
+> - Nenhuma tag, release, publicação, anúncio ou alteração de settings foi
+>   realizada. Os bloqueios e a sequência de retomada estão em
+>   `docs/RELEASE-READINESS-2026-09-04.md` e
+>   `docs/PRODUCTION-PUBLICITY-PLAN.md`.
+
 **Data do checkpoint:** 2026-09-04
 **Repositório:** `VIDORETTO/agent-knowledge-kit`
 **Branch:** `main`
