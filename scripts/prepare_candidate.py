@@ -234,12 +234,27 @@ def _display_output(path: Path, root: Path) -> str:
         return path.name
 
 
+def _has_pip(python: Path) -> bool:
+    try:
+        completed = subprocess.run(
+            [str(python), "-c", "import pip"],
+            check=False,
+            capture_output=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return completed.returncode == 0
+
+
 def _candidate_python(root: Path, explicit: Path | None) -> Path:
     if explicit is not None:
         return explicit.absolute()
     relative = Path("Scripts/python.exe") if os.name == "nt" else Path("bin/python")
     project_python = venv_directory(root) / relative
-    return project_python.absolute() if project_python.is_file() else Path(sys.executable).absolute()
+    if project_python.is_file() and _has_pip(project_python):
+        return project_python.absolute()
+    return Path(sys.executable).absolute()
 
 
 def _attestation_status() -> dict[str, Any]:

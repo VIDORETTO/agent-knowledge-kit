@@ -30,7 +30,9 @@
   structured wheel-gate errors when large CLI reports fail.
 - Preserved the interpreter selected for candidate wheel and dependency
   evidence when a POSIX virtual environment exposes it through a symlink, and
-  made the fail-closed release identity check an explicit manual CI input.
+  made the fail-closed release identity check an explicit manual CI input;
+  incomplete `--no-install` bootstrap environments now fall back to the
+  invoking interpreter instead of producing a misleading wheel failure.
 - Added an explicit authenticated GitHub settings checklist and kept commit,
   push, tag and release operations outside all local automation.
 - Added the `plan`/`apply`/`inspect` operation seam with real create/update/dry-run
