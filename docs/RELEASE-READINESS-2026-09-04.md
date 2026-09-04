@@ -23,6 +23,9 @@ circular quando a documentação muda.
 - Wheel RAG requerido: **pass**, `adapter=mcp`, `rag=true`.
 - Fixture RAG: `run --index-rag`, `validate` e avaliação MCP: **pass**;
   MRR@5/Recall@5 **1.0/1.0**, 2 documentos e 4 chunks.
+- Clone limpo com perfil RAG: bootstrap, `run --index-rag`, `validate` e
+  avaliação MCP: **pass**, MRR@5/Recall@5 **1.0/1.0**, 2 documentos e 4
+  chunks.
 - MCP smoke: **pass**, handshake `2024-11-05`, backend `4.8.5`, 13 tools;
   consultas e conteúdo permaneceram redigidos.
 - Stress de reindex concorrente: **pass**, 10 s, 4 readers, 35.407 buscas,
