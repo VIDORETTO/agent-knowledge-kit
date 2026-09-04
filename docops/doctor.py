@@ -105,9 +105,9 @@ def discover_python(
     for command in ("python3", "python"):
         found = shutil.which(command)
         if found:
-            return PythonDiscovery(Path(found).resolve(), "PATH")
+            return PythonDiscovery(Path(found).absolute(), "PATH")
 
-    return PythonDiscovery(Path(sys.executable).resolve(), "runtime")
+    return PythonDiscovery(Path(sys.executable).absolute(), "runtime")
 
 
 def _display_path(path: Path, project_root: Path) -> str:

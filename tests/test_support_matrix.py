@@ -79,6 +79,15 @@ def test_package_workflow_retains_candidate_evidence() -> None:
     assert "candidate-1.1.0-${{ github.sha }}" in workflow
 
 
+def test_release_identity_gate_is_an_explicit_manual_workflow_input() -> None:
+    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+    assert "release_verification:" in workflow
+    assert "type: boolean" in workflow
+    assert "github.event_name == 'workflow_dispatch' && inputs.release_verification == true" in workflow
+    assert "github.event_name == 'push' && github.ref == 'refs/heads/main'" not in workflow
+
+
 def test_quick_workflow_retains_raw_dependency_audit_evidence_and_checks_installation() -> None:
     workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
 

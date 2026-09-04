@@ -82,6 +82,13 @@ the bundle's `.github` and `.gitignore` entries are part of its measured source
 set; `if-no-files-found: error` prevents a green job with missing evidence.
 The uploaded artifact is evidence for review, not a GitHub Release asset.
 
+The ordinary push and pull-request CI stops at candidate verification. The
+final `--release` identity/residual-risk gate is intentionally manual: dispatch
+`.github/workflows/ci.yml` on `main` with the boolean input
+`release_verification=true` after the maintainer has reviewed the remote CI,
+GitHub settings and Chroma decision. This keeps engineering CI green without
+turning an unresolved human release decision into an automated approval.
+
 `verify_candidate.py` is an independent local verifier. It checks the wheel
 metadata, bundle checksums, required community/metadata files, candidate audit,
 source identity, publication=false and the supply-chain evidence. Model

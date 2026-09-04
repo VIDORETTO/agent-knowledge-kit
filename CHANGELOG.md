@@ -28,6 +28,9 @@
   as an artifact named with the workflow commit SHA for later review.
 - Kept the FastEmbed model cache outside generated packages and preserved
   structured wheel-gate errors when large CLI reports fail.
+- Preserved the interpreter selected for candidate wheel and dependency
+  evidence when a POSIX virtual environment exposes it through a symlink, and
+  made the fail-closed release identity check an explicit manual CI input.
 - Added an explicit authenticated GitHub settings checklist and kept commit,
   push, tag and release operations outside all local automation.
 - Added the `plan`/`apply`/`inspect` operation seam with real create/update/dry-run

@@ -98,7 +98,7 @@ def discover_rag_python(project_root: Path | str, *, environ: Mapping[str, str] 
     for command in ("python3", "python"):
         found = shutil.which(command)
         if found and _supports_knowledge_rag(Path(found)):
-            return Executable(Path(found).resolve(), "PATH")
+            return Executable(Path(found).absolute(), "PATH")
     missing = root / (Path("Scripts") / "python.exe" if os.name == "nt" else Path("bin") / "python")
     return Executable(missing, "missing")
 
@@ -174,7 +174,7 @@ def runtime_contract(
 
     root = Path(project_root).resolve()
     discovered = None if python else discover_rag_python(root, environ=environ)
-    executable = Path(python).resolve() if python else discovered.path.resolve()
+    executable = Path(python).expanduser().absolute() if python else discovered.path.absolute()
     environment = runtime_environment(root, environ=environ)
     selected_version = None
     if expected_version is None and executable.is_file():
@@ -249,7 +249,7 @@ def runtime_provenance(
     root = Path(project_root).resolve()
     vendor_version = _vendor_version(root)
     discovered = None if python else discover_rag_python(root, environ=environ)
-    executable = Path(python).resolve() if python else discovered.path.resolve()
+    executable = Path(python).expanduser().absolute() if python else discovered.path.absolute()
     environment = runtime_environment(root, environ=environ)
     selected_version = selected_runtime_version(executable, environ=environment) if executable.is_file() else None
     backend_version = expected_version or selected_version or vendor_version

@@ -359,7 +359,10 @@ def generate(
     models = _model_evidence(model_cache, root)
     if require_model and not any(item.get("status") == "verified-external-snapshot" for item in models):
         errors.append({"code": "model_missing", "message": "the requested candidate has no verified model snapshot"})
-    interpreter = (python or Path(sys.executable)).expanduser().resolve()
+    # Preserve a venv's interpreter symlink; resolving it would silently move
+    # pip inspection to the base Python and produce false missing-dependency
+    # evidence on POSIX hosts.
+    interpreter = (python or Path(sys.executable)).expanduser().absolute()
     environment = _pip_inspect(interpreter, root, requirements, profile=profile)
     wheel_evidence = (
         _wheel_evidence(wheel, root) if wheel.is_file() else {"path": _display_path(wheel, root), "sha256": None}

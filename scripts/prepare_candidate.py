@@ -189,7 +189,21 @@ def _build_wheel(root: Path, python: Path, destination: Path) -> Path:
         )
         wheels = sorted(wheel_dir.glob("*.whl"))
         if completed.returncode or len(wheels) != 1:
-            raise RuntimeError("candidate wheel build failed or produced an unexpected number of wheels")
+
+            def redacted_tail(value: str) -> str:
+                return value[-4000:].replace(str(root), "<project-root>").replace(str(wheel_dir), "<wheel-dir>")
+
+            details = {
+                "returncode": completed.returncode,
+                "stderr_tail": redacted_tail(completed.stderr),
+                "stdout_tail": redacted_tail(completed.stdout),
+                "wheel_count": len(wheels),
+                "wheel_names": [wheel.name for wheel in wheels],
+            }
+            raise RuntimeError(
+                "candidate wheel build failed or produced an unexpected number of wheels: "
+                + json.dumps(details, ensure_ascii=False, sort_keys=True)
+            )
         destination.mkdir(parents=True, exist_ok=True)
         shutil.copy2(wheels[0], destination / wheels[0].name)
         return destination / wheels[0].name
@@ -222,10 +236,10 @@ def _display_output(path: Path, root: Path) -> str:
 
 def _candidate_python(root: Path, explicit: Path | None) -> Path:
     if explicit is not None:
-        return explicit
+        return explicit.absolute()
     relative = Path("Scripts/python.exe") if os.name == "nt" else Path("bin/python")
     project_python = venv_directory(root) / relative
-    return project_python if project_python.is_file() else Path(sys.executable)
+    return project_python.absolute() if project_python.is_file() else Path(sys.executable).absolute()
 
 
 def _attestation_status() -> dict[str, Any]:
@@ -257,7 +271,10 @@ def build_candidate(
 ) -> dict[str, Any]:
     root = root.expanduser().resolve()
     output = output.expanduser().resolve()
-    python = python.expanduser().resolve()
+    # A POSIX venv commonly exposes ``bin/python`` as a symlink.  Resolving it
+    # here escapes the venv and makes pip inspect the base interpreter instead
+    # of the environment selected by the caller.
+    python = python.expanduser().absolute()
     _assert_output_is_external_or_ignored(root, output)
     if output.exists():
         if not output.is_dir() or any(output.iterdir()):

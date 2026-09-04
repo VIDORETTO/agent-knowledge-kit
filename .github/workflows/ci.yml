@@ -4,6 +4,12 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_verification:
+        description: "Run the fail-closed release identity and residual-risk gate"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -128,5 +134,5 @@ jobs:
           include-hidden-files: true
           retention-days: 30
       - name: Verify release identity on a pushed main commit
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'workflow_dispatch' && inputs.release_verification == true && github.ref == 'refs/heads/main'
         run: python scripts/verify_candidate.py --root artifacts/candidate-1.1.0 --source-root . --release
