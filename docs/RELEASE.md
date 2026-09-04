@@ -45,7 +45,7 @@ git diff --check
 python scripts/verify_clean_clone.py --bootstrap
 python scripts/verify_wheel.py --core
 python scripts/verify_wheel.py --require-rag
-python -m pip wheel --no-deps --wheel-dir dist .
+SOURCE_DATE_EPOCH=0 python -m pip wheel --no-deps --wheel-dir dist .
 python scripts/generate_supply_chain.py --root . --wheel dist/<wheel>.whl --output artifacts/supply-chain --profile core
 python scripts/verify_supply_chain.py --root . --evidence artifacts/supply-chain
 python scripts/audit_release.py --tracked-only --json

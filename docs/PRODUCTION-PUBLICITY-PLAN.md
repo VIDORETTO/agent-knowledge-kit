@@ -88,13 +88,13 @@ qualquer publicação.
 **Gate:** um único commit, digest e conjunto de arquivos explicam todos os
 resultados.
 
-- [ ] Confirmar checkout limpo, branch, remote, tag inexistente/conflictante e
+- [x] Confirmar checkout limpo, branch, remote, tag inexistente/conflictante e
   ausência de mudanças depois da última medição.
-- [ ] Reexecutar, em clone limpo, o runbook de `docs/RELEASE.md` com os perfis
+- [x] Reexecutar, em clone limpo, o runbook de `docs/RELEASE.md` com os perfis
   `core` e `rag` conforme o escopo do lançamento.
-- [ ] Rodar auditoria de release, contratos, suporte, workflows, wheel,
+- [x] Rodar auditoria de release, contratos, suporte, workflows, wheel,
   supply-chain, MCP, Golden Set e stress sem suprimir saídas vermelhas.
-- [ ] Gerar um novo candidate fora do Git e verificar manifesto, lista,
+- [x] Gerar um novo candidate fora do Git e verificar manifesto, lista,
   checksums, SBOM, provenance, licença, `publication=false` e `source_commit`.
 - [ ] Fazer push do commit candidato apenas com autorização explícita e aguardar
   CI e Integration no SHA exato.
