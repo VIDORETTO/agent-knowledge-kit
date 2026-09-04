@@ -8,8 +8,12 @@ import sys
 from pathlib import Path
 
 
-def _prepare_candidate(tmp_path: Path) -> tuple[Path, dict[str, object]]:
+def _prepare_candidate(tmp_path: Path, *, without_ci_evidence: bool = False) -> tuple[Path, dict[str, object]]:
     output = tmp_path / "candidate"
+    environment = None
+    if without_ci_evidence:
+        environment = dict(os.environ)
+        environment.pop("GITHUB_SHA", None)
     completed = subprocess.run(
         [
             sys.executable,
@@ -22,6 +26,7 @@ def _prepare_candidate(tmp_path: Path) -> tuple[Path, dict[str, object]]:
         check=False,
         capture_output=True,
         text=True,
+        env=environment,
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
     report = json.loads(completed.stdout)
@@ -31,7 +36,7 @@ def _prepare_candidate(tmp_path: Path) -> tuple[Path, dict[str, object]]:
 
 
 def test_release_candidate_identity_is_structured_and_fail_closed_without_ci_evidence(tmp_path: Path) -> None:
-    output, manifest = _prepare_candidate(tmp_path)
+    output, manifest = _prepare_candidate(tmp_path, without_ci_evidence=True)
 
     assert isinstance(manifest.get("identity"), dict)
     identity = manifest["identity"]
