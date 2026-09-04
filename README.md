@@ -1,20 +1,20 @@
 # consulta-documentacao
 
-`consulta-documentacao` 1.1.0 é um candidato de release (ainda não publicado) para transformar uma referência
-de documentação em um pacote de conhecimento para agentes. Ele resolve a
+`consulta-documentacao` 1.1.0 transforma uma referência de documentação em um
+pacote de conhecimento para agentes. Ele resolve a
 fonte, adquire e normaliza documentos, gera uma skill e um roteador, prepara o
 corpus para `knowledge-rag` e registra tudo em um manifesto com outcome terminal,
 proveniência e recibos verificáveis.
 
 O projeto não contém nem escolhe um LLM, provedor, modelo, chat ou chave de
-API. OpenCode e Codex foram validados na matriz do candidato; qualquer outro
+API. OpenCode e Codex foram validados na matriz de suporte; qualquer outro
 harness precisa implementar Agent Skills e MCP stdio. O MCP é uma ferramenta
 local opcional para recuperação; o operador continua utilizável sem o servidor
-RAG instalado. Claude Code não é um alvo de suporte anunciado neste candidato.
+RAG instalado. Claude Code não é um alvo de suporte anunciado nesta versão.
 
 ## Começo rápido
 
-O suporte do candidato cobre Python 3.11–3.13 em Ubuntu, Windows e macOS. Python
+A versão 1.1.0 cobre Python 3.11–3.13 em Ubuntu, Windows e macOS. Python
 3.14 é apenas tolerado localmente até entrar na matriz; Git é necessário para
 fontes de repositório.
 
@@ -110,10 +110,10 @@ GitHub](community/GITHUB-SETTINGS-CHECKLIST.md) são distribuídos e nunca
 alterados automaticamente. A metadata do repositório está em
 [docs/REPOSITORY-METADATA.json](docs/REPOSITORY-METADATA.json).
 
-## Candidato 1.1.0
+## Versão 1.1.0 e verificação
 
-Este working tree identifica-se como candidato técnico, não como uma release
-publicada. O checkpoint para retomar o follow-up do CI do wheel RAG está em
+Esta versão é distribuída exclusivamente pelo GitHub Release. O checkpoint
+para retomar o follow-up do CI do wheel RAG está em
 [docs/HANDOFF-2026-09-04-CI-WHEEL.md](docs/HANDOFF-2026-09-04-CI-WHEEL.md).
 Para materializar e verificar o conjunto exato de arquivos:
 

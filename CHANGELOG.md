@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.0 — 2026-09-04
 
 - Closed post-1.0 reliability tickets 23–29 locally: candidate identity and
   source remeasurement, public-seam coverage, crash-recoverable promotion,
@@ -60,7 +60,7 @@
 - Added a normative support matrix, contract/release gates, immutable GitHub
   Actions revisions, and installed-wheel create/validate/evaluate coverage.
 
-## 1.1.0 — candidate (2026-09-02; not published)
+### Conteúdo de verificação e distribuição
 
 - Hardened candidate auditing for nested runtime artifacts, binary paths,
   structured token canaries and exact Git candidate sets.

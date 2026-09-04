@@ -1,13 +1,13 @@
-# Release candidate 1.1.0 (not published)
+# Release 1.1.0
 
 The end-to-end plan from candidate closure through controlled publication,
 post-release canary, rollback and progressive publicity is in
 [`PRODUCTION-PUBLICITY-PLAN.md`](PRODUCTION-PUBLICITY-PLAN.md). This document
 remains the technical gate runbook referenced by that plan.
 
-The prepared, still-unpublished release notes are in
+The prepared release notes are in
 [`RELEASE-NOTES-1.1.0.md`](RELEASE-NOTES-1.1.0.md). They must be reviewed
-against the final public assets before publication.
+against the final public assets for the GitHub Release.
 
 The current evidence and pending human gates are recorded in
 [`RELEASE-READINESS-2026-09-04.md`](RELEASE-READINESS-2026-09-04.md). The
@@ -16,8 +16,8 @@ post-release canary/rollback handoff template is
 
 The current publication verdict is recorded in
 `docs/GITHUB-PUBLICATION-AUDIT-2026-09-02.md`. It supersedes the historical
-2026-09-01 audit for release decisions; the candidate remains local until its
-identity, dependency decision and remote CI evidence are closed.
+2026-09-01 audit for release decisions; the release identity, dependency
+decision and remote CI evidence are recorded separately in the readiness log.
 
 This is the executable runbook for the post-1.0 candidate. Every gate must
 refer to the same Git `HEAD` and candidate digest recorded by

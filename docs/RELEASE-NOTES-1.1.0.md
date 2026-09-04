@@ -1,7 +1,7 @@
-# consulta-documentacao 1.1.0 — release notes (draft)
+# consulta-documentacao 1.1.0 — release notes
 
-> **Status:** candidate only; not published. Review this file against the
-> final tag, wheel, checksums, SBOM and provenance before making it public.
+> Esta versão é distribuída exclusivamente pelo GitHub Release. Review these
+> notes against the final tag, wheel, checksums, SBOM and provenance.
 
 ## What this release is for
 
@@ -21,7 +21,7 @@ provider, hosted service or API key.
 - Cross-platform bootstrap and support evidence for Python 3.11–3.13 on
   Ubuntu, Windows and macOS; Python 3.14 remains tolerated only.
 - No acquired corpus, index, model cache, token, user log or private path is
-  part of the release candidate.
+  part of this release.
 
 ## Installation after publication
 
@@ -34,7 +34,8 @@ python -m docops doctor --json
 ```
 
 The RAG profile is optional and must be installed only when the selected
-channel, dependency decision and local threat model have been reviewed.
+channel, recorded dependency decision and local threat model have been
+reviewed.
 
 ## Minimal flow
 
@@ -50,13 +51,13 @@ This package does not execute a model, choose a provider, host an HTTP service
 or guarantee compatibility with every agent harness. Acquired documentation
 may be copyrighted and requires an explicit license/redistribution decision.
 The optional RAG dependency currently has four documented ChromaDB advisories;
-the raw audit remains visible and publication requires the maintainer decision
-in [`CHROMA-RESIDUAL-DECISION.md`](CHROMA-RESIDUAL-DECISION.md). Report
-security issues privately according to [`SECURITY.md`](../SECURITY.md).
+the raw audit remains visible and the recorded scope-limited decision is in
+[`CHROMA-RESIDUAL-DECISION.md`](CHROMA-RESIDUAL-DECISION.md). Report security
+issues privately according to [`SECURITY.md`](../SECURITY.md).
 
 ## Support
 
 The normative support matrix is
 [`SUPPORT-MATRIX.json`](SUPPORT-MATRIX.json). Public claims must be limited to
-the platforms, Python versions and profiles verified by the final candidate
-and its canary.
+the platforms, Python versions and profiles verified by the release and its
+canary.
