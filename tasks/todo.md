@@ -78,8 +78,9 @@
 
 **Evidência ainda ausente ou externa**
 
-- [ ] Candidate final reconstruído a partir do commit enviado, com perfil RAG,
-  snapshot externo de modelo, re-medição da fonte e release fail-closed.
+- [x] Candidate RAG local reconstruído a partir do commit de código enviado,
+  com snapshot externo de modelo e re-medição da fonte; o release continua
+  fail-closed sem evidência remota/decisão humana.
 - [ ] CI remoto do mesmo SHA/digest, settings autenticadas e decisão humana
   Chroma. O commit/ref remoto será criado nesta execução; os demais dependem do
   GitHub e do mantenedor.
@@ -101,8 +102,28 @@
 - [x] Corrigir `scripts/prepare_candidate.py` para tornar o caminho absoluto
   sem resolver symlinks e atualizar changelog, handoff e lessons.
 - [x] Reexecutar o teste de candidate e os gates locais disponíveis.
-- [ ] Confirmar no novo CI que quick, clean-clone e package passam no mesmo SHA;
-  manter o release gate bloqueado enquanto a decisão Chroma estiver pendente.
+- [x] Confirmar no novo CI (`33897740714`) que quick, clean-clone e package
+  passam no mesmo SHA; manter o release gate bloqueado enquanto a decisão
+  Chroma estiver pendente.
+
+## Fechamento do checkpoint apos o CI — 2026-09-04
+
+- [x] Preservar os commits que chegaram ao remoto durante a execução e fazer
+  rebase do handoff sobre o `origin/main` mais recente.
+- [x] Executar a suíte completa no `.venv` com versões fixadas: `230 passed,
+  2 skipped`; os skips são apenas os testes de symlink indisponível neste
+  Windows.
+- [x] Reexecutar os testes de candidate/identidade: `10 passed`, incluindo o
+  fallback de venv criado com `--no-install` e sem `pip`.
+- [x] Enviar o commit de código `6b850ad` para `origin/main` e confirmar
+  `HEAD == origin/main`.
+- [x] Confirmar o CI `33897740714`: os 13 jobs passaram, incluindo wheel RAG,
+  clean clone nos três sistemas e toda a matriz quick.
+- [x] Regenerar e verificar um candidate RAG local a partir do commit de código
+  enviado; a identidade é local e não substitui a evidência remota de release.
+- [ ] Revisar settings autenticadas do GitHub e decidir explicitamente os
+  quatro CVEs residuais de `chromadb==1.5.9`; sem isso, não criar tag, release
+  ou publicar.
 
 ### Evidência do diagnóstico adicional
 

@@ -110,24 +110,37 @@ e `tests/test_verify_wheel.py`. A documentação operacional foi alinhada em
   iniciado no interpretador global sem o backend. Após remover somente os
   diretórios gerados/ignorados e executar sequencialmente, ambos passaram.
 
+## Resultado do push final e do CI
+
+O commit de código `6b850adab2b20163a688c475f60dbb78e2216d2e` foi enviado para
+`origin/main`. O run `33897740714` do workflow `CI` terminou com sucesso para
+esse SHA: os 13 jobs passaram, incluindo wheel Linux/Python 3.12, clean clone
+em Ubuntu/Windows/macOS e a matriz quick em Python 3.11, 3.12 e 3.13. O gate
+`--release` não é executado em push; ele continua manual e fail-closed.
+
+O handoff e as atualizações de checklist deste documento são uma alteração
+documental posterior ao commit de código testado. Se essa alteração gerar um
+novo SHA, o CI desse SHA deve ser tratado como a verificação final da árvore,
+sem confundir o resultado acima com o novo commit documental.
+
 ## Estado após o commit local
 
-O diff foi revisado, o primeiro commit corretivo foi criado e enviado, e os
-cinco commits que avançaram o remoto foram preservados. A correção adicional
-dos launchers POSIX e este handoff estão incluídos no commit local deste
-checkpoint, aguardando o push final; em um computador novo, confirme o estado
-sincronizado com `git log -1`, `git rev-parse HEAD`, `git rev-parse origin/main`
-e `git status --short`.
+O diff foi revisado, o primeiro commit corretivo foi criado e enviado, os cinco
+commits que avançaram o remoto foram preservados e o CI do commit de código
+final passou. Este handoff está sendo atualizado em um commit documental
+posterior; em um computador novo, confirme o estado sincronizado com
+`git log -1`, `git rev-parse HEAD`, `git rev-parse origin/main` e `git status
+--short`.
 
 Continuidade pós-push:
 
-- conferir que `origin/main` aponta para o novo `HEAD` e aguardar o CI do mesmo
-  SHA, em especial os jobs quick/clean-clone e `package` Linux/Python 3.12;
+- conferir que `origin/main` aponta para o novo `HEAD`; o CI do commit de código
+  `6b850ad` já passou no run `33897740714`, e qualquer commit documental
+  posterior deve ter seu próprio run conferido;
 - considerar o candidate gerado pelo CI como o novo candidate, pois qualquer
   bundle anterior baseado em `7916083` não representa esta correção;
-- manter release/tag/publicação bloqueadas até o CI do novo SHA, a revisão
-  autenticada das settings do GitHub e a decisão humana sobre o residual do
-  Chroma;
+- manter release/tag/publicação bloqueadas até a revisão autenticada das
+  settings do GitHub e a decisão humana sobre o residual do Chroma;
 - não commitar `documents/`, `data/`, `models_cache/`, ambientes, caches ou
   `artifacts/`.
 
