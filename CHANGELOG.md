@@ -41,8 +41,9 @@
 - The concurrent RAG stress harness now starts the reviewed vendored backend,
   matching the runtime used by indexing and MCP evaluation instead of the
   independently installed package.
-- Candidate wheel builders now pin `SOURCE_DATE_EPOCH=0`, making repeated
-  builds of the same source tree byte-identical for release-asset comparison.
+- Candidate wheel builders now pin `SOURCE_DATE_EPOCH=315532800`, making
+  repeated builds of the same source tree byte-identical for release-asset
+  comparison while remaining valid for ZIP timestamps on Windows.
 - Hardened vendored RAG search against transient Chroma rows without metadata
   during concurrent reindex; uncitable hits are discarded instead of failing
   the MCP request.

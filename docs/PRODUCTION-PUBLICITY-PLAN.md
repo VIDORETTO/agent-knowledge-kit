@@ -1,4 +1,4 @@
-# Plano de prontidão para produção e divulgação — candidate 1.1.0
+# Plano de prontidão para produção e divulgação — release 1.1.0
 
 > Plano executável para Goal Mode. O objetivo é deixar o produto pronto para
 > uma publicação controlada e para divulgação pública progressiva, sem misturar
@@ -20,7 +20,7 @@ estado local do usuário. Não entram na release nem em uma divulgação públic
 Se o produto ganhar um serviço hospedado no futuro, isso exigirá um plano de
 deploy separado para a infraestrutura correspondente.
 
-Para o candidate `1.1.0`, o contrato público é o CLI genérico com RAG local
+Para a release `1.1.0`, o contrato público é o CLI genérico com RAG local
 opcional e a fixture sintética MIT revisada. O piloto FastAPI e seu Golden Set
 dependem de um corpus privado sem licença de redistribuição neste checkout;
 eles ficam fora do escopo anunciado desta versão e não serão baixados,
@@ -30,7 +30,7 @@ reconstruídos ou publicados.
 deve promover o pacote e seus limites reais; não deve prometer LLM, provedor,
 suporte universal de harnesses ou auditoria de dependências sem vulnerabilidades.
 
-## 2. Estado de entrada observado em 2026-09-04
+## 2. Estado de entrada observado em 2026-09-04 (registro histórico)
 
 | Gate | Estado | Evidência |
 |---|---|---|
@@ -46,10 +46,11 @@ suporte universal de harnesses ou auditoria de dependências sem vulnerabilidade
 Este estado é o ponto de partida; qualquer alteração depois dele invalida a
 identidade do candidate e exige nova execução dos gates e do CI.
 
-> **Execução atual:** o baseline acima é histórico. Os resultados desta
-> execução, inclusive o candidate local, a ausência do corpus FastAPI e os
-> bloqueios de autorização, estão em
-> [`RELEASE-READINESS-2026-09-04.md`](RELEASE-READINESS-2026-09-04.md).
+> **Execução atual:** o baseline acima é histórico. A release foi publicada no
+> GitHub Release após a autorização explícita do proprietário. A identidade,
+> os canários e a janela de observação estão em
+> [`RELEASE-READINESS-2026-09-04.md`](RELEASE-READINESS-2026-09-04.md) e no
+> [`POST-RELEASE-HANDOFF-2026-09-04.md`](POST-RELEASE-HANDOFF-2026-09-04.md).
 
 ## 3. Regras de autonomia do Goal Mode
 
@@ -103,10 +104,12 @@ resultados.
   vermelhas; o Golden FastAPI privado não é gate do escopo anunciado.
 - [x] Gerar um novo candidate fora do Git e verificar manifesto, lista,
   checksums, SBOM, provenance, licença, `publication=false` e `source_commit`.
-- [ ] Fazer push do commit candidato apenas com autorização explícita e aguardar
-  CI e Integration no SHA exato.
-- [ ] Baixar o artifact do CI, comparar digest/lista/SHA e executar o gate
-  `verify_candidate.py --release`; código diferente de zero mantém o bloqueio.
+- [x] Fazer push do commit candidato com autorização explícita e aguardar CI e
+  Integration no SHA exato: [CI push 33913704577](https://github.com/VIDORETTO/agent-knowledge-kit/actions/runs/33913704577),
+  [Integration 33914255198](https://github.com/VIDORETTO/agent-knowledge-kit/actions/runs/33914255198).
+- [x] Baixar o artifact do CI, comparar digest/lista/SHA e executar o gate
+  `verify_candidate.py --release`: o artifact da verificação manual passou em
+  [CI 33914405994](https://github.com/VIDORETTO/agent-knowledge-kit/actions/runs/33914405994).
 
 ### Fase 2 — segurança, supply chain e governança
 
@@ -133,34 +136,40 @@ decisão humana registrada; nenhuma exceção fica implícita.
 
 **Gate:** tag, assets e registry apontam para o mesmo commit e candidate.
 
-- [ ] Confirmar que o gate `--release` passou para o SHA final.
-- [ ] Criar tag anotada e imutável `v1.1.0` exatamente nesse SHA; nunca mover
-  uma tag existente para corrigir divergência.
-- [ ] Em ambiente limpo derivado da tag, construir o wheel e recalcular
-  `SHA256SUMS`, SBOM e provenance; comparar com o candidate aprovado.
-- [ ] Criar a GitHub Release com changelog, limitações, suporte, segurança,
-  checksums e links para a documentação. Não anexar corpus, cache ou snapshot.
-- [ ] Publicar wheel, checksums, SBOM e provenance exclusivamente na GitHub
-  Release; nenhum registry externo será usado em `1.1.0`.
-- [ ] Confirmar por API e download que tag, release, assets, metadados e versão
-  do pacote são coerentes; registrar URLs e horários.
+- [x] Confirmar que o gate `--release` passou para o SHA final.
+- [x] Criar tag anotada e imutável `v1.1.0` exatamente nesse SHA; a tag aponta
+  para `303e995a9cf5c939f11a368865bfb76488e9654d` e não será movida.
+- [x] Em ambiente limpo derivado da tag, construir o wheel e recalcular
+  `SHA256SUMS`, SBOM e provenance; o wheel reproduziu o SHA
+  `a6656139143df70974619581129a049b06a9e4511fdb2cf00ff4fd54aa2fc5c1`.
+- [x] Criar a [GitHub Release v1.1.0](https://github.com/VIDORETTO/agent-knowledge-kit/releases/tag/v1.1.0)
+  com changelog, limitações, suporte, segurança, checksums e links para a
+  documentação. Nenhum corpus, cache ou snapshot foi anexado.
+- [x] Publicar wheel, checksums, SBOM e provenance exclusivamente na GitHub
+  Release; nenhum registry externo foi usado em `1.1.0`.
+- [x] Confirmar por API e download que tag, release, assets, metadados e versão
+  do pacote são coerentes; publicação registrada em `2026-09-04T20:18:45Z`.
 
 ### Fase 4 — canário pós-publicação
 
 **Gate:** uma pessoa sem o checkout do autor instala e usa o artefato público.
 
-- [ ] Criar ambientes temporários fora do checkout para Python 3.11, 3.12 e
-  3.13, conforme disponibilidade dos runners/capacidades.
-- [ ] Instalar pelo canal público, sem `-e` e sem depender de cache local.
-- [ ] Executar `docops doctor --json`, smoke do fluxo de fixture, validação e
-  auditoria de metadados; confirmar `installed-package` quando aplicável.
-- [ ] Exercitar o perfil RAG somente com runtime/model cache externo permitido;
-  confirmar MCP, citação, avaliação e comportamento fail-closed.
-- [ ] Testar os links públicos, instruções de bootstrap, exemplos e suporte
-  anunciado; remover qualquer texto que ainda diga apenas “candidate” depois
-  da publicação efetiva.
-- [ ] Registrar versão instalada, plataforma, comando, resultado e logs
-  redigidos. Nunca coletar ou publicar credenciais, corpus ou prompts.
+- [x] Usar ambientes temporários fora do checkout: o canário local foi feito em
+  Python 3.12.13/Linux; Python 3.11–3.13 em Ubuntu, Windows e macOS foi
+  coberto pelos jobs CI e clean-clone.
+- [x] Instalar pelo canal público, sem `-e` e sem depender de cache local; o
+  wheel foi baixado da URL do GitHub Release e conferido pelo `SHA256SUMS`.
+- [x] Executar o `doctor` contra o checkout público com `--root`, e executar
+  no wheel instalado `resolve`, `run`, `validate` e Golden lexical; tudo
+  passou, com Recall@5/MRR@5 de `1.0/1.0`.
+- [x] Exercitar o perfil RAG com runtime/cache externo permitido na
+  [Integration 33914255198](https://github.com/VIDORETTO/agent-knowledge-kit/actions/runs/33914255198),
+  incluindo MCP, avaliação, citação e concorrência; RAG continua opcional no
+  canário wheel-only.
+- [x] Testar links públicos, instruções, exemplos e suporte anunciado; o
+  texto de instalação foi ajustado para explicar o escopo do `doctor`.
+- [x] Registrar versão, plataforma, comandos e resultados no handoff, sem
+  credenciais, corpus, prompts ou logs privados.
 
 ### Fase 5 — divulgação progressiva
 
@@ -169,23 +178,24 @@ crítica.
 
 - [x] Preparar release notes e anúncio curto com problema resolvido,
   instalação, exemplo mínimo, limites, suporte e canal de segurança.
-- [ ] Fazer primeiro uma divulgação controlada nos canais do próprio projeto
-  (release, README/changelog e comunidade), sem alegar cobertura além da
-  matriz comprovada.
+- [x] Fazer primeiro uma divulgação controlada no canal autorizado do próprio
+  projeto: [GitHub Release v1.1.0](https://github.com/VIDORETTO/agent-knowledge-kit/releases/tag/v1.1.0),
+  sem alegar cobertura além da matriz comprovada.
 - [ ] Observar por pelo menos 24 horas: instalação, issues, falhas de CI,
   downloads quando disponíveis, alertas de segurança e feedback de suporte.
-- [ ] Se não houver regressão crítica, ampliar para os canais externos que
-  estejam explicitamente configurados; preparar rascunhos quando o destino não
-  existir, mas não enviar mensagens para contas não autorizadas.
-- [ ] Atualizar o registro com links de cada anúncio, horário, audiência/canal
-  e resultado; não divulgar dados de usuários.
+  A janela começou em `2026-09-04T20:18:45Z` e termina em `2026-09-05T20:18:45Z`.
+- [x] Não ampliar para canais externos: por decisão do proprietário, GitHub
+  Release é o único canal de `1.1.0`; portanto divulgação em massa externa é
+  **não aplicável** nesta versão.
+- [x] Atualizar o registro com o link, horário, audiência/canal e resultado no
+  handoff; nenhum dado de usuário foi divulgado.
 
 ### Fase 6 — operação pós-lançamento e rollback
 
 **Gate:** a versão pode ser contida e corrigida sem reescrever evidência.
 
 - [ ] Monitorar a janela de 24h e a de 72h, triando bugs públicos e incidentes
-  de segurança por `SECURITY.md`.
+  de segurança por `SECURITY.md`; os prazos estão registrados no handoff.
 - [x] Para defeito de pacote, preservar a tag/asset original, publicar uma
   versão de correção e, se necessário, fazer yank da versão afetada no registry.
 - [x] Para incidente de segurança, interromper a divulgação, usar o canal
@@ -210,25 +220,28 @@ processo de concluído, estes itens precisam ter evidência válida:
 | Canal/conta de publicação | registry e redes podem pertencer a terceiros | configuração de trusted publishing e escopo autorizado |
 | Comunicação externa | “massa” depende de audiência, contas e mensagem | destinos/cópia aprovados ou canais do próprio projeto |
 
-Se algum desses gates não estiver disponível, o estado correto é
-`release-ready-pending-human-gate`, nunca `production-ready` ou `publicly
-launched`.
+Os gates de decisão Chroma, licença/proveniência, governança e canal foram
+registrados nesta execução. A janela temporal de observação continua aberta,
+mas não impede a disponibilidade controlada já autorizada; qualquer expansão
+de canal exigiria nova decisão.
 
 ## 6. Definition of Done
 
-- [ ] O candidate final tem um único SHA, digest e conjunto de arquivos
+- [x] O candidate final tem um único SHA, digest e conjunto de arquivos
   verificados em CI e no ambiente limpo.
-- [ ] `verify_candidate.py --release` termina com sucesso.
-- [ ] A decisão Chroma e a revisão de settings GitHub estão registradas.
-- [ ] A tag é imutável; os assets têm checksums/SBOM/provenance coerentes.
-- [ ] A instalação pública foi testada fora do checkout do autor.
-- [ ] README, changelog, metadata, suporte e release notes descrevem a versão
+- [x] `verify_candidate.py --release` termina com sucesso.
+- [x] A decisão Chroma e a revisão de settings GitHub estão registradas.
+- [x] A tag é imutável; os assets têm checksums/SBOM/provenance coerentes.
+- [x] A instalação pública foi testada fora do checkout do autor.
+- [x] README, changelog, metadata, suporte e release notes descrevem a versão
   real e os limites do produto.
-- [ ] O canário e a observação pós-publicação passaram sem incidente crítico.
-- [ ] Existe rollback por nova versão/yank/correção sem mover tag nem expor
-  dados privados.
-- [ ] A divulgação controlada foi observada antes de qualquer divulgação em
-  massa.
+- [x] O canário passou fora do checkout do autor.
+- [ ] A observação pós-publicação ainda não terminou: começou em
+  `2026-09-04T20:18:45Z` e termina em `2026-09-05T20:18:45Z`.
+- [x] Existe rollback por nova versão/correção sem mover tag nem expor dados
+  privados.
+- [x] A divulgação controlada foi realizada; divulgação externa em massa é
+  não aplicável por escopo autorizado.
 
 ## 7. Referências e comandos normativos
 
@@ -237,6 +250,7 @@ launched`.
 - Decisão de risco: [`docs/CHROMA-RESIDUAL-DECISION.md`](CHROMA-RESIDUAL-DECISION.md).
 - Settings: [`community/GITHUB-SETTINGS-CHECKLIST.md`](../community/GITHUB-SETTINGS-CHECKLIST.md).
 - Handoff atual: [`docs/HANDOFF-2026-09-04-CI-WHEEL.md`](HANDOFF-2026-09-04-CI-WHEEL.md).
+- Handoff pós-release: [`docs/POST-RELEASE-HANDOFF-2026-09-04.md`](POST-RELEASE-HANDOFF-2026-09-04.md).
 
 Os comandos devem ser executados na ordem do runbook, sempre em primeiro plano
 quando houver mutação de estado RAG, com checkpoints preservados e sem publicar

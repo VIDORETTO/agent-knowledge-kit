@@ -1,7 +1,8 @@
-# Divulgação 1.1.0 — rascunho não enviado
+# Divulgação 1.1.0 — executada no GitHub Release
 
-> Não enviar nem agendar este texto. Ele só pode sair depois de uma release
-> pública verificável, instalação externa aprovada e canário sem regressão.
+> Status: mensagem publicada somente no [GitHub Release v1.1.0](https://github.com/VIDORETTO/agent-knowledge-kit/releases/tag/v1.1.0)
+> após verificação do artefato e canário externo. Não foi enviado para contas
+> ou canais externos.
 
 ## Mensagem curta
 
@@ -13,7 +14,7 @@ pacote e avaliar as consultas revisadas.
 
 ## O que apontar
 
-- Release notes: `docs/RELEASE-NOTES-1.1.0.md`.
+- Release notes: [`docs/RELEASE-NOTES-1.1.0.md`](RELEASE-NOTES-1.1.0.md).
 - Instalação e limites: `README.md`, `docs/USE.md` e `docs/PUBLISHING-POLICY.md`.
 - Segurança: `SECURITY.md`.
 - Suporte: `docs/SUPPORT-MATRIX.json`.
@@ -33,5 +34,6 @@ pacote e avaliar as consultas revisadas.
 
 O único destino desta versão é o próprio GitHub Release, com README/changelog
 coerentes no repositório. Registry e canais externos ficam explicitamente fora
-do escopo; não haverá anúncio para contas externas. O responsável deve
-confirmar o horário e a janela de observação no handoff antes do envio.
+do escopo; não houve anúncio para contas externas. Publicação registrada em
+`2026-09-04T20:18:45Z`; a janela de observação está no
+[`POST-RELEASE-HANDOFF-2026-09-04.md`](POST-RELEASE-HANDOFF-2026-09-04.md).

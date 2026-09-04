@@ -1,93 +1,107 @@
 # Registro de prontidão — 2026-09-04
 
-**Estado:** `release-ready-pending-human-gate`  
-**Escopo:** candidate `1.1.0` do pacote `consulta-documentacao`  
-**Política:** nenhuma tag, release, publicação ou anúncio foi criado por esta
-execução.
+**Estado:** `production-ready-publicity-ready` com observação pós-release aberta
+**Escopo:** release pública `1.1.0` do pacote `consulta-documentacao`
+**Canal:** somente GitHub Release; nenhum registry ou anúncio externo
+**Release:** [v1.1.0](https://github.com/VIDORETTO/agent-knowledge-kit/releases/tag/v1.1.0)
+**Publicado em:** `2026-09-04T20:18:45Z`
 
-Este registro separa evidência local de autorização externa. O SHA e o digest
-do candidate final devem ser lidos dos arquivos gerados em
-`artifacts/candidate-1.1.0/`; não são repetidos aqui para evitar referência
-circular quando a documentação muda.
+Este registro é o handoff operacional da publicação. A tag é imutável e o
+candidate usado no Release foi preservado como evidência do CI; alterações
+posteriores na documentação de `main` não alteram a identidade publicada.
 
-## Evidência automática observada
+## Identidade imutável
 
-- Ambiente isolado Python 3.12 criado pelo bootstrap com perfis `dev`,
-  `formats` e `rag`; `docops doctor --json` e `pip check` passaram.
-- `pytest -q`: **234 passed em 310,52 s**.
-- Clean clone com bootstrap, auditoria full e suíte completa: **pass**;
-  o clone executou **234 passed em 93,70 s**.
-- Support matrix, workflows, contratos, public seams, Ruff, format,
-  `compileall`, `git diff --check` e auditoria tracked/candidate: **pass**.
-- Wheel core: **pass**, `adapter=memory`, `rag=false`.
-- Wheel RAG requerido: **pass**, `adapter=mcp`, `rag=true`.
-- Fixture RAG: `run --index-rag`, `validate` e avaliação MCP: **pass**;
-  MRR@5/Recall@5 **1.0/1.0**, 2 documentos e 4 chunks.
-- Clone limpo com perfil RAG: bootstrap, `run --index-rag`, `validate` e
-  avaliação MCP: **pass**, MRR@5/Recall@5 **1.0/1.0**, 2 documentos e 4
-  chunks.
-- MCP smoke: **pass**, handshake `2024-11-05`, backend `4.8.5`, 13 tools;
-  consultas e conteúdo permaneceram redigidos.
-- Stress de reindex concorrente: **pass**, 10 s, 4 readers, 33.125 buscas,
-  zero erros/warnings, reindex terminal e zero resíduo recuperável.
-- Vendor security: **173 passed, 3 skipped, 7 xfailed**. A suíte upstream
-  completa não é um gate do `config.yaml` do produto: seus testes de preset
-  exigem configuração upstream específica; a execução isolada com preset
-  registrou 758 pass e 3 incompatibilidades de formatos/configuração, sem
-  alterar o vendor nem o perfil do produto.
-- Build do wheel agora é byte-reprodutível: o builder fixa
-  `SOURCE_DATE_EPOCH=315532800` (primeiro timestamp representável por ZIP) e
-  há teste de igualdade byte a byte.
+| Campo | Valor | Evidência |
+|---|---|---|
+| versão | `1.1.0` | `pyproject.toml`, wheel e Release |
+| tag anotada | `v1.1.0` | [tag pública](https://github.com/VIDORETTO/agent-knowledge-kit/releases/tag/v1.1.0) |
+| commit da tag | `303e995a9cf5c939f11a368865bfb76488e9654d` | `refs/tags/v1.1.0^{}` |
+| candidate digest | `bd64da7b769a2fd442abc28e768008fe6a8eccf8ca130906309b2291e88293a2` | `candidate-manifest.json` e `candidate-identity.json` |
+| wheel SHA-256 | `a6656139143df70974619581129a049b06a9e4511fdb2cf00ff4fd54aa2fc5c1` | asset público e reconstrução em clone limpo |
+| Release | [GitHub Release v1.1.0](https://github.com/VIDORETTO/agent-knowledge-kit/releases/tag/v1.1.0) | não-draft, não-prerelease |
+| registry | `none` | PyPI e outros registries fora do escopo |
 
-## Evidência negativa preservada
+## Gates executados
 
-- O `pip-audit` cru retorna código 1 por exatamente quatro advisories em
-  `chromadb==1.5.9`: `CVE-2026-45829`, `CVE-2026-45830`, `CVE-2026-45831` e
-  `CVE-2026-45833`. O índice consultado não oferece versão posterior nem
-  `fix_versions`; o wrapper passa apenas pela allowlist estreita do uso local.
-- `verify_candidate.py --release` já tem a decisão Chroma e as evidências locais;
-  antes do push ele falha fechado somente pela identidade remota e pelo CI
-  correspondente, que precisam observar o SHA final.
-- O Golden FastAPI não foi convertido em sucesso: os 14 arquivos em
-  `documents/fastapi-docs` não estão disponíveis neste checkout. Isso é um
-  resultado negativo preservado, mas o piloto FastAPI foi explicitamente
-  excluído do escopo público `1.1.0`; a avaliação pública usa a fixture MIT
-  revisada, que passou com MRR@5/Recall@5 1.0/1.0.
+- O commit `303e995` foi enviado para `main` com autorização explícita. O
+  [CI push 33913704577](https://github.com/VIDORETTO/agent-knowledge-kit/actions/runs/33913704577)
+  passou os 13 contexts obrigatórios: nove combinações de Python 3.11–3.13
+  em Ubuntu/Windows/macOS, três clean clones e o job de wheel.
+- O [Integration 33914255198](https://github.com/VIDORETTO/agent-knowledge-kit/actions/runs/33914255198)
+  passou o perfil RAG/MCP com a fixture MIT revisada: `2` documentos, `4`
+  chunks, Recall@5/MRR@5 `1.0/1.0`, smoke MCP e concorrência de reindex.
+- A [verificação manual de release 33914405994](https://github.com/VIDORETTO/agent-knowledge-kit/actions/runs/33914405994)
+  observou o digest e o commit exatos; `verify_candidate.py --release` passou.
+- A execução adicional acionada pela tag, [CI 33915236656](https://github.com/VIDORETTO/agent-knowledge-kit/actions/runs/33915236656),
+  também terminou com os 13 contexts obrigatórios em `success`.
+- A suíte local do commit publicado terminou com `234 passed`; o wheel foi
+  reconstruído em clone limpo, com Python 3.12.13 e `SOURCE_DATE_EPOCH=315532800`,
+  reproduzindo byte a byte o SHA público.
+- O candidato baixado do CI passou `sha256sum -c SHA256SUMS`, verificação de
+  supply chain e verificação independente no clone da tag. O Release publica
+  wheel, manifesto, identidade, auditoria, SBOM SPDX, locks, requirements e
+  `SHA256SUMS`; não publica corpus, índices, cache ou token.
 
-## Estado externo verificado
+## Segurança e escopo
 
-- No momento da auditoria, `origin/main` e `HEAD` eram o commit
-  `912599c8dc6ab7bde30e27a2cc27f0c1f1107c41`; a árvore de trabalho continha
-  mudanças locais desta preparação. Os runs públicos observados para esse SHA
-  foram CI `33900149915` e Integration `33900161429`, ambos concluídos com
-  sucesso; isso não prova mudanças locais posteriores.
-- O repositório público tem apenas a release `v1.0.0`; não existe tag/release
-  pública `v1.1.0`.
-- O canal selecionado para `1.1.0` é o GitHub Release; PyPI e registries
-  externos estão fora do escopo, portanto não há trusted publisher a configurar.
-- A revisão autenticada como `VIDORETTO` confirmou branch protection, 13 checks
-  obrigatórios, review de CODEOWNER, Dependabot security updates, secret
-  scanning, push protection e Actions com SHA pinning; a evidência está em
-  `community/GITHUB-SETTINGS-CHECKLIST.md`.
+- A decisão [Chroma residual](CHROMA-RESIDUAL-DECISION.md) foi registrada como
+  `mitigate` pelo administrador autenticado `VIDORETTO`, em `2026-09-04`, para
+  `chromadb==1.5.9`/`knowledge-rag==4.8.5`. O `pip-audit` cru continua
+  reportando exatamente quatro advisories: `CVE-2026-45829`,
+  `CVE-2026-45830`, `CVE-2026-45831` e `CVE-2026-45833`.
+- A mitigação é limitada ao `PersistentClient` local e MCP `stdio`; não há
+  `HttpClient`, HTTP Chroma, `trust_remote_code` nem repositório remoto de
+  modelo. Reavaliar em `2026-10-04` ou antes se esse threat model mudar.
+- A revisão autenticada dos settings GitHub está em
+  [`community/GITHUB-SETTINGS-CHECKLIST.md`](../community/GITHUB-SETTINGS-CHECKLIST.md):
+  branch protection, 13 required checks, CODEOWNERS, Dependabot, secret
+  scanning, push protection e Actions com SHA pinning.
+- O Golden FastAPI não foi fabricado nem baixado: os 14 arquivos do corpus
+  privado não estão disponíveis/licenciados neste checkout. Ele está fora da
+  release; o Golden público é a fixture sintética MIT revisada.
 
-## Bloqueios humanos/externos exatos
+## Canário externo
 
-1. A autorização explícita para push, tag, GitHub Release, upload de assets e
-   anúncio controlado foi fornecida pelo proprietário nesta execução. Ainda é
-   necessário executar o push, aguardar o CI do SHA final e concluir a release;
-   o push deliberado usará o bypass administrativo documentado, preservando o
-   SHA exato do candidate.
+Executado em `2026-09-04` fora do checkout do autor, em Linux com Python
+`3.12.13`, instalando o wheel diretamente da URL pública e sem `--editable`:
 
-## Artefatos preparados
+1. Baixar `consulta_documentacao-1.1.0-py3-none-any.whl` e `SHA256SUMS` do
+   GitHub Release; checksum passou.
+2. Instalar o wheel em um virtualenv temporário sem dependências locais.
+3. Rodar `resolve`, `run`, `validate` e `evaluate --adapter lexical` usando a
+   fixture MIT pública copiada para uma pasta temporária.
+4. Rodar `doctor --root <checkout-público> --json` contra um clone público da
+   tag; o resultado foi `ok=true`.
 
-- [`PRODUCTION-PUBLICITY-PLAN.md`](PRODUCTION-PUBLICITY-PLAN.md): fases e
-  Definition of Done.
-- [`RELEASE-NOTES-1.1.0.md`](RELEASE-NOTES-1.1.0.md): notas revisáveis.
-- [`PUBLICITY-DRAFT-1.1.0.md`](PUBLICITY-DRAFT-1.1.0.md): anúncio não enviado.
-- [`POST-RELEASE-HANDOFF-TEMPLATE.md`](POST-RELEASE-HANDOFF-TEMPLATE.md):
-  canário, observação e rollback.
-- `artifacts/candidate-1.1.0/`: bundle local, manifesto, checksums, SBOM,
-  provenance e verificação independente; conteúdo é ignorado pelo Git.
+Resultados: todos os comandos passaram; avaliação Recall@5/MRR@5 `1.0/1.0`;
+`pip show` confirmou `consulta-documentacao 1.1.0` no virtualenv temporário.
+O perfil RAG não é requisito da instalação core; seu fluxo real foi coberto
+separadamente pelo Integration CI, com cache/modelo externo permitido.
 
-Qualquer alteração no código, documentação, lock, vendor, metadata ou conjunto
-de arquivos invalida o candidate anterior e exige nova execução dos gates.
+Links públicos testados com resposta HTTP válida: Release, wheel, checksums,
+README da tag, release notes da tag, `docs/USE.md` e `SECURITY.md`.
+
+## Observação pós-release
+
+A divulgação controlada começou no próprio GitHub Release. Nenhum canal externo
+foi acionado por escolha explícita do proprietário.
+
+| janela | início UTC | fim UTC | estado |
+|---|---|---|---|
+| 24h | `2026-09-04T20:18:45Z` | `2026-09-05T20:18:45Z` | aberta; requer acompanhamento |
+| 72h | `2026-09-04T20:18:45Z` | `2026-09-07T20:18:45Z` | agendada; não iniciar divulgação externa |
+
+Até a execução deste handoff não há incidente crítico conhecido. Registrar
+issues, falhas de instalação ou alertas no handoff pós-release sem copiar
+credenciais, corpus, prompts ou logs privados.
+
+## Contenção e rollback
+
+- Não mover `v1.1.0` nem substituir seus assets/checksums.
+- Se surgir defeito no pacote, preservar esta release e publicar uma versão de
+  correção com nova tag; não editar a evidência histórica.
+- Se surgir incidente de segurança, interromper a divulgação, usar o canal
+  privado descrito em `SECURITY.md` e publicar apenas a informação necessária.
+- O plano e os contatos operacionais estão em
+  [`PRODUCTION-PUBLICITY-PLAN.md`](PRODUCTION-PUBLICITY-PLAN.md).

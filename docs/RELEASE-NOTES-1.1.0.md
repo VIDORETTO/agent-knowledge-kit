@@ -29,9 +29,14 @@ This version is distributed only through its GitHub Release. After the release
 is public, download the exact wheel asset and verify its checksum before use:
 
 ```text
-python -m pip install consulta_documentacao-1.1.0-py3-none-any.whl
-python -m docops doctor --json
+python -m pip install ./consulta_documentacao-1.1.0-py3-none-any.whl
+python -m docops run <fonte> --output ./artifacts/<slug> --license <id>
+python -m docops validate ./artifacts/<slug> --json
 ```
+
+`doctor` verifica um checkout de projeto (metadata, lock e skill do operador),
+não uma pasta que contenha somente o wheel. Para diagnosticar um checkout
+público, use `python -m docops doctor --root <checkout> --json`.
 
 The RAG profile is optional and must be installed only when the selected
 channel, recorded dependency decision and local threat model have been

@@ -5,14 +5,18 @@ post-release canary, rollback and progressive publicity is in
 [`PRODUCTION-PUBLICITY-PLAN.md`](PRODUCTION-PUBLICITY-PLAN.md). This document
 remains the technical gate runbook referenced by that plan.
 
-The prepared release notes are in
-[`RELEASE-NOTES-1.1.0.md`](RELEASE-NOTES-1.1.0.md). They must be reviewed
-against the final public assets for the GitHub Release.
+The release notes are in
+[`RELEASE-NOTES-1.1.0.md`](RELEASE-NOTES-1.1.0.md) and were reviewed against
+the final public assets for the GitHub Release.
 
-The current evidence and pending human gates are recorded in
+The current release evidence and post-release handoff are recorded in
 [`RELEASE-READINESS-2026-09-04.md`](RELEASE-READINESS-2026-09-04.md). The
 post-release canary/rollback handoff template is
 [`POST-RELEASE-HANDOFF-TEMPLATE.md`](POST-RELEASE-HANDOFF-TEMPLATE.md).
+
+The controlled `1.1.0` publication is the
+[GitHub Release v1.1.0](https://github.com/VIDORETTO/agent-knowledge-kit/releases/tag/v1.1.0);
+this runbook remains the technical procedure for future candidates.
 
 The current publication verdict is recorded in
 `docs/GITHUB-PUBLICATION-AUDIT-2026-09-02.md`. It supersedes the historical

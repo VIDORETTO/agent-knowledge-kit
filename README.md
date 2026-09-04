@@ -34,9 +34,8 @@ python scripts/mcp_smoke.py "retry policy"
 No Windows, `scripts/bootstrap.ps1` é equivalente; no Linux/macOS, use
 `sh scripts/bootstrap.sh`. Os scripts detectam `bin/python` e
 `Scripts/python.exe`, e não dependem de um caminho da máquina do autor. A
-execução manual deste candidato foi comprovada no Windows; Linux/macOS ficam
-exercitados pela matriz do CI e não são apresentados como validação manual
-local.
+release `v1.1.0` foi comprovada pela matriz CI em Ubuntu, Windows e macOS; o
+canário externo local foi executado em Linux com Python 3.12.
 
 ## Matriz de suporte
 
@@ -112,10 +111,9 @@ alterados automaticamente. A metadata do repositório está em
 
 ## Versão 1.1.0 e verificação
 
-Esta versão é distribuída exclusivamente pelo GitHub Release. O checkpoint
-para retomar o follow-up do CI do wheel RAG está em
-[docs/HANDOFF-2026-09-04-CI-WHEEL.md](docs/HANDOFF-2026-09-04-CI-WHEEL.md).
-Para materializar e verificar o conjunto exato de arquivos:
+Esta versão é distribuída exclusivamente pelo
+[GitHub Release v1.1.0](https://github.com/VIDORETTO/agent-knowledge-kit/releases/tag/v1.1.0).
+Para materializar e verificar um candidato de uma próxima release, use:
 
 ```text
 python scripts/prepare_candidate.py --root . --output artifacts/candidate-1.1.0
@@ -125,16 +123,16 @@ python scripts/verify_candidate.py --root artifacts/candidate-1.1.0 --source-roo
 
 O bundle registra o commit base, o digest do candidato, wheel, checksums, SBOM,
 proveniência do vendor, manifest/digest do snapshot externo de modelo e as
-pendências de autorização humana. Bytes de cache de modelo não entram no
-candidate. Nenhum script de verificação executa commit, tag, push, publicação
-ou release.
+decisões de segurança que precisam ser revisadas. Bytes de cache de modelo não
+entram no candidate. Nenhum script de verificação executa commit, tag, push,
+publicação ou release.
 
 O plano completo para fechar os gates, publicar de forma controlada, executar o
 canário e fazer divulgação progressiva está em
 [docs/PRODUCTION-PUBLICITY-PLAN.md](docs/PRODUCTION-PUBLICITY-PLAN.md).
-O registro da execução atual e dos bloqueios humanos está em
+O registro da publicação e da observação pós-release está em
 [docs/RELEASE-READINESS-2026-09-04.md](docs/RELEASE-READINESS-2026-09-04.md),
-e as notas para revisão estão em
+e as notas publicadas estão em
 [docs/RELEASE-NOTES-1.1.0.md](docs/RELEASE-NOTES-1.1.0.md).
 
 Políticas comunitárias estão em [community/](community/), e a metadata do
