@@ -94,3 +94,11 @@
 - Distinguir o interpretador global do ambiente RAG do projeto; um gate RAG
   deve apontar para o `.venv` que contém o backend e registrar explicitamente
   `adapter=mcp`, `rag=true`.
+
+## 2026-09-04 — preservar launchers de venv no candidate
+
+- Em POSIX, `bin/python` pode ser symlink para um interpretador de sistema sem
+  `pip`; não aplicar `Path.resolve()` ao interpretador selecionado para um
+  candidate, pois isso remove o ambiente virtual da invocação.
+- Testar construção de candidate em checkout nativo Linux/WSL, não apenas em
+  um venv Windows, para cobrir essa diferença de launcher.

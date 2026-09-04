@@ -96,6 +96,8 @@ def test_candidate_falls_back_when_bootstrap_no_install_leaves_a_venv_without_pi
             ".ruff_cache",
             "*.egg-info",
             "artifacts",
+            ".scratch",
+            "fastapi-docs",
             "build",
             "data",
             "dist",

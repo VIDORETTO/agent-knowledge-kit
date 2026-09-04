@@ -25,9 +25,9 @@
   auditoria, supply chain, re-medição da fonte e modo release fail-closed.
 - [x] Atualizar docs, tickets, changelog, auditoria, este registro e lessons com
   apenas evidência observada nesta execução; revisar elegância e diff final.
-- [x] Confirmar working tree pronto, criar um único commit e fazer push para
-  `origin/main`, conforme autorização explícita posterior do usuário. Tag,
-  GitHub Release e publicação continuam fora do escopo.
+- [x] Confirmar working tree pronto, criar os commits corretivos necessários e
+  fazer push para `origin/main`, conforme autorização explícita posterior do
+  usuário. Tag, GitHub Release e publicação continuam fora do escopo.
 
 ### Classificação de pendências e evidência
 
@@ -89,6 +89,28 @@
 - [x] TDD red → green → verificação registrado para cada mudança nova.
 - [x] Revisão final de privacidade, arquivos proibidos, status e pendências antes
   do commit/push.
+
+## Follow-up pós-CI do primeiro push — 2026-09-04
+
+- [x] Confirmar o run `33891442751` no SHA publicado e separar o caminho feliz
+  do wheel RAG do bloqueio humano do modo release.
+- [x] Confirmar que a falha dos testes de candidate também existia no CI do
+  commit-base `7916083`, portanto não foi causada pelo ajuste do cache.
+- [x] Reproduzir em checkout Linux/WSL que `Path.resolve()` removia o launcher
+  do venv POSIX e selecionava um Python sem `pip`.
+- [x] Corrigir `scripts/prepare_candidate.py` para tornar o caminho absoluto
+  sem resolver symlinks e atualizar changelog, handoff e lessons.
+- [x] Reexecutar o teste de candidate e os gates locais disponíveis.
+- [ ] Confirmar no novo CI que quick, clean-clone e package passam no mesmo SHA;
+  manter o release gate bloqueado enquanto a decisão Chroma estiver pendente.
+
+### Evidência do diagnóstico adicional
+
+- O job `wheel / Python 3.12` do run `33891442751` passou construção, smoke RAG,
+  candidate, supply chain e re-medição; a etapa `--release` retornou
+  `human_decision_pending` como esperado.
+- Os jobs quick/clean-clone falharam nos testes de candidate porque o venv
+  POSIX era canonicalizado para `/usr/bin/python3.12`, sem `pip`.
 
 ## Execução Goal Mode — revalidação e implementação — 2026-09-03
 
