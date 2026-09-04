@@ -53,7 +53,6 @@ python -m docops run documents/fixtures/acme-docs --output artifacts/acme --slug
 python -m docops validate artifacts/acme --json
 python -m docops evaluate --package artifacts/acme --cases golden-set/test-cases-fixture.json --adapter mcp --runtime-root . --json
 python scripts/mcp_smoke.py "background tasks"
-python scripts/evaluate_golden.py --cases golden-set/test-cases-fastapi.json
 python scripts/test_reindex_concurrency.py --package artifacts/acme --seconds 10 --readers 4 --min-searches 40
 python scripts/audit_release.py --candidate --json
 python scripts/prepare_candidate.py --root . --output artifacts/candidate-1.1.0 --profile core
@@ -74,6 +73,12 @@ The optional RAG profile runs in its own environment. It must execute
 runtime is recorded as `SKIPPED [rag_optional_unavailable]`, while a requested
 RAG gate fails. The wheel gate sets `DOCOPS_REQUIRE_WHEEL_RAG=1` when RAG is
 part of the candidate and must report the installed-package provenance.
+
+The FastAPI Golden is an internal pilot artifact and is intentionally outside
+the public `1.1.0` scope because its private documentation corpus is not
+licensed in this checkout. Do not run `scripts/evaluate_golden.py` for this
+release unless an authorized corpus is supplied; the reviewed MIT fixture is
+the public Golden gate.
 
 ## Candidate identity and artifacts
 

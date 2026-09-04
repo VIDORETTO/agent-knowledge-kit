@@ -44,15 +44,16 @@ circular quando a documentação muda.
   `chromadb==1.5.9`: `CVE-2026-45829`, `CVE-2026-45830`, `CVE-2026-45831` e
   `CVE-2026-45833`. O índice consultado não oferece versão posterior nem
   `fix_versions`; o wrapper passa apenas pela allowlist estreita do uso local.
-- `verify_candidate.py --release` falha fechado enquanto a decisão Chroma,
-  identidade remota e CI correspondente não estiverem presentes.
+- `verify_candidate.py --release` já tem a decisão Chroma e as evidências locais;
+  antes do push ele falha fechado somente pela identidade remota e pelo CI
+  correspondente, que precisam observar o SHA final.
 - O Golden FastAPI não foi convertido em sucesso: os 14 arquivos em
   `documents/fastapi-docs` não estão disponíveis neste checkout. Isso é um
   resultado negativo preservado, mas o piloto FastAPI foi explicitamente
   excluído do escopo público `1.1.0`; a avaliação pública usa a fixture MIT
   revisada, que passou com MRR@5/Recall@5 1.0/1.0.
 
-## Estado externo somente leitura
+## Estado externo verificado
 
 - No momento da auditoria, `origin/main` e `HEAD` eram o commit
   `912599c8dc6ab7bde30e27a2cc27f0c1f1107c41`; a árvore de trabalho continha
@@ -71,10 +72,10 @@ circular quando a documentação muda.
 ## Bloqueios humanos/externos exatos
 
 1. A autorização explícita para push, tag, GitHub Release, upload de assets e
-   anúncio controlado foi fornecida pelo proprietário nesta execução; essas
-   ações ainda precisam ser executadas depois do CI do SHA final. O push
-   deliberado usará o bypass administrativo documentado, preservando o SHA
-   exato do candidate; o `--release` continua exigindo CI correspondente.
+   anúncio controlado foi fornecida pelo proprietário nesta execução. Ainda é
+   necessário executar o push, aguardar o CI do SHA final e concluir a release;
+   o push deliberado usará o bypass administrativo documentado, preservando o
+   SHA exato do candidate.
 
 ## Artefatos preparados
 

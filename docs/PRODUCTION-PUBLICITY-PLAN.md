@@ -140,8 +140,8 @@ decisão humana registrada; nenhuma exceção fica implícita.
   `SHA256SUMS`, SBOM e provenance; comparar com o candidate aprovado.
 - [ ] Criar a GitHub Release com changelog, limitações, suporte, segurança,
   checksums e links para a documentação. Não anexar corpus, cache ou snapshot.
-- [ ] Publicar no registry escolhido somente se a identidade do projeto,
-  trusted publishing e permissões least privilege estiverem verificadas.
+- [ ] Publicar wheel, checksums, SBOM e provenance exclusivamente na GitHub
+  Release; nenhum registry externo será usado em `1.1.0`.
 - [ ] Confirmar por API e download que tag, release, assets, metadados e versão
   do pacote são coerentes; registrar URLs e horários.
 
