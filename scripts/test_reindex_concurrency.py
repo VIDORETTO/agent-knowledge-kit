@@ -19,6 +19,13 @@ from docops.observability import exception_diagnostic, redact_report  # noqa: E4
 from docops.runtime import discover_rag_python, runtime_environment  # noqa: E402
 
 
+def _runtime_environment_for_package(package: Path) -> dict[str, str]:
+    """Start the stress workload with the reviewed backend used by DOCOPS."""
+
+    vendor = ROOT / "skills" / "vendor" / "knowledge-rag"
+    return runtime_environment(package, vendor_root=vendor)
+
+
 def _gate_event(code: str) -> dict[str, object]:
     return {"code": code, "severity": "error", "category": "stress", "redacted": True}
 
@@ -177,7 +184,7 @@ def main() -> int:
     stop = threading.Event()
     request_timeout = max(1.0, min(5.0, args.seconds))
     try:
-        environment = runtime_environment(package, vendor_root=ROOT)
+        environment = _runtime_environment_for_package(package)
         primary = start_mcp_server(executable, package, env=environment)
         readers = [start_mcp_server(executable, package, env=environment) for _ in range(args.readers)]
         # Initialization is intentionally lazy in knowledge-rag. Establish an

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 from scripts.test_reindex_concurrency import (
     _mcp_error,
+    _runtime_environment_for_package,
     recoverable_residue_counts,
     safe_reindex_status,
     stress_gate_findings,
@@ -128,3 +132,11 @@ def test_attempt_with_staging_or_nonterminal_outcome_is_recoverable_residue() ->
     )
 
     assert counts == {"staging": 0, "backups": 0, "recoverable_attempts": 2, "attempt_records": 2}
+
+
+def test_concurrency_runtime_uses_the_reviewed_vendor_tree(tmp_path: Path) -> None:
+    environment = _runtime_environment_for_package(tmp_path)
+
+    assert environment["PYTHONPATH"].split(os.pathsep)[0] == str(
+        Path(__file__).parents[1].resolve() / "skills" / "vendor" / "knowledge-rag"
+    )

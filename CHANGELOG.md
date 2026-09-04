@@ -38,6 +38,9 @@
   commit and matching CI evidence.
 - Phase receipts keep a positive millisecond floor on coarse monotonic clocks,
   preserving the measured-duration contract across supported operating systems.
+- The concurrent RAG stress harness now starts the reviewed vendored backend,
+  matching the runtime used by indexing and MCP evaluation instead of the
+  independently installed package.
 - Added an explicit authenticated GitHub settings checklist and kept commit,
   push, tag and release operations outside all local automation.
 - Added the `plan`/`apply`/`inspect` operation seam with real create/update/dry-run
