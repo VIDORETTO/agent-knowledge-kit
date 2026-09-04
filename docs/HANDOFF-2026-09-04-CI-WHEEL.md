@@ -3,8 +3,9 @@
 > **Snapshot atual desta execução (2026-09-04):** esta seção é a referência
 > operacional vigente; as seções abaixo preservam o histórico do checkpoint.
 >
-> - `HEAD` local: `e4d69f4e1592df196a2b9a0bf1927b9114bd3d41`; working tree limpo;
->   `origin/main` ainda aponta para `912599c8dc6ab7bde30e27a2cc27f0c1f1107c41`.
+> - O checkout local estava limpo no momento do snapshot; o SHA exato do
+>   candidate deve ser lido no manifesto abaixo. `origin/main` ainda aponta
+>   para `912599c8dc6ab7bde30e27a2cc27f0c1f1107c41`.
 > - O candidate `1.1.0` final está em `artifacts/candidate-1.1.0/`; leia
 >   `candidate-manifest.json` e `candidate-identity.json` para o SHA e digest
 >   exatos, evitando referência circular neste handoff.
