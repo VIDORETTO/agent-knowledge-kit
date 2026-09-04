@@ -39,6 +39,8 @@ def test_release_candidate_identity_is_structured_and_fail_closed_without_ci_evi
     assert identity["candidate_digest"] == manifest["source_candidate_digest"]
     assert identity["files"] == manifest["source_files"]
 
+    environment = dict(os.environ)
+    environment.pop("GITHUB_SHA", None)
     completed = subprocess.run(
         [
             sys.executable,
@@ -52,6 +54,7 @@ def test_release_candidate_identity_is_structured_and_fail_closed_without_ci_evi
         check=False,
         capture_output=True,
         text=True,
+        env=environment,
     )
 
     assert completed.returncode == 1
