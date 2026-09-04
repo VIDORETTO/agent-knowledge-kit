@@ -14,9 +14,10 @@ circular quando a documentação muda.
 
 - Ambiente isolado Python 3.12 criado pelo bootstrap com perfis `dev`,
   `formats` e `rag`; `docops doctor --json` e `pip check` passaram.
-- `pytest -q`: **233 passed**.
+- `pytest -q`: **234 passed em 310,52 s**.
 - Clean clone com bootstrap, auditoria full e suíte completa: **pass**;
-  o clone executou **233 passed**.
+  o clone será repetido após este registro final; a execução local atual é
+  **234 passed**.
 - Support matrix, workflows, contratos, public seams, Ruff, format,
   `compileall`, `git diff --check` e auditoria tracked/candidate: **pass**.
 - Wheel core: **pass**, `adapter=memory`, `rag=false`.
