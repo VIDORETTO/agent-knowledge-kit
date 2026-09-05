@@ -21,6 +21,7 @@ from types import MappingProxyType
 from typing import Any, Iterable, Mapping
 
 from .api_types import PipelineOptions, PipelineResult
+from .config_audit import load_config
 from .contracts import validate_artifact
 from .generation import write_router, write_skill
 from .harness import build_harness_manifest
@@ -1258,12 +1259,20 @@ def _write_index(stage: Path, plan_value: OperationPlan) -> dict[str, Any]:
     backend_total_documents = (
         backend_stats.get("total_documents") if isinstance(backend_stats.get("total_documents"), int) else None
     )
+    embedding_profile = "compact"
+    try:
+        config = load_config(stage / "config.yaml")
+        embedding = config.get("models", {}).get("embedding", {})
+        if isinstance(embedding, Mapping):
+            embedding_profile = str(embedding.get("profile") or "custom")
+    except (OSError, ValueError, TypeError):
+        embedding_profile = "custom"
     index_payload: dict[str, Any] = {
         "schema_version": 1,
         "status": "ready" if plan_value.records else "empty",
         "backend": "knowledge-rag",
         "mode": "indexed" if rag_sync_result is not None and rag_sync_result.ok else "corpus-ready",
-        "profile": "compact",
+        "profile": embedding_profile,
         "corpus_documents": len(plan_value.records),
         "operator_chunks": operator_chunks,
         "backend_total_documents": backend_total_documents,

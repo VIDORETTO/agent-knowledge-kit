@@ -287,6 +287,65 @@ def test_worker_processes_a_due_event_into_a_review_candidate_without_touching_a
     assert (package / "rag" / "documents" / "guide.md").read_text(encoding="utf-8") == "# Guide\nBefore.\n"
 
 
+def test_admitted_learning_is_materialized_only_in_a_candidate(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    guide = source / "guide.md"
+    guide.write_text("# Guide\nSource fact.\n", encoding="utf-8")
+    package = tmp_path / "package"
+    assert _run("run", str(source), "--output", str(package), "--slug", "guide", "--license", "MIT")["ok"]
+    proposal = _run(
+        "lifecycle",
+        "learning",
+        "submit",
+        "--package",
+        str(package),
+        "--claim",
+        "Reviewed fact from an approved conversation.",
+        "--claim-type",
+        "fact",
+        "--evidence-json",
+        '[{"source":"manual.md","locator":"#fact"}]',
+    )
+    _run(
+        "lifecycle",
+        "learning",
+        "review",
+        "--package",
+        str(package),
+        "--proposal-id",
+        proposal["proposal_id"],
+        "--decision",
+        "admit",
+        "--reviewer",
+        "reviewer@example.test",
+    )
+
+    candidate = _run(
+        "lifecycle",
+        "candidate",
+        "prepare",
+        "--package",
+        str(package),
+        "--source",
+        str(source),
+        "--slug",
+        "guide",
+        "--license",
+        "MIT",
+    )
+    status = _run(
+        "lifecycle", "candidate", "status", "--package", str(package), "--candidate-id", candidate["candidate_id"]
+    )
+    runtime = tmp_path / ".package.docops-runtime"
+    learning_files = list(runtime.rglob(f"{proposal['proposal_id']}.md"))
+
+    assert candidate["materialized_learning"] == [proposal["proposal_id"]]
+    assert status["status"] == "review_required"
+    assert learning_files
+    assert not (package / "rag" / "documents" / "learning" / f"{proposal['proposal_id']}.md").exists()
+
+
 def test_source_reconcile_is_read_only_when_hashes_are_unchanged(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
@@ -332,3 +391,31 @@ def test_source_reconcile_is_read_only_when_hashes_are_unchanged(tmp_path: Path)
     assert unchanged["changed"] is False
     assert changed["changed"] is True
     assert status["jobs"]["pending"] == 1
+
+
+def test_repeated_feedback_opens_investigation_without_mutating_golden_or_active_package(tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    package.mkdir()
+    results = []
+    for occurrence in ("run-a", "run-b", "run-c"):
+        results.append(
+            _run(
+                "lifecycle",
+                "feedback",
+                "submit",
+                "--package",
+                str(package),
+                "--kind",
+                "unanswered",
+                "--query",
+                "What is the retry limit?",
+                "--occurrence-id",
+                occurrence,
+            )
+        )
+
+    status = _run("lifecycle", "feedback", "status", "--package", str(package))
+
+    assert [result["investigation_required"] for result in results] == [False, False, True]
+    assert status["feedback"]["unanswered"] == 3
+    assert not (package / "golden-set").exists()

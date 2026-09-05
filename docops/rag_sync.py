@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .config_audit import audit_config_file
+from .config_audit import audit_config_file, load_config
 from .mcp_client import first_json_payload, start_mcp_server
 from .observability import redact_report
 from .runtime import discover_rag_python, runtime_environment, runtime_provenance
@@ -181,6 +181,26 @@ class RagSynchronizer:
                     "message": "; ".join(error["message"] for error in config_audit.errors),
                 },
             )
+        profile = "custom"
+        try:
+            loaded_config = load_config(config_path)
+            embedding = loaded_config.get("models", {}).get("embedding", {})
+            if isinstance(embedding, dict):
+                profile = str(embedding.get("profile") or "custom")
+        except (OSError, ValueError, TypeError):
+            profile = "custom"
+        previous_profile = None
+        previous_index = root / "rag" / "index.json"
+        if previous_index.is_file() and not previous_index.is_symlink():
+            try:
+                previous_payload = json.loads(previous_index.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, json.JSONDecodeError):
+                previous_payload = None
+            if isinstance(previous_payload, dict):
+                previous_profile = previous_payload.get("profile")
+        profile_changed = previous_profile is not None and previous_profile != profile
+        if profile_changed and not full_rebuild:
+            full_rebuild = True
         runtime_root = self.runtime_root or root
         executable = self.python or discover_rag_python(runtime_root).path
         if not executable.is_file():
@@ -239,7 +259,7 @@ class RagSynchronizer:
                 timeout=120,
             )
             smoke = _response_payload(smoke_response, "search_knowledge")
-            return RagSyncResult(
+            result = RagSyncResult(
                 True,
                 stats=stats,
                 reindex=reindex,
@@ -247,6 +267,12 @@ class RagSynchronizer:
                 provenance={**expected_provenance, "server_version": actual_version},
                 diagnostics=client.diagnostics(status="completed") if hasattr(client, "diagnostics") else {},
             )
+            if profile_changed:
+                result.diagnostics = {
+                    **(result.diagnostics if isinstance(result.diagnostics, dict) else {}),
+                    "embedding_profile": {"previous": previous_profile, "current": profile, "full_rebuild": True},
+                }
+            return result
         except (OSError, RuntimeError, TimeoutError) as exc:
             code = str(getattr(exc, "code", "rag_integration_failed"))
             diagnostics = (

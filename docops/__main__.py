@@ -228,6 +228,22 @@ def build_parser() -> argparse.ArgumentParser:
     learning_review.add_argument("--reviewer", required=True)
     learning_review.add_argument("--note", default="")
     learning_review.add_argument("--json", action="store_true")
+
+    feedback = lifecycle_commands.add_parser("feedback", help="record quality signals without changing knowledge")
+    feedback_commands = feedback.add_subparsers(dest="feedback_command", required=True)
+    feedback_submit = feedback_commands.add_parser("submit")
+    feedback_submit.add_argument("--package", type=Path, required=True)
+    feedback_submit.add_argument("--runtime-root", type=Path)
+    feedback_submit.add_argument("--kind", required=True)
+    feedback_submit.add_argument("--query")
+    feedback_submit.add_argument("--generation")
+    feedback_submit.add_argument("--occurrence-id")
+    feedback_submit.add_argument("--payload-json", default="{}")
+    feedback_submit.add_argument("--json", action="store_true")
+    feedback_status = feedback_commands.add_parser("status")
+    feedback_status.add_argument("--package", type=Path, required=True)
+    feedback_status.add_argument("--runtime-root", type=Path)
+    feedback_status.add_argument("--json", action="store_true")
     return parser
     return parser
 
@@ -439,7 +455,10 @@ def _dispatch(args: argparse.Namespace) -> int:
                     },
                 )
             elif args.candidate_command == "status":
-                result = store.candidate(args.candidate_id) or {"ok": False, "code": "candidate_not_found"}
+                candidate_value = store.candidate(args.candidate_id)
+                result = (
+                    {"ok": True, **candidate_value} if candidate_value else {"ok": False, "code": "candidate_not_found"}
+                )
             elif args.candidate_command == "approve":
                 result = store.approve_candidate(
                     args.candidate_id,
@@ -477,6 +496,24 @@ def _dispatch(args: argparse.Namespace) -> int:
                     reviewer=args.reviewer,
                     note=args.note,
                 )
+            else:
+                return 2
+        elif args.lifecycle_command == "feedback":
+            if args.feedback_command == "status":
+                result = store.status()
+            elif args.feedback_command == "submit":
+                try:
+                    payload = json.loads(args.payload_json)
+                except json.JSONDecodeError as exc:
+                    result = {"ok": False, "code": "feedback_json_invalid", "message": redact_text(exc)}
+                else:
+                    result = store.submit_feedback(
+                        kind=args.kind,
+                        query=args.query,
+                        generation=args.generation,
+                        occurrence_id=args.occurrence_id,
+                        payload=payload if isinstance(payload, dict) else {},
+                    )
             else:
                 return 2
         else:

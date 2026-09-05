@@ -26,7 +26,11 @@ from .operations import OperationOptions, _promote, _remove_generated_path
 from .operations import apply as apply_operation
 from .operations import plan as build_plan
 from .package_validator import validate_package
+from .rag_sync import RagSynchronizer
+from .readiness import assess_readiness
 from .revisions import compute_revisions
+from .state import SourceRecord, StateStore
+from .storage import write_json_atomic, write_text_atomic
 
 SCHEMA_VERSION = 1
 DEBOUNCE_SECONDS = 60.0
@@ -506,6 +510,137 @@ class LifecycleStore:
             )
         return {"ok": True, "proposal_id": proposal_id, "status": status}
 
+    def _admitted_proposals(self) -> list[sqlite3.Row]:
+        with self._connect() as connection:
+            return connection.execute(
+                "SELECT * FROM proposals WHERE status='admitted' ORDER BY created_at, proposal_id"
+            ).fetchall()
+
+    def materialize_admitted_learning(self, candidate_root: Path) -> list[str]:
+        """Materialize reviewed claims into a candidate's corpus only."""
+
+        proposals = self._admitted_proposals()
+        if not proposals:
+            return []
+        documents = candidate_root / "rag" / "documents" / "learning"
+        documents.mkdir(parents=True, exist_ok=True)
+        state = StateStore(candidate_root / ".docops" / "state.json")
+        records = state.records()
+        sources_path = candidate_root / "rag" / "sources.json"
+        try:
+            sources_payload = json.loads(sources_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            sources_payload = {"schema_version": 1, "sources": []}
+        sources = sources_payload.get("sources") if isinstance(sources_payload, dict) else []
+        if not isinstance(sources, list):
+            sources = []
+        manifest_path = candidate_root / "manifest.json"
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            manifest = None
+        entries = manifest.get("entries") if isinstance(manifest, dict) else []
+        if not isinstance(entries, list):
+            entries = []
+        materialized: list[str] = []
+        for proposal in proposals:
+            proposal_id = str(proposal["proposal_id"])
+            relative = f"learning/{proposal_id}.md"
+            content = [
+                "# Reviewed knowledge proposal",
+                "",
+                str(proposal["claim"]),
+                "",
+                f"Proposal: `{proposal_id}`",
+                f"Claim type: `{proposal['claim_type']}`",
+            ]
+            if proposal["scope"]:
+                content.append(f"Scope: `{proposal['scope']}`")
+            if proposal["version"]:
+                content.append(f"Version: `{proposal['version']}`")
+            try:
+                evidence = json.loads(proposal["evidence_json"])
+            except (TypeError, json.JSONDecodeError):
+                evidence = []
+            if isinstance(evidence, list) and evidence:
+                content.extend(["", "## Evidence", "", *[f"- `{redact_text(_json(item))}`" for item in evidence]])
+            text = "\n".join(content).rstrip() + "\n"
+            destination = documents / f"{proposal_id}.md"
+            write_text_atomic(destination, text)
+            content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+            record = SourceRecord(f"conversation://{proposal_id}", proposal["version"], content_hash, relative)
+            records = [existing for existing in records if existing.logical_key != record.logical_key]
+            records.append(record)
+            sources = [
+                existing
+                for existing in sources
+                if not (isinstance(existing, dict) and existing.get("canonical") == record.canonical)
+            ]
+            sources.append(
+                {
+                    "source": f"conversation://{proposal_id}",
+                    "canonical": f"conversation://{proposal_id}",
+                    "destination": relative,
+                    "title": "Reviewed knowledge proposal",
+                    "format": "markdown",
+                    "status": "accepted",
+                    "content_hash": content_hash,
+                    "version": proposal["version"],
+                    "proposal_id": proposal_id,
+                }
+            )
+            entries = [
+                existing
+                for existing in entries
+                if not (isinstance(existing, dict) and existing.get("proposal_id") == proposal_id)
+            ]
+            entries.append(
+                {
+                    "source": f"conversation://{proposal_id}",
+                    "canonical": f"conversation://{proposal_id}",
+                    "destination": relative,
+                    "title": "Reviewed knowledge proposal",
+                    "format": "markdown",
+                    "status": "accepted",
+                    "content_hash": content_hash,
+                    "proposal_id": proposal_id,
+                }
+            )
+            materialized.append(proposal_id)
+        state.commit(records)
+        write_json_atomic(
+            sources_path,
+            {"schema_version": 1, "sources": sorted(sources, key=lambda item: str(item.get("canonical", "")))},
+        )
+        if isinstance(manifest, dict):
+            manifest["entries"] = sorted(entries, key=lambda item: str(item.get("canonical", "")))
+            counts = manifest.setdefault("counts", {})
+            if isinstance(counts, dict):
+                counts["accepted"] = sum(1 for item in manifest["entries"] if item.get("status") == "accepted")
+            metrics = manifest.setdefault("metrics", {})
+            if isinstance(metrics, dict):
+                metrics["learning"] = {"materialized_proposals": materialized, "index_rebuild_required": True}
+            manifest["readiness"] = assess_readiness(candidate_root)
+            manifest["revisions"] = compute_revisions(candidate_root)
+            write_json_atomic(manifest_path, manifest)
+        index_path = candidate_root / "rag" / "index.json"
+        try:
+            index = json.loads(index_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            index = None
+        if isinstance(index, dict):
+            index["mode"] = "corpus-ready"
+            index["backend_total_documents"] = None
+            index["backend_total_chunks"] = None
+            index["reindex_required"] = True
+            index.setdefault("metrics", {})["learning"] = {"materialized_proposals": materialized}
+            write_json_atomic(index_path, index)
+        if isinstance(manifest, dict):
+            manifest["readiness"] = assess_readiness(candidate_root)
+            manifest["revisions"] = compute_revisions(candidate_root)
+            write_json_atomic(manifest_path, manifest)
+        return materialized
+
     def status(self) -> dict[str, Any]:
         with self._connect() as connection:
             counts: dict[str, dict[str, int]] = {}
@@ -522,6 +657,7 @@ class LifecycleStore:
             release = connection.execute(
                 "SELECT release_id,status,created_at FROM releases ORDER BY created_at DESC LIMIT 1"
             ).fetchone()
+            feedback_rows = connection.execute("SELECT kind, COUNT(*) AS count FROM feedback GROUP BY kind").fetchall()
         revisions = compute_revisions(self.package_root) if (self.package_root / "manifest.json").is_file() else None
         return {
             "schema_version": SCHEMA_VERSION,
@@ -531,8 +667,71 @@ class LifecycleStore:
             "jobs": {"pending": counts["jobs"].get("pending", 0), **counts["jobs"]},
             "candidates": counts["candidates"],
             "proposals": counts["proposals"],
+            "feedback": {str(row["kind"]): int(row["count"]) for row in feedback_rows},
             "active_revisions": revisions,
             "latest_release": dict(release) if release else None,
+        }
+
+    def submit_feedback(
+        self,
+        *,
+        kind: str,
+        query: str | None = None,
+        generation: str | None = None,
+        occurrence_id: str | None = None,
+        payload: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        allowed = {"unanswered", "conflict", "low_quality", "citation", "abstention"}
+        if kind not in allowed:
+            return {"ok": False, "code": "feedback_kind_invalid"}
+        if query is not None and len(query) > 20_000:
+            return {"ok": False, "code": "feedback_query_invalid"}
+        feedback_id = f"feedback-{uuid.uuid4().hex}"
+        occurrence = occurrence_id or feedback_id
+        safe_payload = redact_report({**dict(payload or {}), "occurrence_id": occurrence})
+        now = _timestamp()
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO feedback(feedback_id,package_id,generation,kind,query_hash,payload_json,created_at) VALUES(?,?,?,?,?,?,?)",
+                (
+                    feedback_id,
+                    self.package_id,
+                    generation,
+                    kind,
+                    _hash(query) if query else None,
+                    _json(safe_payload),
+                    now,
+                ),
+            )
+            window_start = now - 7 * 24 * 60 * 60
+            rows = connection.execute(
+                "SELECT payload_json FROM feedback WHERE package_id=? AND kind=? AND query_hash IS ? AND created_at>=?",
+                (self.package_id, kind, _hash(query) if query else None, window_start),
+            ).fetchall()
+        occurrences: set[str] = set()
+        for row in rows:
+            try:
+                value = json.loads(row["payload_json"])
+            except (TypeError, json.JSONDecodeError):
+                value = {}
+            if isinstance(value, dict) and value.get("occurrence_id"):
+                occurrences.add(str(value["occurrence_id"]))
+        investigation = len(occurrences) >= 3
+        investigation_event = None
+        if investigation:
+            investigation_event = self.submit_event(
+                event_type="investigation.requested",
+                observed_revision=_hash({"kind": kind, "query": query}),
+                debounce_seconds=0.0,
+                payload={"kind": kind, "query_hash": _hash(query) if query else None, "occurrences_7d": len(occurrences)},
+            )
+        return {
+            "ok": True,
+            "feedback_id": feedback_id,
+            "kind": kind,
+            "occurrences_7d": len(occurrences),
+            "investigation_required": investigation,
+            "investigation_event": investigation_event,
         }
 
     def create_candidate_record(self, *, base_fingerprint: str, path: Path, target_revision: str | None) -> str:
@@ -625,6 +824,10 @@ class LifecycleStore:
             ).fetchone()
         if approval is None or approval["candidate_fingerprint"] != fingerprint:
             return {"ok": False, "code": "approval_invalidated"}
+        if row.get("base_fingerprint") not in {None, "", "absent"} and (self.package_root / "manifest.json").is_file():
+            active_fingerprint = compute_revisions(self.package_root)["composition"]
+            if active_fingerprint != row["base_fingerprint"]:
+                return {"ok": False, "code": "stale_base"}
         release_id = f"release-{fingerprint[:16]}-{uuid.uuid4().hex[:8]}"
         active = self.package_root
         active.parent.mkdir(parents=True, exist_ok=True)
@@ -772,6 +975,17 @@ def prepare_candidate(
             "errors": result.errors,
             "outcome": result.outcome,
         }
+    materialized_learning = store.materialize_admitted_learning(candidate_path)
+    if materialized_learning and bool(values.get("index_rag", False)):
+        rag_result = RagSynchronizer(runtime_root=operation_options.runtime_root).sync(candidate_path)
+        if not rag_result.ok:
+            return {
+                "ok": False,
+                "code": "learning_reindex_failed",
+                "candidate_id": candidate_id,
+                "materialized_learning": materialized_learning,
+                "error": rag_result.error,
+            }
     revisions = compute_revisions(candidate_path)
     store.create_candidate_record(
         base_fingerprint=base_revisions.get("composition", "absent"),
@@ -786,7 +1000,13 @@ def prepare_candidate(
     store.update_candidate(
         actual_id, status="review_required", revisions=revisions, evidence={"operation": result.to_dict()}
     )
-    return {"ok": True, "candidate_id": actual_id, "base_revisions": base_revisions, "revisions": revisions}
+    return {
+        "ok": True,
+        "candidate_id": actual_id,
+        "base_revisions": base_revisions,
+        "revisions": revisions,
+        "materialized_learning": materialized_learning,
+    }
 
 
 def reconcile_source(
@@ -843,6 +1063,10 @@ def work_once(
         return {"ok": True, "worked": False, "reason": "no_due_job"}
     payload = job.get("payload") if isinstance(job.get("payload"), Mapping) else {}
     try:
+        if job.get("job_type") == "investigation.requested":
+            result = {"ok": True, "investigation": payload, "action": "review_and_create_golden_candidate"}
+            store.complete_job(job["job_id"], job["lease_id"], result)
+            return {"ok": True, "worked": True, "job_id": job["job_id"], "result": result}
         if not payload.get("source"):
             raise ValueError("event payload requires source for document processing")
         result = prepare_candidate(

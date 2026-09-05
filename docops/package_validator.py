@@ -14,6 +14,7 @@ from .contracts import validate_artifact
 from .divergence import inspect_package_divergence
 from .observability import redact_report
 from .readiness import READINESS_ORDER, assess_readiness
+from .revisions import compute_revisions
 
 
 @dataclass
@@ -142,6 +143,16 @@ def validate_package(package_root: Path | str) -> ValidationResult:
                 contract_error["code"],
                 f"manifest contract {contract_error.get('path', '$')}: {contract_error['message']}",
             )
+
+    declared_revisions = manifest.get("revisions")
+    if declared_revisions is not None:
+        if not isinstance(declared_revisions, dict) or declared_revisions.get("schema_version") != 1:
+            _error(errors, "revisions_invalid", "manifest revisions must use schema_version 1")
+        else:
+            observed_revisions = compute_revisions(root)
+            for field in ("corpus_revision", "index_revision", "skill_revision", "router_revision", "composition"):
+                if declared_revisions.get(field) != observed_revisions.get(field):
+                    _error(errors, "revisions_stale", f"manifest revision {field} does not match package content")
 
     if manifest.get("schema_version") != 1:
         _error(errors, "manifest_schema", "manifest schema_version must be 1")
