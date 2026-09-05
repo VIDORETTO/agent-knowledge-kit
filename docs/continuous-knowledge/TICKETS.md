@@ -2,9 +2,12 @@
 
 [Índice](README.md) · [Especificação](SPEC.md) · [TDD](TDD.md)
 
-Status: **18 tickets propostos, nenhum implementado ou publicado em rastreador**.
-Um arquivo por ticket, em ordem topológica. A documentação está em docs/ por
-solicitação do usuário; não é backlog temporário em .scratch/.
+Status: **18 tickets especificados; o piloto está mapeado em
+[IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md)**. Alguns tickets são
+integrações/contratos e não significam que o pacote hospede scheduler, modelo,
+OCR ou avaliador externo. Um arquivo por ticket, em ordem topológica. A
+documentação está em docs/ por solicitação do usuário; não é backlog temporário
+em .scratch/.
 
 ## Backlog
 

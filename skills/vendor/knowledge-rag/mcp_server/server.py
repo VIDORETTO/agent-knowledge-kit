@@ -1354,7 +1354,9 @@ class KnowledgeOrchestrator:
         ``stdio`` transport is single-process, so it keeps Chroma's default
         journal mode.
         """
-        if config.transport != "stdio":
+        if config.read_only and not config.chroma_dir.exists():
+            raise RuntimeError("read-only session requires an existing indexed Chroma directory")
+        if config.transport != "stdio" and not config.read_only:
             _enable_wal_mode(config.chroma_dir)
         return chromadb.PersistentClient(path=str(config.chroma_dir))
 
@@ -1370,6 +1372,15 @@ class KnowledgeOrchestrator:
         Recovery: deletes corrupted data and starts fresh.
         """
         import shutil
+
+        if config.read_only:
+            # ``get_or_create_collection`` is a mutation and can silently
+            # create an empty collection. A reader fails closed until a
+            # maintenance worker has produced the index.
+            return self.chroma_client.get_collection(
+                name=config.collection_name,
+                embedding_function=self.embed_fn,
+            )
 
         try:
             return self.chroma_client.get_or_create_collection(
@@ -2167,6 +2178,8 @@ class KnowledgeOrchestrator:
         prefix = f"{config.collection_name}__staging_"
         now = int(time.time())
         stats = {"scanned": 0, "removed": 0, "preserved": 0}
+        if config.read_only:
+            return stats
         try:
             existing = self.chroma_client.list_collections()
         except Exception as e:
@@ -2604,6 +2617,11 @@ class KnowledgeOrchestrator:
         Interrupted migrations (``in_progress`` with a partial
         ``docs_indexed`` count) resume from the last checkpointed batch.
         """
+        if config.read_only:
+            # FTS5 startup creates SQLite schema and migration markers. The
+            # query-only capability uses Chroma/BM25 and leaves those files
+            # to the maintenance worker.
+            return
         db_path = config.data_dir / "fts5_index.db"
         state_path = config.data_dir / "fts5_migration.state"
         self.fts5_index = Fts5LexicalIndex(db_path=db_path, state_path=state_path)
@@ -4824,7 +4842,10 @@ def main():
             os.environ["KNOWLEDGE_RAG_SINGLE_INSTANCE"] = "1"
 
         with single_instance_lock():
-            run_preflight()
+            if config.read_only:
+                print("[READER] Startup preflight skipped in query-only mode", file=sys.stderr)
+            else:
+                run_preflight()
 
             orchestrator = get_orchestrator()
 

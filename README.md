@@ -36,6 +36,7 @@ um modelo, provedor ou chave de API.
 - [O que é gerado](#o-que-e-gerado)
 - [Parte técnica](#parte-tecnica)
 - [Segurança, licenças e limites](#seguranca-licencas-e-limites)
+- [Atualização contínua](#atualizacao-continua)
 - [Documentação e suporte](#documentacao-e-suporte)
 
 ## O que é
@@ -557,6 +558,19 @@ privada usada no piloto FastAPI não faz parte deste repositório nem da release
 | Outros harnesses | Devem suportar Agent Skills e MCP stdio |
 | RAG | Opcional; integração local |
 | Publicação | GitHub Release; não PyPI |
+
+## Atualização contínua
+
+O piloto da atualização contínua está na branch `feat/continuous-knowledge`.
+Ele separa RAG factual (rápido e incremental) de skill conceitual (candidata,
+avaliada e aprovada), mantém leitores pinados em uma geração e coloca
+aprendizado de conversas em quarentena. O fluxo não instala scheduler, não
+hospeda modelo e não publica material protegido automaticamente.
+
+Veja a [especificação e o estado de implementação](docs/continuous-knowledge/README.md)
+antes de habilitar o worker local. A matriz explica quais partes são código
+executável, quais dependem do harness/evaluador externo e quais ainda exigem
+decisão operacional.
 
 ## Assets da release
 

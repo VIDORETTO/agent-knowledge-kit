@@ -59,7 +59,13 @@ def compute_revisions(package_root: Path | str) -> dict[str, Any]:
         ("rag/sources.json", ".docops/state.json", ".docops/revocations.json"),
         ("rag/documents",),
     )
-    index_revision = _combined_digest(root, ("rag/index.json", "config.yaml"))
+    # The generated index is the immutable data-plane artifact.  Keep operator
+    # transport/tuning overrides out of this digest: packages intentionally
+    # preserve a consumer's valid ``config.yaml`` during a no-op/update, and a
+    # harmless stdio/comment change must not make the active generation look
+    # corrupt.  Embedding/profile compatibility is checked by RagSynchronizer
+    # against the profile recorded in ``rag/index.json`` before indexing.
+    index_revision = _combined_digest(root, ("rag/index.json",))
     skill_revision = _tree_digest(root / "skill")
     router_revision = _tree_digest(root / "router")
     harness_revision = _file_digest(root / "harness.json")

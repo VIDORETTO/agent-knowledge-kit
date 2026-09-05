@@ -110,6 +110,44 @@ def test_embedding_profile_change_forces_full_rebuild(monkeypatch, tmp_path: Pat
     }
 
 
+def test_legacy_embedding_profile_field_also_forces_full_rebuild(monkeypatch, tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    (package / "rag" / "documents").mkdir(parents=True)
+    (package / "rag" / "documents" / "guide.md").write_text("# Guide", encoding="utf-8")
+    (package / "config.yaml").write_text(
+        "models:\n  embedding:\n    profile: multilingual\nserver:\n  transport: stdio\n",
+        encoding="utf-8",
+    )
+    (package / "rag" / "index.json").write_text(
+        json.dumps({"embedding_profile": "compact"}), encoding="utf-8"
+    )
+    executable = tmp_path / "python"
+    executable.touch()
+
+    class FakeClient:
+        server_info = {"version": "4.8.5"}
+
+        def call(self, _method: str, *, name: str, arguments: dict, **_kwargs: object) -> dict:
+            payload = {
+                "reindex_documents": {"status": "started"},
+                "get_reindex_status": {"active": False},
+                "get_index_stats": {"stats": {"total_documents": 1, "total_chunks": 1}},
+                "search_knowledge": {"results": []},
+            }[name]
+            assert name != "reindex_documents" or arguments == {"full_rebuild": True}
+            return {"result": {"content": [{"text": json.dumps(payload)}]}}
+
+        def close(self) -> None:
+            return
+
+    monkeypatch.setattr(rag_sync, "start_mcp_server", lambda *_args, **_kwargs: FakeClient())
+
+    result = RagSynchronizer(python=executable, runtime_root=_runtime_root(tmp_path)).sync(package)
+
+    assert result.ok, result.error
+    assert result.diagnostics["embedding_profile"]["full_rebuild"] is True
+
+
 def test_rag_synchronizer_rejects_a_symlinked_package_config(tmp_path: Path) -> None:
     package = tmp_path / "package"
     package.mkdir()

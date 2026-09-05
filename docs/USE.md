@@ -82,6 +82,37 @@ e desabilita o watcher durante mutações explícitas. O estado `.rag_state.json
 validá-lo, mas o operador não cria uma sessão de IA nem envia chaves a um
 provedor.
 
+## Atualização contínua (piloto)
+
+O ciclo seguro está documentado em
+[`docs/continuous-knowledge/IMPLEMENTATION-STATUS.md`](continuous-knowledge/IMPLEMENTATION-STATUS.md).
+Ele usa um runtime SQLite privado fora do pacote, eventos idempotentes e um
+worker foreground. Os comandos abaixo não publicam uma skill por conta própria:
+
+```text
+python -m docops lifecycle status --package <pacote>
+python -m docops lifecycle source register --package <pacote> --source-id <id> --canonical <fonte>
+python -m docops lifecycle source reconcile --package <pacote> --source <fonte> --source-root <dir>
+python -m docops lifecycle work --package <pacote> [--force]
+python -m docops lifecycle work --package <pacote> --loop --interval-seconds 5
+```
+
+Mudanças documentais podem atualizar o RAG quando um job é executado. Um
+gatilho conceitual apenas cria `skill.enrichment.requested`; a skill ativa só
+muda depois de candidata, receipt de avaliação, aprovação e publicação:
+
+```text
+python -m docops lifecycle candidate prepare --package <pacote> --source <fonte> --source-root <dir>
+python -m docops lifecycle candidate evaluate --package <pacote> --candidate-id <id> --evidence-json <json>
+python -m docops lifecycle candidate approve --package <pacote> --candidate-id <id> --actor <id> --role owner --policy-revision <hash>
+python -m docops lifecycle candidate publish --package <pacote> --candidate-id <id>
+```
+
+Propostas de conversa exigem revisão; conteúdo `private` ou `restricted` não
+é materializado no corpus compartilhado. O MCP de consulta é read-only e uma
+mudança de composição durante a sessão resulta em erro de geração, exigindo
+reabertura do leitor.
+
 ## Configuração e segurança
 
 O `config.yaml` usa caminhos relativos e transporte `stdio`. Não exponha o

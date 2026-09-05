@@ -1075,6 +1075,11 @@ class Config:
 
     def _ensure_directories(self) -> None:
         """Create data/chroma/documents/models directories if missing."""
+        # A query-only harness must not bootstrap writable state merely by
+        # opening a reader. Maintenance workers run with read_only=0 and own
+        # directory/index creation explicitly.
+        if self.read_only:
+            return
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.chroma_dir.mkdir(parents=True, exist_ok=True)
         self.documents_dir.mkdir(parents=True, exist_ok=True)

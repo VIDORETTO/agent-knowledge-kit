@@ -1,10 +1,13 @@
 # Atualização contínua de conhecimento
 
-Status: **proposta técnica; implementação não iniciada**.
+Status: **piloto implementado e verificável na branch `feat/continuous-knowledge`**.
 
 Este conjunto documenta a evolução do DOCOPS para atualizar RAG e skill com
 cadências distintas, candidatas revisáveis, evidências e rollback. Criar estes
-documentos não aprova as decisões pendentes nem habilita automação.
+documentos não aprova as decisões pendentes nem habilita automação fora do
+worker local. Consulte o [estado de implementação](IMPLEMENTATION-STATUS.md)
+para distinguir o que já existe no checkout, o que é contrato de integração e o
+que permanece pendente.
 
 ## Ordem de leitura
 
@@ -15,6 +18,7 @@ documentos não aprova as decisões pendentes nem habilita automação.
 5. [Tickets e dependências](TICKETS.md): 18 entregas verticais, uma por arquivo.
 6. [Plano TDD](TDD.md): seams, primeiro RED, GREEN mínimo e ciclos seguintes.
 7. [Decisões pendentes](DECISIONS.md): escolhas que precisam ser resolvidas antes da fase correspondente.
+8. [Estado de implementação](IMPLEMENTATION-STATUS.md): matriz de tickets, comandos e limites atuais.
 
 ## Recomendação
 
@@ -37,10 +41,11 @@ Baseline: commit `566ac3b8d16e3e65785859ba46c35fe0212c87c1`, versão declarada
 `1.1.0`, análise em 2026-09-04. Mudanças posteriores exigem revalidar as
 evidências. Números históricos FastAPI não são novas medições deste plano.
 
-O processo utilizado foi `to-spec → to-tickets → tdd`, com vocabulário de seams
-de `codebase-design`. As instruções do usuário prevaleceram: documentação no
-projeto, arquivos/módulos explícitos, sem implementação nem publicação externa.
-Os tickets são documentos de planejamento, não issues abertas ou trabalho concluído.
+O processo de desenho utilizado foi `to-spec → to-tickets → tdd`, com
+vocabulário de seams de `codebase-design`. A implementação incremental desta
+branch cobre o ciclo local seguro descrito no estado de implementação; os
+tickets continuam sendo a trilha de rastreabilidade, não issues abertas em um
+rastreador externo.
 
 Para evitar duplicação normativa: SPEC define a política; CONTRACTS detalha
 interfaces; VALIDATION define os critérios; os tickets referenciam esses

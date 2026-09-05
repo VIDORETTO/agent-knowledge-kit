@@ -197,7 +197,10 @@ class RagSynchronizer:
             except (OSError, UnicodeError, json.JSONDecodeError):
                 previous_payload = None
             if isinstance(previous_payload, dict):
-                previous_profile = previous_payload.get("profile")
+                # Older packages called this field ``embedding_profile``;
+                # accept both names so a profile change cannot silently reuse
+                # an index created with a different embedding dimension.
+                previous_profile = previous_payload.get("profile") or previous_payload.get("embedding_profile")
         profile_changed = previous_profile is not None and previous_profile != profile
         if profile_changed and not full_rebuild:
             full_rebuild = True

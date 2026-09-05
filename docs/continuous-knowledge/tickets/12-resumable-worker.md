@@ -2,7 +2,7 @@
 
 [Índice dos tickets](../TICKETS.md) · [Especificação](../SPEC.md) · [TDD](../TDD.md)
 
-Status: **proposto; não implementado**.
+Status: **worker local implementado; ver [estado](../IMPLEMENTATION-STATUS.md)**.
 
 ## Objetivo e entrega
 

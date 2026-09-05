@@ -2,7 +2,7 @@
 
 [Índice dos tickets](../TICKETS.md) · [Especificação](../SPEC.md) · [TDD](../TDD.md)
 
-Status: **proposto; não implementado**.
+Status: **parcial no piloto; snapshot distribuído permanece pendente**.
 
 ## Objetivo e entrega
 
