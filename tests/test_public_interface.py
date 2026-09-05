@@ -144,3 +144,47 @@ def test_document_update_preserves_an_externally_enriched_skill(tmp_path: Path) 
     assert updated_revisions["corpus_revision"] != first_revisions["corpus_revision"]
     assert updated_revisions["skill_revision"] == enriched_revisions["skill_revision"]
     assert updated_revisions["composition"] != first_revisions["composition"]
+
+
+def test_document_update_blocks_when_enrichment_evidence_is_stale(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    guide = source / "guide.md"
+    guide.write_text("# Guide\nBefore.\n", encoding="utf-8")
+    output = tmp_path / "package"
+    request = docops.OperationRequest(
+        source,
+        docops.OperationOptions(output_dir=output, source_root=tmp_path, slug="guide", license="MIT"),
+    )
+    assert docops.apply(docops.plan(request)).ok
+    skill = output / "skill" / "SKILL.md"
+    skill.write_text(
+        skill.read_text(encoding="utf-8").replace(
+            "This structural scaffold contains headings and provenance only; an external `book-to-skill` skill may fold richer mental models into it.",
+            "Reviewed externally.",
+        ),
+        encoding="utf-8",
+    )
+    docops.record_skill_enrichment(output, tool="book-to-skill", version="2.0")
+    skill.write_text(skill.read_text(encoding="utf-8") + "\nChanged without evidence.\n", encoding="utf-8")
+    guide.write_text("# Guide\nAfter.\n", encoding="utf-8")
+
+    result = docops.apply(
+        docops.plan(
+            docops.OperationRequest(
+                source,
+                docops.OperationOptions(
+                    output_dir=output,
+                    source_root=tmp_path,
+                    slug="guide",
+                    license="MIT",
+                    mode="update",
+                ),
+            )
+        )
+    )
+
+    assert not result.ok
+    assert result.outcome["code"] == "skill_enrichment_invalid"
+    assert "Changed without evidence." in skill.read_text(encoding="utf-8")
+    assert (output / "rag" / "documents" / "guide.md").read_text(encoding="utf-8") == "# Guide\nBefore.\n"

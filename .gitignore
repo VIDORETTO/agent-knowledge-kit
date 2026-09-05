@@ -27,5 +27,6 @@ documents/*
 /dist/
 *.egg-info/
 /.scratch/
+.*.docops-runtime/
 skills/generated/
 config/network.yaml
