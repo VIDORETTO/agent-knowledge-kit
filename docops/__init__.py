@@ -12,6 +12,7 @@ __all__ = [
     "inspect",
     "plan",
     "preview",
+    "record_skill_enrichment",
 ]
 __version__ = "1.1.0"
 
@@ -54,6 +55,14 @@ def preview(*args, **kwargs):
     from .operations import preview as preview_plan
 
     return preview_plan(*args, **kwargs)
+
+
+def record_skill_enrichment(*args, **kwargs):
+    """Record validated enrichment produced by an external skill tool."""
+
+    from .readiness import record_skill_enrichment as record_enrichment
+
+    return record_enrichment(*args, **kwargs)
 
 
 def __getattr__(name):

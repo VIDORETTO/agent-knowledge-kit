@@ -54,7 +54,7 @@ from .primitives import (
     write_if_changed as _write_if_changed,
 )
 from .rag_sync import RagSynchronizer, package_rag_config_text
-from .readiness import assess_readiness
+from .readiness import assess_readiness, skill_fingerprint
 from .repository_acquirer import RepositoryAcquirer
 from .runtime import runtime_provenance
 from .source_resolver import SourceResolution, SourceResolver, canonicalize_url
@@ -1119,6 +1119,30 @@ def _copy_preserved_user_files(source: Path, stage: Path) -> list[str]:
     copied: list[str] = ["config.yaml"]
     if not source.is_dir():
         return copied
+
+    enrichment_evidence = source / ".docops" / "skill-enrichment.json"
+    preserve_enriched_skill = enrichment_evidence.is_file() and (source / "skill").is_dir()
+    if preserve_enriched_skill:
+        readiness = assess_readiness(source)
+        if readiness.get("skill") != "skill-enriched":
+            raise OperationFailure(
+                "skill_enrichment_invalid",
+                "externally enriched skill evidence no longer matches the active skill",
+                phase="prepare",
+            )
+        skill_source = source / "skill"
+        if _contains_symlink(skill_source):
+            raise OperationFailure(
+                "unsafe_user_artifact",
+                "externally enriched skill contains a symbolic link",
+                phase="prepare",
+            )
+        shutil.copytree(skill_source, stage / "skill", dirs_exist_ok=True)
+        copied.extend(path.relative_to(stage).as_posix() for path in (stage / "skill").rglob("*") if path.is_file())
+        metadata = stage / ".docops"
+        metadata.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(enrichment_evidence, metadata / enrichment_evidence.name)
+        copied.append(".docops/skill-enrichment.json")
     for child in source.iterdir():
         if child.name in _GENERATED_ROOTS:
             continue
@@ -1191,7 +1215,21 @@ def _write_artifacts(stage: Path, plan_value: OperationPlan) -> None:
     source["input"] = plan_value.request.source
     source["license"] = plan_value.provenance.get("license", "unknown")
     accepted = [entry for entry in (_thaw(item) for item in plan_value.entries) if entry.get("status") == "accepted"]
-    write_skill(stage, selected.slug if selected else "documentation", accepted, source)
+    enrichment_path = stage / ".docops" / "skill-enrichment.json"
+    enriched_skill = False
+    if enrichment_path.is_file() and (stage / "skill" / "SKILL.md").is_file():
+        try:
+            evidence = json.loads(enrichment_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            evidence = None
+        enriched_skill = bool(
+            isinstance(evidence, dict)
+            and evidence.get("schema_version") == 1
+            and evidence.get("validated") is True
+            and evidence.get("skill_hash") == skill_fingerprint(stage)
+        )
+    if not enriched_skill:
+        write_skill(stage, selected.slug if selected else "documentation", accepted, source)
     write_router(stage, selected.slug if selected else "documentation")
     harness_text = json.dumps(build_harness_manifest(stage), indent=2, ensure_ascii=False, sort_keys=True) + "\n"
     _write_if_changed(stage / "harness.json", harness_text)
