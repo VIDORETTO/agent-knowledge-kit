@@ -28,7 +28,7 @@ from .operations import apply as apply_operation
 from .operations import plan as build_plan
 from .package_validator import validate_package
 from .rag_sync import RagSynchronizer
-from .readiness import assess_readiness
+from .readiness import assess_readiness, record_skill_enrichment, skill_fingerprint
 from .revisions import compute_revisions
 from .state import SourceRecord, StateStore
 from .storage import write_json_atomic, write_text_atomic
@@ -38,6 +38,7 @@ DEBOUNCE_SECONDS = 60.0
 MAX_DEBOUNCE_SECONDS = 5 * 60.0
 JOB_LEASE_SECONDS = 5 * 60.0
 MAX_ATTEMPTS = 5
+MAX_ENRICHMENT_BYTES = 4 * 1024 * 1024
 CONCEPTUAL_EVENT_TYPES = frozenset({"document.changed", "source.reconcile", "source.revoked", "source.conflict"})
 
 
@@ -271,6 +272,92 @@ class LifecycleStore:
             )
             row = connection.execute("SELECT * FROM sources WHERE source_id = ?", (source_id,)).fetchone()
         return {"ok": True, "source": self._public_row(row) if row else None}
+
+    def revoke_source(self, source_id: str, *, actor: str, reason: str = "") -> dict[str, Any]:
+        """Create an explicit tombstone and immediately block derived readers."""
+
+        if not source_id.strip() or not actor.strip():
+            return {"ok": False, "code": "source_revoke_invalid"}
+        with self._connect() as connection:
+            row = connection.execute("SELECT * FROM sources WHERE source_id=?", (source_id,)).fetchone()
+            if row is None:
+                return {"ok": False, "code": "source_not_found"}
+            connection.execute(
+                "UPDATE sources SET status='revoked',updated_at=? WHERE source_id=?",
+                (utc_now(), source_id),
+            )
+        canonical = str(row["canonical"])
+        local_prefix = ""
+        if str(row["kind"]) == "local":
+            local_prefix = f"file://local/{hashlib.sha256(canonical.encode('utf-8')).hexdigest()[:16]}/"
+        destinations: list[str] = []
+        manifest_path = self.package_root / "manifest.json"
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            manifest = {}
+        entries = manifest.get("entries") if isinstance(manifest, dict) else []
+        package_source = manifest.get("source", {}).get("canonical") if isinstance(manifest, dict) else None
+        if isinstance(entries, list):
+            destinations = sorted(
+                {
+                    str(entry.get("destination"))
+                    for entry in entries
+                    if isinstance(entry, Mapping)
+                    and entry.get("destination")
+                    and (
+                        str(entry.get("canonical") or "") == canonical
+                        or str(entry.get("canonical") or "").startswith(canonical.rstrip("/") + "/")
+                        or (local_prefix and str(entry.get("canonical") or "").startswith(local_prefix))
+                        or (str(package_source or "").startswith("file://local/") and str(row["kind"]) == "local")
+                        or (package_source and canonical == str(package_source))
+                    )
+                }
+            )
+        revocations_path = self.package_root / ".docops" / "revocations.json"
+        try:
+            current = json.loads(revocations_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            current = {"schema_version": 1, "sources": []}
+        records = current.get("sources") if isinstance(current, dict) else []
+        if not isinstance(records, list):
+            records = []
+        records = [item for item in records if not (isinstance(item, Mapping) and item.get("source_id") == source_id)]
+        records.append(
+            {
+                "source_id": source_id,
+                "canonical": canonical,
+                "destinations": destinations,
+                "actor": redact_text(actor),
+                "reason": redact_text(reason),
+                "revoked_at": utc_now(),
+            }
+        )
+        revocations_path.parent.mkdir(parents=True, exist_ok=True)
+        write_json_atomic(revocations_path, {"schema_version": 1, "sources": records})
+        if isinstance(manifest, dict):
+            manifest["revocations"] = {"source_ids": sorted({str(item.get("source_id")) for item in records})}
+            manifest["revisions"] = compute_revisions(self.package_root)
+            write_json_atomic(manifest_path, manifest)
+        event = self.submit_event(
+            event_type="source.revoked",
+            source_id=source_id,
+            observed_revision=_hash({"source_id": source_id, "canonical": canonical, "destinations": destinations}),
+            debounce_seconds=0.0,
+            payload={
+                "source": canonical,
+                "destinations": destinations,
+                "critical": True,
+                "reason": redact_text(reason),
+            },
+        )
+        return {
+            "ok": True,
+            "source_id": source_id,
+            "status": "revoked",
+            "destinations": destinations,
+            "event": event,
+        }
 
     def submit_event(
         self,
@@ -916,6 +1003,204 @@ class LifecycleStore:
             row = connection.execute("SELECT * FROM candidates WHERE candidate_id=?", (candidate_id,)).fetchone()
         return self._public_row(row) if row else None
 
+    def enrichment_request(self, candidate_id: str) -> dict[str, Any]:
+        row = self.candidate(candidate_id)
+        if row is None:
+            return {"ok": False, "code": "candidate_not_found"}
+        revisions = row.get("revisions") if isinstance(row.get("revisions"), Mapping) else {}
+        request = {
+            "schema_version": 1,
+            "request_id": f"enrichment-{_hash({'candidate_id': candidate_id, 'revisions': revisions})[:24]}",
+            "candidate_id": candidate_id,
+            "status": row.get("status"),
+            "base_revisions": revisions,
+            "allowed_artifacts": ["skill/SKILL.md", "skill/*.md"],
+            "max_bytes": MAX_ENRICHMENT_BYTES,
+            "policy": "external-harness-review-required",
+        }
+        return {"ok": True, "request": request}
+
+    def submit_enrichment(
+        self,
+        candidate_id: str,
+        *,
+        skill_root: Path | str,
+        tool: str,
+        version: str,
+        provenance: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Import a constrained external skill result into a candidate only."""
+
+        row = self.candidate(candidate_id)
+        if row is None:
+            return {"ok": False, "code": "candidate_not_found"}
+        if row.get("status") not in {"draft", "review_required"}:
+            return {"ok": False, "code": "candidate_not_enrichable", "status": row.get("status")}
+        if not tool.strip() or not version.strip():
+            return {"ok": False, "code": "enrichment_metadata_required"}
+        candidate_path = self._candidate_path(candidate_id)
+        before = compute_revisions(candidate_path)
+        source = Path(skill_root).expanduser().resolve()
+        if source == candidate_path or candidate_path in source.parents:
+            return {"ok": False, "code": "enrichment_source_inside_candidate"}
+        if (source / "skill").is_dir() and (source / "skill" / "SKILL.md").is_file():
+            source = source / "skill"
+        if not source.is_dir() or source.is_symlink() or not (source / "SKILL.md").is_file():
+            return {"ok": False, "code": "enrichment_skill_missing"}
+        files: list[Path] = []
+        total = 0
+        for path in sorted(source.rglob("*")):
+            if path.is_dir():
+                continue
+            if path.is_symlink() or path.suffix.casefold() != ".md":
+                return {"ok": False, "code": "enrichment_artifact_not_allowed"}
+            try:
+                path.relative_to(source)
+                size = path.stat().st_size
+            except OSError:
+                return {"ok": False, "code": "enrichment_artifact_unreadable"}
+            total += size
+            if total > MAX_ENRICHMENT_BYTES:
+                return {"ok": False, "code": "enrichment_too_large"}
+            files.append(path)
+        if not files:
+            return {"ok": False, "code": "enrichment_skill_missing"}
+        stage = candidate_path / ".docops" / f"enrichment-{uuid.uuid4().hex}"
+        stage.mkdir(parents=True, exist_ok=True)
+        backup_skill: Path | None = None
+        try:
+            for path in files:
+                relative = path.relative_to(source)
+                destination = stage / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(path, destination)
+            active_skill = candidate_path / "skill"
+            backup_skill = candidate_path / ".docops" / f"skill-backup-{uuid.uuid4().hex}"
+            if active_skill.exists():
+                os.replace(active_skill, backup_skill)
+            os.replace(stage, active_skill)
+            if backup_skill.exists():
+                shutil.rmtree(backup_skill)
+            receipt_provenance = {
+                **dict(provenance or {}),
+                "base_composition": before["composition"],
+                "input_skill_hash": hashlib.sha256(
+                    "".join(
+                        f"{path.relative_to(source).as_posix()}:{hashlib.sha256(path.read_bytes()).hexdigest()}\\n"
+                        for path in files
+                    ).encode("utf-8")
+                ).hexdigest(),
+            }
+            receipt_path = record_skill_enrichment(
+                candidate_path,
+                tool=tool,
+                version=version,
+                provenance=receipt_provenance,
+                artifacts=[f"skill/{path.relative_to(source).as_posix()}" for path in files],
+            )
+        except (OSError, ValueError, UnicodeError) as exc:
+            if stage.exists():
+                shutil.rmtree(stage, ignore_errors=True)
+            if backup_skill is not None and backup_skill.exists() and not (candidate_path / "skill").exists():
+                os.replace(backup_skill, candidate_path / "skill")
+            return {"ok": False, "code": "enrichment_import_failed", "message": redact_text(exc)}
+        revisions = compute_revisions(candidate_path)
+        evidence = row.get("evidence") if isinstance(row.get("evidence"), Mapping) else {}
+        updated_evidence = {
+            **dict(evidence),
+            "enrichment": {
+                "receipt": ".docops/skill-enrichment.json",
+                "tool": redact_text(tool),
+                "version": redact_text(version),
+                "base_composition": before["composition"],
+                "output_skill_hash": skill_fingerprint(candidate_path),
+                "receipt_path": str(receipt_path.name),
+            },
+        }
+        self.update_candidate(candidate_id, status="review_required", revisions=revisions, evidence=updated_evidence)
+        return {
+            "ok": True,
+            "candidate_id": candidate_id,
+            "status": "review_required",
+            "base_composition": before["composition"],
+            "skill_revision": revisions["skill_revision"],
+            "receipt": ".docops/skill-enrichment.json",
+        }
+
+    def evaluate_candidate(self, candidate_id: str, evidence: Mapping[str, Any]) -> dict[str, Any]:
+        """Persist an external evaluation receipt tied to the candidate hash."""
+
+        row = self.candidate(candidate_id)
+        if row is None:
+            return {"ok": False, "code": "candidate_not_found"}
+        if row.get("status") not in {"draft", "review_required"}:
+            return {"ok": False, "code": "candidate_not_evaluable", "status": row.get("status")}
+        candidate_path = self._candidate_path(candidate_id)
+        composition = compute_revisions(candidate_path)["composition"]
+        declared = evidence.get("composition") or evidence.get("evaluated_composition")
+        if declared is not None and str(declared) != composition:
+            return {"ok": False, "code": "evaluation_stale"}
+        metrics = evidence.get("metrics")
+        if not isinstance(metrics, Mapping) or not metrics:
+            return {"ok": False, "code": "evaluation_metrics_required"}
+        safe_metrics: dict[str, float] = {}
+        for key, raw in metrics.items():
+            try:
+                value = float(raw)
+            except (TypeError, ValueError, OverflowError):
+                return {"ok": False, "code": "evaluation_metric_invalid", "metric": str(key)}
+            if key.endswith("rate") or key in {
+                "recall",
+                "precision",
+                "faithfulness",
+                "abstention_rate",
+                "recall_at_5",
+                "mrr_at_5",
+            }:
+                if not 0 <= value <= 1:
+                    return {"ok": False, "code": "evaluation_metric_out_of_range", "metric": str(key)}
+            elif value < 0:
+                return {"ok": False, "code": "evaluation_metric_out_of_range", "metric": str(key)}
+            safe_metrics[str(key)] = value
+        envelope = {
+            "schema_version": 1,
+            "ok": evidence.get("ok") is not False,
+            "metrics": safe_metrics,
+            "composition": composition,
+            "metadata": redact_report(dict(evidence.get("metadata") or {})),
+            "source": "external-harness",
+        }
+        evaluation_path = candidate_path / ".docops" / "evaluation.json"
+        write_json_atomic(evaluation_path, envelope)
+        manifest_path = candidate_path / "manifest.json"
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            manifest = None
+        if isinstance(manifest, dict):
+            manifest["readiness"] = assess_readiness(candidate_path)
+            manifest["metrics"] = {
+                **(manifest.get("metrics") if isinstance(manifest.get("metrics"), dict) else {}),
+                "evaluation": envelope,
+            }
+            manifest["revisions"] = compute_revisions(candidate_path)
+            write_json_atomic(manifest_path, manifest)
+        revisions = compute_revisions(candidate_path)
+        current_evidence = row.get("evidence") if isinstance(row.get("evidence"), Mapping) else {}
+        self.update_candidate(
+            candidate_id,
+            status="review_required",
+            revisions=revisions,
+            evidence={**dict(current_evidence), "evaluation": envelope},
+        )
+        return {
+            "ok": True,
+            "candidate_id": candidate_id,
+            "composition": composition,
+            "metrics": safe_metrics,
+            "evaluation": ".docops/evaluation.json",
+        }
+
     def approve_candidate(self, candidate_id: str, *, actor: str, role: str, policy_revision: str) -> dict[str, Any]:
         row = self.candidate(candidate_id)
         if row is None:
@@ -1315,3 +1600,26 @@ def work_once(
             "code": "worker_failed",
             "message": redact_text(exc),
         }
+
+
+def work_loop(
+    package_root: Path | str,
+    *,
+    runtime_root: Path | str | None = None,
+    interval_seconds: float = 60.0,
+    max_jobs: int | None = None,
+) -> dict[str, Any]:
+    """Run the durable worker in the foreground until stopped or bounded."""
+
+    if interval_seconds <= 0 or (max_jobs is not None and max_jobs < 1):
+        return {"ok": False, "code": "worker_loop_invalid"}
+    processed: list[dict[str, Any]] = []
+    while max_jobs is None or len(processed) < max_jobs:
+        result = work_once(package_root, runtime_root=runtime_root)
+        if result.get("worked"):
+            processed.append(result)
+        elif max_jobs is not None:
+            break
+        if max_jobs is None or len(processed) < max_jobs:
+            time.sleep(interval_seconds)
+    return {"ok": True, "worked": bool(processed), "processed": processed}

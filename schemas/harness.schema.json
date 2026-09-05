@@ -7,6 +7,18 @@
   "properties": {
     "schema_version": {"const": 1},
     "package_root": {"const": "."},
+    "generation": {
+      "type": "object",
+      "required": ["schema_version", "release_id", "corpus_revision", "index_revision", "skill_revision", "router_revision"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "release_id": {"type": "string"},
+        "corpus_revision": {"type": "string"},
+        "index_revision": {"type": "string"},
+        "skill_revision": {"type": "string"},
+        "router_revision": {"type": "string"}
+      }
+    },
     "skills": {"type": "array", "minItems": 2, "items": {"type": "string"}},
     "mcp": {
       "type": "object",

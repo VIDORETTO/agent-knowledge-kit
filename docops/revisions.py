@@ -56,7 +56,7 @@ def compute_revisions(package_root: Path | str) -> dict[str, Any]:
     root = Path(package_root).resolve()
     corpus_revision = _combined_digest(
         root,
-        ("rag/sources.json", ".docops/state.json"),
+        ("rag/sources.json", ".docops/state.json", ".docops/revocations.json"),
         ("rag/documents",),
     )
     index_revision = _combined_digest(root, ("rag/index.json", "config.yaml"))

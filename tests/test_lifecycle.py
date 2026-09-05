@@ -188,6 +188,80 @@ def test_lifecycle_candidate_requires_approval_and_publishes_with_rollback(tmp_p
     assert (package / "rag" / "documents" / "guide.md").read_text(encoding="utf-8") == "# Guide\nVersion two.\n"
 
 
+def test_external_skill_enrichment_is_imported_only_into_candidate(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "guide.md").write_text("# Guide\nSource fact.\n", encoding="utf-8")
+    package = tmp_path / "package"
+    assert _run("run", str(source), "--output", str(package), "--slug", "guide", "--license", "MIT")["ok"]
+    active_skill = (package / "skill" / "SKILL.md").read_text(encoding="utf-8")
+    candidate = _run(
+        "lifecycle",
+        "candidate",
+        "prepare",
+        "--package",
+        str(package),
+        "--source",
+        str(source),
+        "--slug",
+        "guide",
+        "--license",
+        "MIT",
+    )
+    request = _run(
+        "lifecycle",
+        "candidate",
+        "enrichment-request",
+        "--package",
+        str(package),
+        "--candidate-id",
+        candidate["candidate_id"],
+    )
+    enriched = tmp_path / "enriched-skill"
+    enriched.mkdir()
+    (enriched / "SKILL.md").write_text(
+        "---\nname: guide\ndescription: reviewed conceptual guidance\n---\n\n# Reviewed guidance\n",
+        encoding="utf-8",
+    )
+    (enriched / "patterns.md").write_text("# Patterns\nUse the reviewed pattern.\n", encoding="utf-8")
+    receipt = _run(
+        "lifecycle",
+        "candidate",
+        "enrich",
+        "--package",
+        str(package),
+        "--candidate-id",
+        candidate["candidate_id"],
+        "--skill-root",
+        str(enriched),
+        "--tool",
+        "book-to-skill",
+        "--version",
+        "2.0",
+    )
+    evaluation = _run(
+        "lifecycle",
+        "candidate",
+        "evaluate",
+        "--package",
+        str(package),
+        "--candidate-id",
+        candidate["candidate_id"],
+        "--evidence-json",
+        '{"metrics":{"recall":0.9,"mrr_at_5":0.8,"faithfulness":0.95,"abstention_rate":0.1,"latency_ms":12,"cost":0.02}}',
+    )
+    status = _run(
+        "lifecycle", "candidate", "status", "--package", str(package), "--candidate-id", candidate["candidate_id"]
+    )
+
+    assert request["request"]["allowed_artifacts"] == ["skill/SKILL.md", "skill/*.md"]
+    assert receipt["status"] == "review_required"
+    assert evaluation["metrics"]["faithfulness"] == 0.95
+    assert status["status"] == "review_required"
+    assert status["evidence"]["enrichment"]["receipt"] == ".docops/skill-enrichment.json"
+    assert (package / "skill" / "SKILL.md").read_text(encoding="utf-8") == active_skill
+
+
 def test_conversation_learning_stays_quarantined_until_independent_review(tmp_path: Path) -> None:
     package = tmp_path / "package"
     package.mkdir()
@@ -444,6 +518,46 @@ def test_source_reconcile_is_read_only_when_hashes_are_unchanged(tmp_path: Path)
     assert status["jobs"]["pending"] == 1
 
 
+def test_source_revocation_writes_tombstone_and_queues_review_without_resurrecting_content(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    guide = source / "guide.md"
+    guide.write_text("# Guide\nRevocable.\n", encoding="utf-8")
+    package = tmp_path / "package"
+    assert _run("run", str(source), "--output", str(package), "--slug", "guide", "--license", "MIT")["ok"]
+    _run(
+        "lifecycle",
+        "source",
+        "register",
+        "--package",
+        str(package),
+        "--source-id",
+        "source-guide",
+        "--canonical",
+        source.as_uri(),
+        "--owner",
+        "owner@example.test",
+    )
+    revoked = _run(
+        "lifecycle",
+        "source",
+        "revoke",
+        "--package",
+        str(package),
+        "--source-id",
+        "source-guide",
+        "--actor",
+        "owner@example.test",
+        "--reason",
+        "license withdrawn",
+    )
+    assert revoked["status"] == "revoked"
+    assert "guide.md" in revoked["destinations"]
+    tombstone = json.loads((package / ".docops" / "revocations.json").read_text(encoding="utf-8"))
+    assert tombstone["sources"][0]["source_id"] == "source-guide"
+    assert (package / "rag" / "documents" / "guide.md").read_text(encoding="utf-8") == "# Guide\nRevocable.\n"
+
+
 def test_repeated_feedback_opens_investigation_without_mutating_golden_or_active_package(tmp_path: Path) -> None:
     package = tmp_path / "package"
     package.mkdir()
@@ -470,3 +584,23 @@ def test_repeated_feedback_opens_investigation_without_mutating_golden_or_active
     assert [result["investigation_required"] for result in results] == [False, False, True]
     assert status["feedback"]["unanswered"] == 3
     assert not (package / "golden-set").exists()
+
+
+def test_bounded_worker_loop_is_safe_for_external_schedulers(tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    package.mkdir()
+
+    result = _run(
+        "lifecycle",
+        "work",
+        "--package",
+        str(package),
+        "--loop",
+        "--interval-seconds",
+        "0.01",
+        "--max-jobs",
+        "1",
+    )
+
+    assert result["ok"] is True
+    assert result["worked"] is False

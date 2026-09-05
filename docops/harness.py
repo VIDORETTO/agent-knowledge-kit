@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .contracts import validate_artifact
+from .revisions import compute_revisions
 from .storage import write_json_atomic
 
 
@@ -14,9 +15,19 @@ def build_harness_manifest(package_root: Path | str) -> dict[str, Any]:
     """Describe how a harness can load artifacts without author paths."""
 
     root = Path(package_root).resolve()
+    revisions = compute_revisions(root)
+    generation = {
+        "schema_version": 1,
+        "release_id": revisions["release_id"],
+        "corpus_revision": revisions["corpus_revision"],
+        "index_revision": revisions["index_revision"],
+        "skill_revision": revisions["skill_revision"],
+        "router_revision": revisions["router_revision"],
+    }
     payload = {
         "schema_version": 1,
         "package_root": ".",
+        "generation": generation,
         "skills": ["skill", "router"],
         "mcp": {
             "name": "knowledge-rag",
@@ -28,6 +39,7 @@ def build_harness_manifest(package_root: Path | str) -> dict[str, Any]:
                 "KNOWLEDGE_RAG_DIR": ".",
                 "KNOWLEDGE_RAG_WATCHER_DISABLED": "1",
                 "KNOWLEDGE_RAG_READ_ONLY": "1",
+                "KNOWLEDGE_RAG_GENERATION": generation["release_id"],
             },
             "config": "config.yaml",
         },

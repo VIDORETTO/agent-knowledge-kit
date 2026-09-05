@@ -11,7 +11,7 @@ from .config_audit import audit_config_file
 from .contracts import validate_artifact
 from .doctor import run_doctor
 from .evaluator import evaluate_package, generate_golden_candidates
-from .lifecycle import LifecycleStore, prepare_candidate, reconcile_source, work_once
+from .lifecycle import LifecycleStore, prepare_candidate, reconcile_source, work_loop, work_once
 from .manifest import redact_metadata
 from .observability import redact_report, redact_text
 from .operations import OperationOptions, preview
@@ -129,6 +129,13 @@ def build_parser() -> argparse.ArgumentParser:
     register.add_argument("--owner", required=True)
     register.add_argument("--status", default="admitted")
     register.add_argument("--json", action="store_true")
+    revoke_source = source_commands.add_parser("revoke")
+    revoke_source.add_argument("--package", type=Path, required=True)
+    revoke_source.add_argument("--runtime-root", type=Path)
+    revoke_source.add_argument("--source-id", required=True)
+    revoke_source.add_argument("--actor", required=True)
+    revoke_source.add_argument("--reason", default="")
+    revoke_source.add_argument("--json", action="store_true")
     reconcile = source_commands.add_parser("reconcile")
     reconcile.add_argument("--package", type=Path, required=True)
     reconcile.add_argument("--runtime-root", type=Path)
@@ -177,6 +184,9 @@ def build_parser() -> argparse.ArgumentParser:
     work.add_argument("--package", type=Path, required=True)
     work.add_argument("--runtime-root", type=Path)
     work.add_argument("--force", action="store_true", help="process the earliest job before debounce expires")
+    work.add_argument("--loop", action="store_true", help="keep the worker alive for scheduled processing")
+    work.add_argument("--interval-seconds", type=float, default=60.0)
+    work.add_argument("--max-jobs", type=int)
     work.add_argument("--json", action="store_true")
 
     candidate = lifecycle_commands.add_parser("candidate", help="prepare, approve, publish or inspect a candidate")
@@ -193,6 +203,26 @@ def build_parser() -> argparse.ArgumentParser:
     prepare.add_argument("--license")
     prepare.add_argument("--index-rag", action="store_true")
     prepare.add_argument("--json", action="store_true")
+    enrichment_request = candidate_commands.add_parser("enrichment-request")
+    enrichment_request.add_argument("--package", type=Path, required=True)
+    enrichment_request.add_argument("--runtime-root", type=Path)
+    enrichment_request.add_argument("--candidate-id", required=True)
+    enrichment_request.add_argument("--json", action="store_true")
+    enrich = candidate_commands.add_parser("enrich")
+    enrich.add_argument("--package", type=Path, required=True)
+    enrich.add_argument("--runtime-root", type=Path)
+    enrich.add_argument("--candidate-id", required=True)
+    enrich.add_argument("--skill-root", type=Path, required=True)
+    enrich.add_argument("--tool", required=True)
+    enrich.add_argument("--version", required=True)
+    enrich.add_argument("--provenance-json", default="{}")
+    enrich.add_argument("--json", action="store_true")
+    candidate_evaluate = candidate_commands.add_parser("evaluate")
+    candidate_evaluate.add_argument("--package", type=Path, required=True)
+    candidate_evaluate.add_argument("--runtime-root", type=Path)
+    candidate_evaluate.add_argument("--candidate-id", required=True)
+    candidate_evaluate.add_argument("--evidence-json", required=True)
+    candidate_evaluate.add_argument("--json", action="store_true")
     candidate_status = candidate_commands.add_parser("status")
     candidate_status.add_argument("--package", type=Path, required=True)
     candidate_status.add_argument("--runtime-root", type=Path)
@@ -413,6 +443,12 @@ def _dispatch(args: argparse.Namespace) -> int:
                         "status": args.status,
                     }
                 )
+            elif args.source_command == "revoke":
+                result = store.revoke_source(
+                    args.source_id,
+                    actor=args.actor,
+                    reason=args.reason,
+                )
             elif args.source_command == "reconcile":
                 result = reconcile_source(
                     args.package,
@@ -461,7 +497,16 @@ def _dispatch(args: argparse.Namespace) -> int:
                 },
             )
         elif args.lifecycle_command == "work":
-            result = work_once(args.package, runtime_root=args.runtime_root, force=args.force)
+            result = (
+                work_loop(
+                    args.package,
+                    runtime_root=args.runtime_root,
+                    interval_seconds=args.interval_seconds,
+                    max_jobs=args.max_jobs,
+                )
+                if args.loop
+                else work_once(args.package, runtime_root=args.runtime_root, force=args.force)
+            )
         elif args.lifecycle_command == "candidate":
             if args.candidate_command == "prepare":
                 result = prepare_candidate(
@@ -478,6 +523,31 @@ def _dispatch(args: argparse.Namespace) -> int:
                         "index_rag": args.index_rag,
                     },
                 )
+            elif args.candidate_command == "enrichment-request":
+                result = store.enrichment_request(args.candidate_id)
+            elif args.candidate_command == "enrich":
+                try:
+                    provenance = json.loads(args.provenance_json)
+                except json.JSONDecodeError as exc:
+                    result = {"ok": False, "code": "enrichment_json_invalid", "message": redact_text(exc)}
+                else:
+                    result = store.submit_enrichment(
+                        args.candidate_id,
+                        skill_root=args.skill_root,
+                        tool=args.tool,
+                        version=args.version,
+                        provenance=provenance if isinstance(provenance, dict) else {},
+                    )
+            elif args.candidate_command == "evaluate":
+                try:
+                    evidence = json.loads(args.evidence_json)
+                except json.JSONDecodeError as exc:
+                    result = {"ok": False, "code": "evaluation_json_invalid", "message": redact_text(exc)}
+                else:
+                    result = store.evaluate_candidate(
+                        args.candidate_id,
+                        evidence if isinstance(evidence, dict) else {},
+                    )
             elif args.candidate_command == "status":
                 candidate_value = store.candidate(args.candidate_id)
                 result = (

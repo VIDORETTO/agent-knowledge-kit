@@ -374,6 +374,39 @@ def validate_package(package_root: Path | str) -> ValidationResult:
             if file_count != len(accepted_entries):
                 _error(errors, "manifest_document_count", "accepted manifest entries do not match rag/documents")
 
+    revocations_path = root / ".docops" / "revocations.json"
+    if revocations_path.exists():
+        if revocations_path.is_symlink():
+            _error(errors, "symlink_artifact", "revocations.json must be a regular file")
+        else:
+            try:
+                revocations = json.loads(revocations_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                _error(errors, "invalid_revocations", f"could not read revocations.json: {exc}")
+            else:
+                records = revocations.get("sources") if isinstance(revocations, dict) else None
+                if (
+                    not isinstance(revocations, dict)
+                    or revocations.get("schema_version") != 1
+                    or not isinstance(records, list)
+                ):
+                    _error(errors, "revocations_schema", "revocations.json must contain schema_version=1 and sources[]")
+                else:
+                    for record in records:
+                        if not isinstance(record, dict) or not str(record.get("source_id") or "").strip():
+                            _error(errors, "revocation_identity", "each revocation needs a source_id")
+                            continue
+                        destinations = record.get("destinations", [])
+                        if not isinstance(destinations, list):
+                            _error(errors, "revocation_destinations", "revocation destinations must be a list")
+                            continue
+                        for destination in destinations:
+                            try:
+                                _safe_relative(root, destination, errors, "revocation_path")
+                            except TypeError:
+                                _error(errors, "revocation_path", "revocation destination must be relative")
+                    checks["revocations"] = {"ok": not any(error["code"].startswith("revocation") for error in errors)}
+
     checks["manifest"] = {"ok": not any(error["code"].startswith("manifest") for error in errors)}
     if not config_targets:
         config_targets = [root / "config.yaml"]

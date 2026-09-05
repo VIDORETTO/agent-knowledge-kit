@@ -4047,6 +4047,34 @@ def _mutation_blocked() -> Optional[str]:
     )
 
 
+def _revoked_destinations() -> set[str]:
+    """Load coordinator tombstones without making them an external service."""
+
+    path = config.documents_dir.parent.parent / ".docops" / "revocations.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return set()
+    records = payload.get("sources") if isinstance(payload, dict) else []
+    blocked: set[str] = set()
+    if isinstance(records, list):
+        for record in records:
+            if isinstance(record, dict) and isinstance(record.get("destinations"), list):
+                blocked.update(str(item).replace("\\", "/").lstrip("./") for item in record["destinations"])
+    return blocked
+
+
+def _is_revoked_path(filepath: str) -> bool:
+    normalized = str(filepath).replace("\\", "/")
+    docs_root = config.documents_dir.resolve()
+    try:
+        relative = Path(filepath).resolve().relative_to(docs_root).as_posix()
+    except (OSError, ValueError):
+        marker = "/documents/"
+        relative = normalized.split(marker, 1)[1] if marker in normalized else normalized
+    return relative in _revoked_destinations()
+
+
 # =============================================================================
 # MCP Tools — Existing (6)
 # =============================================================================
@@ -4139,6 +4167,7 @@ def search_knowledge(
             }
         )
 
+    results = [result for result in results if not _is_revoked_path(str(result.get("source") or ""))]
     if not results:
         return json.dumps({"status": "no_results", "query": query, "message": "No relevant documents found."})
 
@@ -4189,6 +4218,8 @@ def get_document(filepath: str) -> str:
     returns chunks, not full docs. Use search_knowledge() first to find the filepath
     if unknown. Use list_documents() to browse all available files by category.
     """
+    if _is_revoked_path(filepath):
+        return json.dumps({"status": "error", "code": "source_revoked", "message": "document is revoked"})
     orchestrator = get_orchestrator()
     doc = orchestrator.get_document(filepath)
 
@@ -4368,7 +4399,11 @@ def list_documents(category: str = None) -> str:
     to read a specific file once you have its filepath.
     """
     orchestrator = get_orchestrator()
-    docs = orchestrator.list_documents(category=category)
+    docs = [
+        doc
+        for doc in orchestrator.list_documents(category=category)
+        if not _is_revoked_path(str(doc.get("source") or doc.get("filepath") or doc.get("filename") or ""))
+    ]
     return json.dumps(
         {"status": "success", "filter": category or "all", "count": len(docs), "documents": docs},
         indent=2,
@@ -4736,8 +4771,7 @@ def _run_transport(transport: str) -> None:
 
     if not token:
         raise RuntimeError(
-            f"{transport} transport requires server.auth.bearer_token; "
-            "refusing to start without authentication"
+            f"{transport} transport requires server.auth.bearer_token; refusing to start without authentication"
         )
 
     guarded = BearerAuthMiddleware(app, token)

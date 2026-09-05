@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping, Protocol
 
 from .mcp_client import McpEofError, McpTimeoutError, first_json_payload, start_mcp_server
+from .revisions import compute_revisions
 from .runtime import discover_rag_python, runtime_environment, runtime_provenance
 
 _TOKEN = re.compile(r"[\wÀ-ÿ][\wÀ-ÿ./:-]*", re.UNICODE)
@@ -182,6 +183,7 @@ class McpRetrievalAdapter:
         self.timeout_seconds = timeout_seconds
         self.client: Any = None
         self.server_info: dict[str, Any] = {}
+        self.pinned_composition: str | None = None
 
     def _ensure_client(self) -> Any:
         if self.client is not None:
@@ -206,6 +208,7 @@ class McpRetrievalAdapter:
         except (OSError, RuntimeError, TimeoutError) as exc:
             raise RetrievalError("mcp_start_failed", "could not start the retrieval backend") from exc
         self.server_info = dict(getattr(self.client, "server_info", {}) or {})
+        self.pinned_composition = compute_revisions(self.package_root).get("composition")
         expected_version = runtime_provenance(self.runtime_root, python=executable, environ=environment).get(
             "expected_version"
         )
@@ -223,6 +226,13 @@ class McpRetrievalAdapter:
             )
         return self.client
 
+    def _assert_pinned_generation(self) -> None:
+        if self.pinned_composition is None:
+            return
+        current = compute_revisions(self.package_root).get("composition")
+        if current != self.pinned_composition:
+            raise RetrievalError("generation_changed", "package generation changed during a pinned reader session")
+
     def _index(self) -> dict[str, Any]:
         try:
             value = json.loads((self.package_root / "rag" / "index.json").read_text(encoding="utf-8"))
@@ -230,8 +240,23 @@ class McpRetrievalAdapter:
             raise RetrievalError("rag_index_unreadable", "could not read package RAG metadata") from exc
         return value if isinstance(value, dict) else {}
 
+    def _revoked_destinations(self) -> set[str]:
+        path = self.package_root / ".docops" / "revocations.json"
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            return set()
+        records = payload.get("sources") if isinstance(payload, dict) else []
+        blocked: set[str] = set()
+        if isinstance(records, list):
+            for record in records:
+                if isinstance(record, Mapping) and isinstance(record.get("destinations"), list):
+                    blocked.update(str(item).replace("\\", "/").lstrip("./") for item in record["destinations"])
+        return blocked
+
     def search(self, query: str, *, max_results: int) -> list[dict[str, Any]]:
         client = self._ensure_client()
+        self._assert_pinned_generation()
         try:
             response = client.call(
                 "tools/call",
@@ -256,6 +281,8 @@ class McpRetrievalAdapter:
                 continue
             raw_source = str(item.get("source") or item.get("path") or "")
             source = _safe_source_reference(raw_source, documents_root)
+            if source in self._revoked_destinations():
+                continue
             hits.append({"source": source, "content": str(item.get("content") or ""), "score": item.get("score", 0.0)})
         return hits
 
@@ -279,6 +306,7 @@ class McpRetrievalAdapter:
         if self.client is not None:
             self.client.close()
             self.client = None
+            self.pinned_composition = None
 
 
 def adapter_for_package(
