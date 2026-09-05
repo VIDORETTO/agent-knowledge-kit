@@ -60,6 +60,8 @@ class NormalizationResult:
     error_code: str | None = None
     error: str | None = None
     untrusted: bool = False
+    language: str = "unknown"
+    locators: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -72,6 +74,8 @@ class NormalizationResult:
             "error_code": self.error_code,
             "error": self.error,
             "untrusted": self.untrusted,
+            "language": self.language,
+            "locators": self.locators,
         }
 
 
@@ -87,6 +91,40 @@ def _untrusted_warnings(content: str) -> tuple[bool, list[str]]:
     if any(pattern.search(content) for pattern in _INJECTION_PATTERNS):
         return True, ["possible prompt injection detected; content is untrusted and was not executed"]
     return False, []
+
+
+def _infer_language(content: str) -> str:
+    """Conservative language hint; explicit source metadata remains primary."""
+
+    lowered = content.casefold()
+    portuguese = len(re.findall(r"\b(?:não|uma|para|como|dos|das|que|com|por|é|são)\b", lowered))
+    english = len(re.findall(r"\b(?:the|and|for|with|from|this|that|are|is)\b", lowered))
+    accented = len(re.findall(r"[ãõáéíóúâêôç]", lowered))
+    if ((portuguese >= 2) or (portuguese >= 1 and accented >= 1)) and portuguese >= english:
+        return "pt"
+    if english >= 2 and english > portuguese:
+        return "en"
+    return "unknown"
+
+
+def _locators(content: str, fmt: str) -> list[dict[str, Any]]:
+    """Expose only locators present in normalized text; never invent pages."""
+
+    values: list[dict[str, Any]] = []
+    for line_number, line in enumerate(content.splitlines(), 1):
+        match = re.match(r"^\s*#{1,6}\s+(.+?)\s*$", line)
+        if match:
+            values.append({"kind": "section", "value": match.group(1).strip(), "line": line_number})
+    if fmt == "pdf":
+        for match in re.finditer(r"^## Page (\d+)\s*$", content, flags=re.MULTILINE):
+            values.append({"kind": "page", "value": int(match.group(1))})
+    if fmt == "pptx":
+        for match in re.finditer(r"^## Slide (\d+)\s*$", content, flags=re.MULTILINE):
+            values.append({"kind": "slide", "value": int(match.group(1))})
+    if fmt == "xlsx":
+        for match in re.finditer(r"^## Sheet (\d+)\s*$", content, flags=re.MULTILINE):
+            values.append({"kind": "sheet", "value": int(match.group(1))})
+    return values
 
 
 def _openapi_markdown(document: dict[str, Any]) -> str:
@@ -147,14 +185,20 @@ def _extract_pdf(path: Path) -> str:
         from pypdf import PdfReader  # type: ignore[import-not-found]
 
         reader = PdfReader(str(path))
-        for page in reader.pages:
-            text_parts.append(page.extract_text() or "")
+        for index, page in enumerate(reader.pages, 1):
+            text = page.extract_text() or ""
+            if text.strip():
+                text_parts.append(f"## Page {index}\n\n{text.strip()}")
     except ImportError:
         try:
             import fitz  # type: ignore[import-not-found]
 
             document = fitz.open(str(path))
-            text_parts = [page.get_text() or "" for page in document]
+            text_parts = [
+                f"## Page {index}\n\n{text.strip()}"
+                for index, page in enumerate(document, 1)
+                if (text := (page.get_text() or "")).strip()
+            ]
         except ImportError as exc:
             raise RuntimeError("pypdf or PyMuPDF is required to normalize PDFs") from exc
         except Exception:
@@ -362,6 +406,14 @@ def normalize_file(
                 )
             document = Document(str(file_path))
             content = "\n\n".join(paragraph.text for paragraph in document.paragraphs if paragraph.text.strip())
+            table_parts: list[str] = []
+            for index, table in enumerate(document.tables, 1):
+                rows = ["\t".join(cell.text.strip() for cell in row.cells) for row in table.rows]
+                rows = [row for row in rows if row.strip()]
+                if rows:
+                    table_parts.extend([f"## Table {index}", "", *rows])
+            if table_parts:
+                content = "\n\n".join(part for part in [content, "\n".join(table_parts)] if part)
             title = _title_from_markdown(content, file_path.stem)
         elif suffix == ".ipynb":
             try:
@@ -428,4 +480,14 @@ def normalize_file(
         )
     untrusted, injection_warnings = _untrusted_warnings(content)
     warnings.extend(injection_warnings)
-    return NormalizationResult("accepted", content, origin, fmt, title=title, warnings=warnings, untrusted=untrusted)
+    return NormalizationResult(
+        "accepted",
+        content,
+        origin,
+        fmt,
+        title=title,
+        warnings=warnings,
+        untrusted=untrusted,
+        language=_infer_language(content),
+        locators=_locators(content, fmt),
+    )

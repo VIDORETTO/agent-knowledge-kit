@@ -187,6 +187,15 @@ def _get_nested(section: str, subsection: str, key: str, default):
     return val
 
 
+def _read_only_setting() -> bool:
+    """Resolve the MCP capability boundary with an environment override."""
+
+    raw = os.environ.get("KNOWLEDGE_RAG_READ_ONLY")
+    if raw is not None:
+        return raw.strip().casefold() in {"1", "true", "yes", "on"}
+    return bool(_get("server", "read_only", False))
+
+
 def _get_top(key: str, default):
     """Get a top-level value from YAML, falling back to default if missing or None."""
     val = _yaml.get(key)
@@ -807,6 +816,12 @@ class Config:
             if isinstance(_get("server", "logging", {}), dict)
             else "INFO"
         )
+    )
+    # Query harnesses set this environment flag to create a capability
+    # boundary.  Maintenance workers explicitly set it to ``0``.  The YAML
+    # value remains available for operators running the backend directly.
+    read_only: bool = field(
+        default_factory=lambda: _read_only_setting()
     )
 
     def __post_init__(self):

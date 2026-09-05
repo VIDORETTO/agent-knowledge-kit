@@ -36,12 +36,14 @@ def test_rag_synchronizer_runs_reindex_status_stats_and_smoke(monkeypatch, tmp_p
     executable = tmp_path / "python"
     executable.touch()
     calls: list[str] = []
+    arguments_seen: list[dict] = []
 
     class FakeClient:
         server_info = {"version": "4.8.5"}
 
         def call(self, _method: str, *, name: str, arguments: dict, **_kwargs: object) -> dict:
             calls.append(name)
+            arguments_seen.append(dict(arguments))
             payload = {
                 "reindex_documents": {"status": "started"},
                 "get_reindex_status": {"active": False, "progress": 1},
@@ -60,6 +62,7 @@ def test_rag_synchronizer_runs_reindex_status_stats_and_smoke(monkeypatch, tmp_p
     assert result.ok, result.error
     assert result.smoke == {"ok": True, "result_count": 0}
     assert calls == ["reindex_documents", "get_reindex_status", "get_index_stats", "search_knowledge", "close"]
+    assert arguments_seen[0] == {"force": False}
 
 
 def test_embedding_profile_change_forces_full_rebuild(monkeypatch, tmp_path: Path) -> None:

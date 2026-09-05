@@ -154,6 +154,16 @@ def build_parser() -> argparse.ArgumentParser:
     submit_event.add_argument("--event-id")
     submit_event.add_argument("--causation-id")
     submit_event.add_argument("--debounce-seconds", type=float, default=60.0)
+    submit_event.add_argument(
+        "--conceptual-impact",
+        choices=("unknown", "true", "false"),
+        default="unknown",
+        help="classify whether this change can affect conceptual guidance",
+    )
+    submit_event.add_argument("--facts-only", action="store_true")
+    submit_event.add_argument("--reindex-only", action="store_true")
+    submit_event.add_argument("--critical", action="store_true")
+    submit_event.add_argument("--normalized-chars", type=int, default=0)
     submit_event.add_argument("--slug")
     submit_event.add_argument("--version")
     submit_event.add_argument("--scope")
@@ -228,6 +238,13 @@ def build_parser() -> argparse.ArgumentParser:
     learning_review.add_argument("--reviewer", required=True)
     learning_review.add_argument("--note", default="")
     learning_review.add_argument("--json", action="store_true")
+    learning_revoke = learning_commands.add_parser("revoke")
+    learning_revoke.add_argument("--package", type=Path, required=True)
+    learning_revoke.add_argument("--runtime-root", type=Path)
+    learning_revoke.add_argument("--proposal-id", required=True)
+    learning_revoke.add_argument("--reviewer", required=True)
+    learning_revoke.add_argument("--reason", default="")
+    learning_revoke.add_argument("--json", action="store_true")
 
     feedback = lifecycle_commands.add_parser("feedback", help="record quality signals without changing knowledge")
     feedback_commands = feedback.add_subparsers(dest="feedback_command", required=True)
@@ -425,6 +442,13 @@ def _dispatch(args: argparse.Namespace) -> int:
                 debounce_seconds=args.debounce_seconds,
                 payload={
                     "source": args.source,
+                    "conceptual_impact": (
+                        None if args.conceptual_impact == "unknown" else args.conceptual_impact == "true"
+                    ),
+                    "facts_only": args.facts_only,
+                    "reindex_only": args.reindex_only,
+                    "critical": args.critical,
+                    "normalized_chars": max(0, args.normalized_chars),
                     "options": {
                         "source_root": str(args.source_root) if args.source_root else None,
                         "slug": args.slug,
@@ -495,6 +519,12 @@ def _dispatch(args: argparse.Namespace) -> int:
                     decision=args.decision,
                     reviewer=args.reviewer,
                     note=args.note,
+                )
+            elif args.learning_command == "revoke":
+                result = store.revoke_learning(
+                    args.proposal_id,
+                    reviewer=args.reviewer,
+                    reason=args.reason,
                 )
             else:
                 return 2

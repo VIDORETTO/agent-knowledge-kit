@@ -306,6 +306,8 @@ def test_admitted_learning_is_materialized_only_in_a_candidate(tmp_path: Path) -
         "fact",
         "--evidence-json",
         '[{"source":"manual.md","locator":"#fact"}]',
+        "--privacy",
+        "shared",
     )
     _run(
         "lifecycle",
@@ -344,6 +346,55 @@ def test_admitted_learning_is_materialized_only_in_a_candidate(tmp_path: Path) -
     assert status["status"] == "review_required"
     assert learning_files
     assert not (package / "rag" / "documents" / "learning" / f"{proposal['proposal_id']}.md").exists()
+
+
+def test_private_learning_is_admitted_for_memory_but_never_materialized_shared(tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    package.mkdir()
+    proposal = _run(
+        "lifecycle",
+        "learning",
+        "submit",
+        "--package",
+        str(package),
+        "--claim",
+        "Private fact for this user.",
+        "--claim-type",
+        "fact",
+        "--evidence-json",
+        '[{"source":"private-note.md","locator":"#fact"}]',
+    )
+    _run(
+        "lifecycle",
+        "learning",
+        "review",
+        "--package",
+        str(package),
+        "--proposal-id",
+        proposal["proposal_id"],
+        "--decision",
+        "admit",
+        "--reviewer",
+        "reviewer@example.test",
+    )
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "guide.md").write_text("# Guide\nStable.\n", encoding="utf-8")
+    _run("run", str(source), "--output", str(package), "--slug", "guide", "--license", "MIT")
+    candidate = _run(
+        "lifecycle",
+        "candidate",
+        "prepare",
+        "--package",
+        str(package),
+        "--source",
+        str(source),
+        "--slug",
+        "guide",
+        "--license",
+        "MIT",
+    )
+    assert candidate["materialized_learning"] == []
 
 
 def test_source_reconcile_is_read_only_when_hashes_are_unchanged(tmp_path: Path) -> None:

@@ -204,6 +204,7 @@ def runtime_environment(
     environ: Mapping[str, str] | None = None,
     disable_watcher: bool = True,
     vendor_root: Path | str | None = None,
+    read_only: bool | None = None,
 ) -> dict[str, str]:
     """Build a subprocess environment rooted at the current clone."""
 
@@ -222,6 +223,13 @@ def runtime_environment(
         environment["KNOWLEDGE_RAG_WATCHER_DISABLED"] = "1"
     else:
         environment.pop("KNOWLEDGE_RAG_WATCHER_DISABLED", None)
+    if read_only is True:
+        environment["KNOWLEDGE_RAG_READ_ONLY"] = "1"
+    elif read_only is False:
+        # Maintenance callers must be able to override a reader environment
+        # inherited from a parent harness.  The vendor server reads this once
+        # at process start, so an explicit zero is safer than deleting it.
+        environment["KNOWLEDGE_RAG_READ_ONLY"] = "0"
     # A user-level mirror can redirect model downloads and make otherwise
     # reproducible bootstrap fail. The caller can opt back in explicitly.
     environment.pop("HF_ENDPOINT", None)

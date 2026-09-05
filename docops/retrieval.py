@@ -193,7 +193,7 @@ class McpRetrievalAdapter:
         if not executable.is_file():
             raise RetrievalError("rag_python_missing", "knowledge-rag Python executable is unavailable")
         vendor = self.runtime_root / "skills" / "vendor" / "knowledge-rag"
-        environment = runtime_environment(self.package_root, vendor_root=vendor)
+        environment = runtime_environment(self.package_root, vendor_root=vendor, read_only=True)
         try:
             self.client = start_mcp_server(
                 executable,

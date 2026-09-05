@@ -24,7 +24,11 @@ def build_harness_manifest(package_root: Path | str) -> dict[str, Any]:
             "command": "python",
             "args": ["-m", "mcp_server.server"],
             "cwd": ".",
-            "env": {"KNOWLEDGE_RAG_DIR": ".", "KNOWLEDGE_RAG_WATCHER_DISABLED": "1"},
+            "env": {
+                "KNOWLEDGE_RAG_DIR": ".",
+                "KNOWLEDGE_RAG_WATCHER_DISABLED": "1",
+                "KNOWLEDGE_RAG_READ_ONLY": "1",
+            },
             "config": "config.yaml",
         },
         "notes": [

@@ -527,6 +527,8 @@ def _collect(source: str | Path, resolution: SourceResolution, options: Pipeline
                     "destination": relative_destination,
                     "title": normalized.title,
                     "format": normalized.format,
+                    "language": options.language or normalized.language,
+                    "locators": normalized.locators,
                     "warnings": normalized.warnings,
                     "untrusted": normalized.untrusted,
                 }

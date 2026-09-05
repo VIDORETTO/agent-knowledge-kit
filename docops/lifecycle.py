@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
+from .coordination import TriggerPolicy, assess_skill_trigger
 from .lease import PackageLease
 from .manifest import redact_metadata, utc_now
 from .observability import redact_report, redact_text
@@ -37,6 +38,7 @@ DEBOUNCE_SECONDS = 60.0
 MAX_DEBOUNCE_SECONDS = 5 * 60.0
 JOB_LEASE_SECONDS = 5 * 60.0
 MAX_ATTEMPTS = 5
+CONCEPTUAL_EVENT_TYPES = frozenset({"document.changed", "source.reconcile", "source.revoked", "source.conflict"})
 
 
 def _timestamp() -> float:
@@ -358,18 +360,110 @@ class LifecycleStore:
                 ),
             )
             connection.commit()
-        return {
+        result = {
             "ok": True,
             "duplicate": False,
             "event_id": event_id,
             "job_id": job_id,
             "not_before": _iso_timestamp(now + debounce_seconds),
         }
+        if event_type in CONCEPTUAL_EVENT_TYPES:
+            result["skill_trigger"] = self._maybe_request_skill_trigger()
+        return result
 
     def _job_for_event(self, event_id: str) -> str | None:
         with self._connect() as connection:
             row = connection.execute("SELECT job_id FROM jobs WHERE event_id = ?", (event_id,)).fetchone()
         return str(row["job_id"]) if row else None
+
+    def _metadata_value(self, key: str) -> str | None:
+        with self._connect() as connection:
+            row = connection.execute("SELECT value FROM metadata WHERE key=?", (key,)).fetchone()
+        return str(row["value"]) if row else None
+
+    def _set_metadata_value(self, key: str, value: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO metadata(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (key, value),
+            )
+
+    def _active_corpus_documents(self) -> int:
+        root = self.package_root / "rag" / "documents"
+        if not root.is_dir():
+            return 0
+        return sum(1 for path in root.rglob("*") if path.is_file() and not path.is_symlink())
+
+    def _maybe_request_skill_trigger(self) -> dict[str, Any] | None:
+        """Queue one explainable enrichment request when policy thresholds fire."""
+
+        last_raw = self._metadata_value("last_skill_trigger_at")
+        try:
+            last_trigger_at = float(last_raw) if last_raw else None
+        except ValueError:
+            last_trigger_at = None
+        now = _timestamp()
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM events WHERE event_type IN ('document.changed','source.reconcile','source.revoked','source.conflict') "
+                "AND status != 'failed' ORDER BY first_observed"
+            ).fetchall()
+            recent_requests = connection.execute(
+                "SELECT COUNT(*) AS count FROM events WHERE event_type='skill.enrichment.requested' AND first_observed>=?",
+                (now - 24 * 60 * 60,),
+            ).fetchone()
+        events: list[dict[str, Any]] = []
+        for row in rows:
+            try:
+                payload = json.loads(row["payload_json"])
+            except (TypeError, json.JSONDecodeError):
+                payload = {}
+            events.append(
+                {
+                    "event_id": row["event_id"],
+                    "event_type": row["event_type"],
+                    "source_id": row["source_id"],
+                    "observed_revision": row["observed_revision"],
+                    "occurred_at": row["occurred_at"],
+                    "payload": payload,
+                }
+            )
+        decision = assess_skill_trigger(
+            events,
+            corpus_documents=self._active_corpus_documents(),
+            now=now,
+            last_trigger_at=last_trigger_at,
+            policy=TriggerPolicy(),
+        )
+        result = decision.to_dict()
+        if not decision.requested:
+            return result
+        if recent_requests and int(recent_requests["count"]) >= decision.policy.max_requests_per_day:
+            result["suppressed"] = "daily_budget"
+            self._set_metadata_value("skill_trigger_backlog", _json(result))
+            return result
+        event = self.submit_event(
+            event_type="skill.enrichment.requested",
+            observed_revision=_hash(
+                {
+                    "affected_documents": decision.affected_documents,
+                    "affected_chars": decision.affected_chars,
+                    "reasons": decision.reasons,
+                }
+            ),
+            causation_id=str(events[-1].get("event_id") or "") if events else None,
+            debounce_seconds=0.0,
+            payload={
+                "reasons": list(decision.reasons),
+                "affected_documents": decision.affected_documents,
+                "affected_chars": decision.affected_chars,
+                "critical": decision.critical,
+                "action": "prepare_external_enrichment_request",
+            },
+        )
+        self._set_metadata_value("last_skill_trigger_at", str(now))
+        result["event"] = event
+        return result
 
     def claim_job(self, *, force: bool = False) -> dict[str, Any] | None:
         now = _timestamp()
@@ -461,6 +555,8 @@ class LifecycleStore:
         allowed = {"fact", "decision", "correction", "experiment", "opinion", "preference", "question"}
         if claim_type not in allowed:
             return {"ok": False, "code": "claim_type_invalid"}
+        if privacy not in {"private", "shared", "restricted"}:
+            return {"ok": False, "code": "privacy_invalid"}
         if not isinstance(evidence, list):
             return {"ok": False, "code": "evidence_invalid"}
         proposal_id = f"proposal-{uuid.uuid4().hex}"
@@ -544,6 +640,10 @@ class LifecycleStore:
             entries = []
         materialized: list[str] = []
         for proposal in proposals:
+            # Private and restricted proposals may be useful to a caller's
+            # memory layer, but are never copied into the shared package.
+            if str(proposal["privacy"]) != "shared":
+                continue
             proposal_id = str(proposal["proposal_id"])
             relative = f"learning/{proposal_id}.md"
             content = [
@@ -641,6 +741,42 @@ class LifecycleStore:
             write_json_atomic(manifest_path, manifest)
         return materialized
 
+    def revoke_learning(self, proposal_id: str, *, reviewer: str, reason: str = "") -> dict[str, Any]:
+        """Revoke a previously admitted proposal and block its candidates."""
+
+        if not reviewer.strip():
+            return {"ok": False, "code": "reviewer_required"}
+        with self._connect() as connection:
+            row = connection.execute("SELECT status FROM proposals WHERE proposal_id=?", (proposal_id,)).fetchone()
+            if row is None:
+                return {"ok": False, "code": "proposal_not_found"}
+            decision = {
+                "decision": "revoke",
+                "reviewer": redact_text(reviewer),
+                "note": redact_text(reason),
+                "at": utc_now(),
+            }
+            connection.execute(
+                "UPDATE proposals SET status='revoked',decision_json=?,updated_at=? WHERE proposal_id=?",
+                (_json(decision), utc_now(), proposal_id),
+            )
+            candidate_rows = connection.execute(
+                "SELECT candidate_id,evidence_json FROM candidates WHERE status IN ('draft','review_required','approved')"
+            ).fetchall()
+            blocked: list[str] = []
+            for candidate in candidate_rows:
+                try:
+                    evidence = json.loads(candidate["evidence_json"] or "{}")
+                except (TypeError, json.JSONDecodeError):
+                    evidence = {}
+                if proposal_id in _proposal_ids_from_evidence(evidence):
+                    connection.execute(
+                        "UPDATE candidates SET status='blocked',updated_at=? WHERE candidate_id=?",
+                        (utc_now(), candidate["candidate_id"]),
+                    )
+                    blocked.append(str(candidate["candidate_id"]))
+        return {"ok": True, "proposal_id": proposal_id, "status": "revoked", "blocked_candidates": blocked}
+
     def status(self) -> dict[str, Any]:
         with self._connect() as connection:
             counts: dict[str, dict[str, int]] = {}
@@ -659,6 +795,11 @@ class LifecycleStore:
             ).fetchone()
             feedback_rows = connection.execute("SELECT kind, COUNT(*) AS count FROM feedback GROUP BY kind").fetchall()
         revisions = compute_revisions(self.package_root) if (self.package_root / "manifest.json").is_file() else None
+        backlog_raw = self._metadata_value("skill_trigger_backlog")
+        try:
+            skill_backlog = json.loads(backlog_raw) if backlog_raw else None
+        except (TypeError, json.JSONDecodeError):
+            skill_backlog = None
         return {
             "schema_version": SCHEMA_VERSION,
             "ok": True,
@@ -668,6 +809,7 @@ class LifecycleStore:
             "candidates": counts["candidates"],
             "proposals": counts["proposals"],
             "feedback": {str(row["kind"]): int(row["count"]) for row in feedback_rows},
+            "skill_trigger_backlog": skill_backlog,
             "active_revisions": revisions,
             "latest_release": dict(release) if release else None,
         }
@@ -723,7 +865,11 @@ class LifecycleStore:
                 event_type="investigation.requested",
                 observed_revision=_hash({"kind": kind, "query": query}),
                 debounce_seconds=0.0,
-                payload={"kind": kind, "query_hash": _hash(query) if query else None, "occurrences_7d": len(occurrences)},
+                payload={
+                    "kind": kind,
+                    "query_hash": _hash(query) if query else None,
+                    "occurrences_7d": len(occurrences),
+                },
             )
         return {
             "ok": True,
@@ -774,6 +920,8 @@ class LifecycleStore:
         row = self.candidate(candidate_id)
         if row is None:
             return {"ok": False, "code": "candidate_not_found"}
+        if row.get("status") not in {"draft", "review_required"}:
+            return {"ok": False, "code": "candidate_not_reviewable", "status": row.get("status")}
         path = self._candidate_path(candidate_id)
         validation = validate_package(path)
         if not validation.ok:
@@ -813,6 +961,9 @@ class LifecycleStore:
             return {"ok": False, "code": "candidate_not_found"}
         if row.get("status") != "approved":
             return {"ok": False, "code": "candidate_not_approved"}
+        revoked = self._revoked_proposals_for_candidate(candidate_id)
+        if revoked:
+            return {"ok": False, "code": "revoked_dependency", "proposal_ids": revoked}
         candidate_path = self._candidate_path(candidate_id)
         validation = validate_package(candidate_path)
         if not validation.ok:
@@ -886,6 +1037,23 @@ class LifecycleStore:
             ).fetchone()
         return str(row["release_id"]) if row else None
 
+    def _revoked_proposals_for_candidate(self, candidate_id: str) -> list[str]:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT evidence_json FROM candidates WHERE candidate_id=?", (candidate_id,)
+            ).fetchone()
+            revoked = {
+                str(value)
+                for value in connection.execute("SELECT proposal_id FROM proposals WHERE status='revoked'").fetchall()
+            }
+        if row is None:
+            return []
+        try:
+            evidence = json.loads(row["evidence_json"] or "{}")
+        except (TypeError, json.JSONDecodeError):
+            evidence = {}
+        return sorted(revoked.intersection(_proposal_ids_from_evidence(evidence)))
+
     def rollback(self, release_id: str) -> dict[str, Any]:
         with self._connect() as connection:
             row = connection.execute(
@@ -896,6 +1064,9 @@ class LifecycleStore:
         archive = Path(row["archive_path"])
         if not archive.is_dir() or not validate_package(archive).ok:
             return {"ok": False, "code": "release_archive_invalid"}
+        revoked = self._revoked_proposals_for_package(archive)
+        if revoked:
+            return {"ok": False, "code": "release_revoked", "proposal_ids": revoked}
         candidate_id = self.create_candidate_record(
             base_fingerprint=compute_revisions(self.package_root).get("composition", "absent"),
             path=archive,
@@ -919,6 +1090,22 @@ class LifecycleStore:
             )
         return self.publish_candidate(candidate_id)
 
+    def _revoked_proposals_for_package(self, package_root: Path) -> list[str]:
+        manifest_path = package_root / "manifest.json"
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            return []
+        proposal_ids = _proposal_ids_from_evidence(manifest)
+        if not proposal_ids:
+            return []
+        with self._connect() as connection:
+            revoked = {
+                str(row["proposal_id"])
+                for row in connection.execute("SELECT proposal_id FROM proposals WHERE status='revoked'").fetchall()
+            }
+        return sorted(revoked.intersection(proposal_ids))
+
     def _candidate_path_for_new(self, candidate_id: str) -> Path:
         path = self.runtime_root / "candidates" / candidate_id / "package"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -927,6 +1114,24 @@ class LifecycleStore:
 
 def _status_value(value: str) -> str:
     return value if value in {"draft", "review_required", "approved", "published", "failed", "blocked"} else "blocked"
+
+
+def _proposal_ids_from_evidence(value: Any) -> set[str]:
+    """Find proposal references in redacted candidate/manifest evidence."""
+
+    found: set[str] = set()
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            if key in {"proposal_id", "proposal_ids"}:
+                if isinstance(item, str):
+                    found.add(item)
+                elif isinstance(item, (list, tuple, set)):
+                    found.update(str(entry) for entry in item)
+            found.update(_proposal_ids_from_evidence(item))
+    elif isinstance(value, (list, tuple, set)):
+        for item in value:
+            found.update(_proposal_ids_from_evidence(item))
+    return {item for item in found if item.startswith("proposal-")}
 
 
 def prepare_candidate(
@@ -998,7 +1203,10 @@ def prepare_candidate(
         row = connection.execute("SELECT candidate_id FROM candidates WHERE path=?", (str(candidate_path),)).fetchone()
         actual_id = str(row["candidate_id"]) if row else candidate_id
     store.update_candidate(
-        actual_id, status="review_required", revisions=revisions, evidence={"operation": result.to_dict()}
+        actual_id,
+        status="review_required",
+        revisions=revisions,
+        evidence={"operation": result.to_dict(), "materialized_learning": materialized_learning},
     )
     return {
         "ok": True,
@@ -1065,6 +1273,18 @@ def work_once(
     try:
         if job.get("job_type") == "investigation.requested":
             result = {"ok": True, "investigation": payload, "action": "review_and_create_golden_candidate"}
+            store.complete_job(job["job_id"], job["lease_id"], result)
+            return {"ok": True, "worked": True, "job_id": job["job_id"], "result": result}
+        if job.get("job_type") in {"skill.enrichment.requested", "source.revoked", "source.conflict"}:
+            # No model or publisher lives in DOCOPS. These jobs produce a
+            # reviewable hand-off (or an invalidation action) and stop before
+            # touching the active package.
+            action = (
+                "prepare_external_enrichment_request"
+                if job.get("job_type") == "skill.enrichment.requested"
+                else "review_source_invalidation"
+            )
+            result = {"ok": True, "request": payload, "action": action}
             store.complete_job(job["job_id"], job["lease_id"], result)
             return {"ok": True, "worked": True, "job_id": job["job_id"], "result": result}
         if not payload.get("source"):

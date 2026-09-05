@@ -209,7 +209,7 @@ class RagSynchronizer:
             )
         client = None
         reviewed_vendor = self.runtime_root / "skills" / "vendor" / "knowledge-rag" if self.runtime_root else None
-        runtime_env = runtime_environment(root, vendor_root=reviewed_vendor)
+        runtime_env = runtime_environment(root, vendor_root=reviewed_vendor, read_only=False)
         expected_provenance = runtime_provenance(
             runtime_root,
             python=executable,
@@ -230,7 +230,11 @@ class RagSynchronizer:
                     provenance={**expected_provenance, "server_version": actual_version},
                     diagnostics=client.diagnostics(status="failed") if hasattr(client, "diagnostics") else {},
                 )
-            arguments = {"full_rebuild": True} if full_rebuild else {"force": True}
+            # The vendor backend's default is an incremental hash-aware pass.
+            # ``force=True`` means smart reindex and needlessly reprocesses
+            # unchanged files; use it only when an explicit caller asks for a
+            # recovery-style pass in a future version of this seam.
+            arguments = {"full_rebuild": True} if full_rebuild else {"force": False}
             response = client.call(
                 "tools/call", name="reindex_documents", arguments=arguments, timeout=self.timeout_seconds
             )

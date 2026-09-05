@@ -141,3 +141,15 @@ def test_normalizer_reports_a_document_size_limit(tmp_path: Path) -> None:
 
     assert result.status == "error"
     assert result.error_code == "document_too_large"
+
+
+def test_portuguese_text_keeps_utf8_and_exposes_real_section_locator(tmp_path: Path) -> None:
+    source = tmp_path / "guia.md"
+    source.write_text("# Guia de implantação\n\n## Retentativas\n\nNão repetir a operação.", encoding="utf-8")
+
+    result = normalize_file(source)
+
+    assert result.status == "accepted"
+    assert result.language == "pt"
+    assert "Retentativas" in result.content
+    assert {"kind": "section", "value": "Retentativas", "line": 3} in result.locators

@@ -4032,6 +4032,21 @@ def _make_snippet(content: str, max_chars: int = 500) -> str:
     return truncated + "..."
 
 
+def _mutation_blocked() -> Optional[str]:
+    """Return a stable JSON error when a query-only reader calls a writer."""
+
+    if not getattr(config, "read_only", False):
+        return None
+    return json.dumps(
+        {
+            "status": "error",
+            "code": "read_only_session",
+            "message": "this MCP session is query-only; use a maintenance worker to mutate the index",
+        },
+        indent=2,
+    )
+
+
 # =============================================================================
 # MCP Tools — Existing (6)
 # =============================================================================
@@ -4270,6 +4285,9 @@ def reindex_documents(
     ``reindex.active`` becomes false. Add/update/URL tools already auto-index —
     use these flags only for the recovery/rebuild scenarios above.
     """
+    blocked = _mutation_blocked()
+    if blocked is not None:
+        return blocked
     orchestrator = get_orchestrator()
 
     if resume and full_rebuild:
@@ -4409,6 +4427,9 @@ def add_document(content: str, filepath: str, category: str = "general") -> str:
     the source is a web page. Use update_document() to replace content of an existing file.
     The document is immediately searchable after this call — no manual reindex needed.
     """
+    blocked = _mutation_blocked()
+    if blocked is not None:
+        return blocked
     if not content or not content.strip():
         return json.dumps({"status": "error", "message": "Content cannot be empty"})
     if not filepath or not filepath.strip():
@@ -4445,6 +4466,9 @@ def update_document(filepath: str, content: str) -> str:
     a new file instead. Use remove_document() to delete without replacing. Changes are
     immediately searchable — no manual reindex needed.
     """
+    blocked = _mutation_blocked()
+    if blocked is not None:
+        return blocked
     if not filepath:
         return json.dumps({"status": "error", "message": "Filepath required"})
     if not content or not content.strip():
@@ -4483,6 +4507,9 @@ def remove_document(filepath: str, delete_file: bool = False) -> str:
     content instead of removing. Use reindex_documents(force=True) if you deleted
     the file manually on disk outside of this tool.
     """
+    blocked = _mutation_blocked()
+    if blocked is not None:
+        return blocked
     if not filepath:
         return json.dumps({"status": "error", "message": "Filepath required"})
 
@@ -4518,6 +4545,9 @@ def add_from_url(url: str, category: str = "general", title: str = None) -> str:
     by URL. Use add_document() instead when you already have the text content. The document
     is immediately searchable after this call — no manual reindex needed.
     """
+    blocked = _mutation_blocked()
+    if blocked is not None:
+        return blocked
     if not url or not url.strip():
         return json.dumps({"status": "error", "message": "URL cannot be empty"})
 
@@ -4766,7 +4796,12 @@ def main():
 
             # Migration: check dimension mismatch AFTER full init (avoids segfault during __init__)
             orchestrator._needs_rebuild = orchestrator._check_dimension_mismatch()
-            if orchestrator._needs_rebuild:
+            if orchestrator._needs_rebuild and config.read_only:
+                print(
+                    "[READER] Embedding/index dimensions differ; refusing automatic rebuild in query-only mode",
+                    file=sys.stderr,
+                )
+            elif orchestrator._needs_rebuild:
                 print("[MIGRATION] Running nuclear rebuild for embedding model change...")
                 try:
                     stats = orchestrator.nuclear_rebuild()
@@ -4778,13 +4813,17 @@ def main():
                     print(f"[ERROR] Migration failed: {e}")
                     print("[FALLBACK] Attempting regular index instead...")
                     stats = orchestrator.index_all(force=True)
-            elif orchestrator.collection.count() == 0:
+            elif orchestrator.collection.count() == 0 and not config.read_only:
                 print("[INFO] No documents indexed. Running initial indexing...")
                 stats = orchestrator.index_all()
                 print(f"[INFO] Indexed {stats['indexed']} documents with {stats['chunks_added']} chunks")
+            elif orchestrator.collection.count() == 0 and config.read_only:
+                print("[READER] Empty index left untouched; maintenance worker must index it", file=sys.stderr)
 
             # Start file watcher for auto-reindex on document changes
-            if os.environ.get("KNOWLEDGE_RAG_WATCHER_DISABLED", "").strip() == "1":
+            if config.read_only:
+                print("[READER] Query-only capability; watcher disabled", file=sys.stderr)
+            elif os.environ.get("KNOWLEDGE_RAG_WATCHER_DISABLED", "").strip() == "1":
                 print("[WATCHER] Disabled via KNOWLEDGE_RAG_WATCHER_DISABLED=1")
             else:
                 try:
