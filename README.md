@@ -594,6 +594,7 @@ dependências e o procedimento de publicação manual pelo GitHub.
 - [Tutorial reproduzível](docs/TUTORIAL.md) — caminho completo com fixture sintética.
 - [Uso operacional](docs/USE.md) — instalação, protocolo, RAG e avaliação.
 - [Arquitetura](docs/ARCHITECTURE.md) — componentes e contratos do pacote.
+- [Plano de atualização contínua de conhecimento](docs/continuous-knowledge/README.md) — especificação proposta, 18 tickets e plano TDD; ainda não implementado.
 - [Integração com harnesses](docs/HARNESSES.md) — hand-off para OpenCode, Codex e outros.
 - [Interface Python](docs/PYTHON-API.md) — API estável para integrações.
 - [Schemas públicos](docs/SCHEMAS.md) — contratos JSON dos artefatos.
