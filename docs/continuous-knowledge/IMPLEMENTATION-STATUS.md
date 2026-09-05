@@ -125,6 +125,14 @@ PYTHONPATH=. ./.venv/bin/python -m docops doctor --json
 git diff --check
 ```
 
+Na verificação desta branch, a suíte passou com **255 testes**, o lint passou e
+`scripts/mcp_smoke.py "background tasks FastAPI" --required` completou handshake,
+listagem de 13 ferramentas e busca real no MCP local `knowledge-rag` 4.8.5.
+O Golden FastAPI não é reproduzível neste checkout público porque o corpus
+privado não é versionado; a tentativa correta termina em `corpus_missing`.
+Portanto, MRR/Recall históricos do piloto não são uma medição nova desta
+branch e não devem ser usados como gate de uma fonte diferente.
+
 Os números de Recall/MRR, faithfulness, custo e latência devem ser publicados
 com corpus, perfil, versão e Golden Set identificados. O DOCOPS registra
 receipts externos; ele não inventa uma medição quando o harness não a forneceu.
