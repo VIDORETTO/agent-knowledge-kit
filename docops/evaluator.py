@@ -15,6 +15,7 @@ from .observability import redact_report, redact_text
 from .package_validator import validate_package
 from .readiness import assess_readiness
 from .retrieval import RetrievalError, SkillRetrievalAdapter, adapter_for_package, route_query
+from .revisions import compute_revisions
 from .storage import write_json_atomic
 
 _TOKEN = re.compile(r"[\wÀ-ÿ][\wÀ-ÿ./:-]*", re.UNICODE)
@@ -459,6 +460,7 @@ def evaluate_package(
                 metrics_value = manifest.setdefault("metrics", {})
                 if isinstance(metrics_value, dict):
                     metrics_value["evaluation"] = evidence
+                manifest["revisions"] = compute_revisions(root)
                 write_json_atomic(manifest_path, manifest)
     except (OSError, UnicodeError, json.JSONDecodeError, TypeError):
         result.warnings.append("evaluation evidence could not be persisted")

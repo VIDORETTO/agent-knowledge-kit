@@ -143,6 +143,7 @@ def build_manifest(
     metrics: Mapping[str, Any] | None = None,
     outcome: Mapping[str, Any] | None = None,
     readiness: Mapping[str, Any] | None = None,
+    revisions: Mapping[str, Any] | None = None,
     warnings: Iterable[str] = (),
     errors: Iterable[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
@@ -198,6 +199,8 @@ def build_manifest(
     }
     if readiness is not None:
         payload["readiness"] = redact_report(redact_metadata(dict(readiness)))
+    if revisions is not None:
+        payload["revisions"] = redact_report(redact_metadata(dict(revisions)))
     if terminal_outcome:
         payload["outcome"] = redact_report(redact_metadata(terminal_outcome))
     return payload

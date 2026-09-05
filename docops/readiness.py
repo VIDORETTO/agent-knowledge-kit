@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .observability import redact_report, redact_text
+from .revisions import compute_revisions
 from .storage import write_json_atomic
 
 READINESS_ORDER = {
@@ -187,6 +188,7 @@ def record_skill_enrichment(
                     "validated": bool(validated),
                     "artifacts": safe_artifacts,
                 }
+            manifest["revisions"] = compute_revisions(root)
             write_json_atomic(manifest_path, manifest)
     return path
 

@@ -56,6 +56,7 @@ from .primitives import (
 from .rag_sync import RagSynchronizer, package_rag_config_text
 from .readiness import assess_readiness, skill_fingerprint
 from .repository_acquirer import RepositoryAcquirer
+from .revisions import compute_revisions
 from .runtime import runtime_provenance
 from .source_resolver import SourceResolution, SourceResolver, canonicalize_url
 from .state import CheckpointStore, SourceRecord, StateStore
@@ -1479,8 +1480,14 @@ def _build_stage(plan_value: OperationPlan, stage: Path) -> tuple[dict[str, Any]
         except (OSError, UnicodeError, json.JSONDecodeError) as exc:
             raise OperationFailure("invalid_rag_index", str(exc), phase="index") from exc
     _run_phase(checkpoint, "state", plan_value, stage, (".docops/state.json",), lambda: _write_state(stage, plan_value))
+    revisions = compute_revisions(stage)
     readiness = assess_readiness(stage)
-    metrics = {"rag": index_payload, "state_diff": dict(plan_value.state_diff), "readiness": readiness}
+    metrics = {
+        "rag": index_payload,
+        "state_diff": dict(plan_value.state_diff),
+        "readiness": readiness,
+        "revisions": revisions,
+    }
 
     def validate_callback() -> None:
         selected = plan_value.resolution.selected
@@ -1500,6 +1507,7 @@ def _build_stage(plan_value: OperationPlan, stage: Path) -> tuple[dict[str, Any]
             metrics=metrics,
             outcome=_outcome("succeeded", "completed", "validate", "operation completed", exit_code=0),
             readiness=readiness,
+            revisions=revisions,
         )
         write_manifest(stage / "manifest.json", manifest)
 

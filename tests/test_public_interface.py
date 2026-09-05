@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import FrozenInstanceError
 from pathlib import Path
 
@@ -102,6 +103,14 @@ def test_document_update_preserves_an_externally_enriched_skill(tmp_path: Path) 
 
     first = docops.apply(docops.plan(request))
     assert first.ok, first.errors
+    first_revisions = first.manifest["revisions"]
+    assert {
+        "corpus_revision",
+        "index_revision",
+        "skill_revision",
+        "router_revision",
+        "composition",
+    } <= set(first_revisions)
     skill = output / "skill" / "SKILL.md"
     enriched = (
         skill.read_text(encoding="utf-8").replace(
@@ -112,6 +121,7 @@ def test_document_update_preserves_an_externally_enriched_skill(tmp_path: Path) 
     )
     skill.write_text(enriched, encoding="utf-8")
     docops.record_skill_enrichment(output, tool="book-to-skill", version="2.0")
+    enriched_revisions = json.loads((output / "manifest.json").read_text(encoding="utf-8"))["revisions"]
 
     guide.write_text("# Guide\nAfter factual policy.\n", encoding="utf-8")
     update_request = docops.OperationRequest(
@@ -130,3 +140,7 @@ def test_document_update_preserves_an_externally_enriched_skill(tmp_path: Path) 
     assert (output / "skill" / "SKILL.md").read_text(encoding="utf-8") == enriched
     assert (output / "rag" / "documents" / "guide.md").read_text(encoding="utf-8") == "# Guide\nAfter factual policy.\n"
     assert updated.manifest["readiness"]["skill"] == "skill-enriched"
+    updated_revisions = updated.manifest["revisions"]
+    assert updated_revisions["corpus_revision"] != first_revisions["corpus_revision"]
+    assert updated_revisions["skill_revision"] == enriched_revisions["skill_revision"]
+    assert updated_revisions["composition"] != first_revisions["composition"]
