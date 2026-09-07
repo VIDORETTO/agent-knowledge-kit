@@ -106,7 +106,9 @@ def install_agents_bootstrap(root: Path | str, *, check: bool = False) -> dict[s
     """Install the routing rule without overwriting project instructions."""
 
     raw_root = Path(root).expanduser()
-    if raw_root.is_symlink() or not raw_root.is_dir():
+    if raw_root.is_symlink():
+        raise ValueError("bootstrap root must not be a symbolic link")
+    if not raw_root.is_dir():
         raise ValueError("bootstrap root must be a regular directory")
     project_root = raw_root.resolve()
     target = project_root / "AGENTS.md"
