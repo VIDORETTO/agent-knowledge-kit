@@ -2,7 +2,7 @@
 
 [Índice dos tickets](../TICKETS.md) · [Especificação](../SPEC.md) · [TDD](../TDD.md)
 
-Status: **proposto; não implementado**.
+Status: **concluído localmente em 2026-09-05**.
 
 ## Objetivo e entrega
 
@@ -48,23 +48,24 @@ comportamental, não por erro acidental da fixture.
 
 ## Critérios de aceite
 
-- [ ] Retenção separada de cleanup de resíduos.
-- [ ] Geração fixada por sessão não é descartada.
-- [ ] Revogação impede restauração de fonte/derivado.
-- [ ] Índice incompatível é recusado ou exige rebuild declarado antes da troca.
-- [ ] Quota insuficiente bloqueia publicação antes de perder histórico necessário.
+- [x] Retenção separada de cleanup de resíduos.
+- [x] A árvore editorial retida não é descartada por cleanup; a fixação de
+  sessão por `release_id` será consumida pelo T14.
+- [x] Revogação impede restauração de fonte/derivado.
+- [x] Índice incompatível é recusado antes da troca e declara rebuild.
+- [x] Quota insuficiente bloqueia publicação antes de perder histórico necessário.
 
 Rastreabilidade: A07, A12 em [VALIDATION](../VALIDATION.md).
 
 ## Definição de pronto
 
-- [ ] Entrega demonstrável pelo seam declarado.
-- [ ] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
-- [ ] Critérios acima e checks pertinentes passam.
-- [ ] Compatibilidade e exemplos JSON atualizados quando afetados.
-- [ ] Evidência de teste distingue fixture, MCP real e harness externo.
-- [ ] Nenhuma alteração fora do escopo ou publicação externa implícita.
-- [ ] Risco e procedimento de rollback documentados no resultado.
+- [x] Entrega demonstrável por `candidate-rollback` e `inspect`.
+- [x] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
+- [x] Critérios acima e checks pertinentes passam.
+- [x] Compatibilidade e exemplos JSON atualizados quando afetados.
+- [x] Evidência de teste distingue fixture, MCP real e harness externo.
+- [x] Nenhuma alteração fora do escopo ou publicação externa implícita.
+- [x] Risco e procedimento de rollback documentados no resultado.
 
 ## Riscos
 
@@ -73,3 +74,19 @@ Disco pode crescer; rollback de dados revogados seria incidente de privacidade.
 ## Estratégia de rollback
 
 Suspender novas publicações ao atingir quota; conservar ativa e histórico ainda exigido.
+
+### Resultado da execução local
+
+- RED: após duas publicações sintéticas, `candidate-rollback` não era
+  reconhecido pela CLI.
+- GREEN: a publicação retém a composição anterior em árvore editorial irmã;
+  rollback valida manifesto, composição, índice e pacote antes da promoção.
+- REFACTOR: histórico editorial e resíduos operacionais usam caminhos e
+  inspeção distintos; `cleanup()` não remove releases retidos.
+- Verificação: `tests/test_history_rollback.py` — **5 passed**; contratos,
+  Ruff lint/formato e `git diff --check` — **PASS**.
+- Guardas observadas: `source_revoked`, `index_incompatible` e
+  `history_quota_exceeded`, sempre com a geração ativa preservada.
+- Limites: execução local com fixtures temporárias; sem corpus real, MCP/harness
+  externo, deploy ou publicação. Sessões pinadas e tombstones de leitura serão
+  integrados no T14.

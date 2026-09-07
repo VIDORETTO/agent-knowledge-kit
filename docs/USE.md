@@ -105,14 +105,156 @@ distribuível.
 python -m docops golden-candidates <pacote> --json
 python -m docops evaluate --package <pacote> --cases <golden-revisado.json> --adapter lexical --json
 python -m docops evaluate --package <pacote> --cases <golden-revisado.json> --adapter mcp --runtime-root . --json
+python -m docops evaluate --package <pacote> --cases <golden-revisado.json> --adapter mcp --response-receipt <evaluation-receipt.json> --json
+python -m docops candidate-approve --package <pacote> --candidate-id <id> --actor <identificador-local> --role human_approver --json
+python -m docops candidate-publish --package <pacote> --candidate-id <id> --json
+python -m docops candidate-rollback --package <pacote> --release-id <release-id> --json
+python -m docops source-register --package <pacote> --source-id <id> --canonical <url-ou-caminho> --kind web --scope 'docs/**' --version-policy pinned --version <versao> --rights <licenca> --privacy public --authority official --owner <responsavel> --json
+python -m docops source-reconcile --package <pacote> --snapshot <acquisition-snapshot.json> --json
+python -m docops source-reconcile --package <pacote> --snapshot <acquisition-snapshot.json> --withdraw --json
+python -m docops event-submit --queue <fila.sqlite> --event <event.json> --now <RFC3339> --json
+python -m docops jobs --queue <fila.sqlite> --now <RFC3339> --json
+python -m docops work --once --queue <fila.sqlite> --now <RFC3339> --json
+python -m docops impact-assess --package <pacote> --events <events.json> --json
+python -m docops reader-session --package <pacote> --adapter memory --now <RFC3339> --json
+python -m docops reader-query --package <pacote> --session <id> --tool search_knowledge --query "..." --adapter memory --now <RFC3339> --json
+python -m docops reader-session-revoke --package <pacote> --session <id> --now <RFC3339> --json
+python -m docops rag-snapshot --package <pacote> --backend knowledge-rag --supports-incremental --snapshot-out <snapshot.json> --json
+python -m docops rag-snapshot --package <pacote> --previous <snapshot.json> --backend knowledge-rag --supports-incremental --verify-query "..." --json
+python -m docops rag-profile-compare --package <pacote> --profiles compact,multilingual --language pt-BR --json
+python -m docops learning-submit --package <pacote> --proposal <proposal.json> --capture-opt-in --json
+python -m docops learning-review --package <pacote> --proposal-id <id> --decision admit --actor <revisor-local> --json
+python -m docops learning-review --package <pacote> --proposal-id <id> --decision revoke --actor <revisor-local> --json
+python -m docops feedback-submit --package <pacote> --feedback <feedback.json> --json
+python -m docops feedback-submit --package <pacote> --feedback <feedback.json> --queue <fila.sqlite> --now <RFC3339> --json
+python -m docops feedback-report --package <pacote> --window-days 7 --now <RFC3339> --json
 python scripts/evaluate_golden.py --cases golden-set/test-cases.json
 ```
+
+Os comandos acima são aliases planos de uma hierarquia canônica. Para novos
+integradores, prefira `python -m docops lifecycle ...`, por exemplo
+`lifecycle reader session`, `lifecycle rag snapshot`, `lifecycle learning
+submit`, `lifecycle feedback report` e `lifecycle worker run`; os aliases
+continuam emitindo o mesmo envelope e código de saída durante a migração.
 
 O adapter `lexical` é um diagnóstico rápido; `memory` é adequado ao TDD; o
 adapter `mcp` é a avaliação híbrida real e exige `rag/index.json` em modo
 `indexed`. Todos exigem Golden revisado e o relatório explicita backend,
-versão, perfil, corpus, rota, top-k e casos. Toda resposta factual do harness
+versão, perfil, corpus, rota, top-k e casos. Um `evaluation-receipt` externo
+deve declarar `generation_id`, `candidate_id`, `package_composition_hash`,
+`golden_revision`, avaliador independente e julgamentos por caso. O comando
+calcula fidelidade e cobertura de citação separadamente; recibo ausente,
+inválido ou stale não aprova a candidata. Toda resposta factual do harness
 deve citar `path#secao` ou `path:linha`.
+
+`learning-submit` exige `--capture-opt-in` e uma proposta com consentimento
+escopado, finalidade, validade e evidência verificável; a proposta permanece
+em quarentena até revisão humana. `feedback-submit` recebe um sinal
+operacional com `event_id` e uma origem autenticada (`authentication`); redige
+a pergunta, preserva somente hashes e métricas mínimas, rejeita replay e aplica
+rate limit por origem sem alterar a geração ativa. `feedback-report` consolida
+uma janela de uso, deduplica repetições por sessão/pergunta/geração e abre uma
+investigação/candidata Golden somente após três ocorrências independentes.
+Relatórios incluem latência, custo e denominadores; comparações com dataset ou
+geração incompatíveis ficam `not_comparable`, nunca regressão controlada. O
+worker de `feedback_report` apenas grava o relatório e o recibo; revisão,
+publicação e reindexação continuam gates explícitos.
+
+`rag-snapshot` é somente leitura sobre o pacote ativo: registra hashes e
+tamanho do conteúdo, identidade do embedding e um inventário
+relocável de `rag/index.json`/`rag/data`. Com `--previous`, compara sempre o
+hash do conteúdo, inclusive quando mtime e tamanho não mudaram. Embedding,
+artefato lógico do backend ou backend sem capacidade declarada de reuso fazem
+o relatório escolher `full_rebuild`; nunca há alegação falsa de incremental.
+O relatório traz `active_preserved=true` e `publication_allowed=false`.
+`--verify-query` executa uma busca pós-snapshot pelo adapter escolhido para
+conferir contagem e fontes; em TDD usa `memory`, enquanto MCP externo requer
+runtime/harness isolado e não é acionado implicitamente.
+
+Resultados de busca preservam localizadores quando o extrator oferece estrutura:
+`page`, `slide`, `sheet`, `cell`, `section`, `timestamp` e `identifier`. Sem um
+localizador estável, a resposta usa `normalized_section`, marca
+`available=false` e declara a limitação; o sistema não inventa página, aba ou
+timestamp. `.vtt`, `.srt`, `.ass` e `.ssa` não são tratados como transcrição
+nativa: forneça Markdown externo com timestamps para indexação auditável.
+
+Extrações com texto ausente, caracteres de substituição ou excesso de controles
+ficam em `quarantined`, não geram conteúdo em `rag/` e tornam o manifesto
+`partial`. O diagnóstico `rag-profile-compare` é somente leitura: ele compara
+perfis, mas não altera a configuração nem indexa. A seleção final exige avaliação
+Golden nativa em português; qualquer mudança de perfil exige `full_rebuild`
+antes de promoção.
+
+Uma candidata só pode avançar com `candidate-approve` e depois
+`candidate-publish`. O primeiro grava um recibo de aprovação com a base,
+composição, política, avaliação e revisões exatas; o segundo revalida tudo sob
+lease, promove com journal e valida o pacote publicado. `approved=true` dentro
+de conteúdo não tem autoridade. No piloto, `human_approver` representa uma
+decisão explícita do operador local; `delegated_policy` é reservado à política
+factual determinística e não equivale a aprovação conceitual humana. A
+identidade local não é autenticação remota.
+
+Uma sessão criada por `reader-session` fixa o `release_id` e o
+`composition_hash` da composição consultada. `reader-query` aceita somente
+`search_knowledge` e `get_document`; ferramentas de escrita, desconhecidas ou
+de manutenção são recusadas pelo backend. O cache inclui sessão e geração, e
+`reader-session-revoke` invalida consultas futuras sem alterar o pacote.
+
+O adapter `mcp` só é aceito quando `harness.json` declara explicitamente
+`mode=read_only`, as duas capacidades de leitura, nenhuma capacidade de escrita
+e `concurrent_publication_allowed=false`. Sessões, cache e revogações ficam no
+diretório runtime irmão `.<nome-do-pacote>.readers/`, fora da composição ativa e
+ignorado pelo Git. Uma sessão antiga só continua disponível enquanto a geração
+retida existir no histórico e não estiver revogada; um pacote substituído
+diretamente sem histórico torna a geração indisponível.
+
+Após uma publicação, a geração anterior é retida em um diretório editorial
+irmão do pacote (`.<nome>.history/`), separado de staging, backups e tentativas
+operacionais. `inspect()` lista os releases retidos e `candidate-rollback`
+valida recibo, composição, índice e pacote inteiro antes de promover uma cópia
+com journal. Gerações revogadas ou marcadas como incompatíveis com o índice são
+recusadas sem alterar a ativa. `cleanup()` não remove o histórico editorial.
+Quando configurada, a quota de retenção pode ser limitada por
+`DOCOPS_HISTORY_QUOTA_BYTES`; publicação nova falha antes da promoção se a
+retenção necessária exceder essa quota.
+
+O registro de fontes fica em `.docops/source-registry.json`. `source-register`
+adiciona ou atualiza uma identidade explícita por `source_id` e preserva outras
+fontes, mesmo quando o canonical é fisicamente igual. Cada
+`source-reconcile` exige um `acquisition-snapshot` com escopo e completude:
+snapshots parciais, falhos, limitados por robots ou por orçamento são registrados
+como observações preservadas e nunca viram tombstone. Uma versão `pinned` não
+avança a partir de uma observação nova. Snapshot completo vazio exige
+`--withdraw` explícito; sem essa autorização o comando falha fechado e mantém a
+fonte ativa. O planejamento também não anuncia remoções depois de uma aquisição
+vazia ou incompleta.
+
+A coordenação local aceita envelopes `event` e expõe jobs pela CLI, sem exigir
+inspeção da tabela SQLite. O mesmo `event_id` com o mesmo payload é
+idempotente; o mesmo identificador com payload divergente falha fechado. Eventos
+da mesma chave de trabalho usam `due_at = min(last_event + 60s, first_event +
+5min)`. O payload pode indicar `completed_files`/`stable_files` e
+`deferred_files`/`unstable_files`; arquivos adiados não bloqueiam os concluídos.
+`work --once` adquire um lease curto, executa no máximo um job e reconhece apenas
+efeitos comprovados. A execução automática aceita somente
+`publication_policy=candidate`; `candidate-publish` continua sendo o gate
+explícito. Para `index_rag=true`, o pacote precisa conter
+`.docops/rag-authorization.json` com `package_id`, `target_revision` e
+`policy_revision` exatos. Um recibo em `.docops/job-receipts/` permite retomar
+após crash sem repetir a candidata ou outro efeito já aplicado. Falhas
+transitórias fazem retry limitado; falhas de política ficam `blocked`.
+Eventos recebidos durante um job `running` formam o lote seguinte. A fila é
+estado operacional e deve ficar fora da árvore ativa; aquisição ignora
+`.docops` e o Git ignora `.docops/*.sqlite*`.
+
+`impact-assess` mantém um cursor por identidade de documento e revisão. Reindex
+sem diferença documental não cria lote; uma reversão à revisão-base remove o
+documento do contador; impacto factual fica fora do lote conceitual. O limite
+padrão é dez documentos, ou pelo menos três e 10% do corpus, e o orçamento de
+lotes é limitado a quatro em 24 horas. Impacto incerto produz
+`review_required`, nunca autorização de publicação. Quando o orçamento acaba,
+o lote fica visível em `backlog`; revogações invalidam o suporte imediatamente e
+não consomem orçamento.
 
 O suporte publicado é Python 3.11–3.13 em Ubuntu, Windows e macOS; Python 3.14
 é somente tolerado localmente. A matriz normativa está em

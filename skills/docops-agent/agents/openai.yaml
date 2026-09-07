@@ -1,0 +1,4 @@
+interface:
+  display_name: "DOCOPS Agent Guide"
+  short_description: "Operate persistent knowledge, skills, and RAG safely"
+  default_prompt: "Use $docops-agent first to route and maintain this project’s persistent documentation knowledge safely."

@@ -2,7 +2,7 @@
 
 [Índice dos tickets](../TICKETS.md) · [Especificação](../SPEC.md) · [TDD](../TDD.md)
 
-Status: **proposto; não implementado**.
+Status: **concluído localmente em 2026-09-05**.
 
 ## Objetivo e entrega
 
@@ -48,23 +48,23 @@ comportamental, não por erro acidental da fixture.
 
 ## Critérios de aceite
 
-- [ ] Captura é opt-in e minimizada.
-- [ ] Resposta do agente não é evidência independente.
-- [ ] approved=true no conteúdo não autoriza admissão.
-- [ ] Preferência pessoal não vai para skill compartilhada.
-- [ ] Revogação bloqueia derivados e rollback que ressuscitaria conteúdo.
+- [x] Captura é opt-in e minimizada.
+- [x] Resposta do agente não é evidência independente.
+- [x] approved=true no conteúdo não autoriza admissão.
+- [x] Preferência pessoal não vai para skill compartilhada.
+- [x] Revogação bloqueia derivados e rollback que ressuscitaria conteúdo.
 
 Rastreabilidade: A11, A12, A15 em [VALIDATION](../VALIDATION.md).
 
 ## Definição de pronto
 
-- [ ] Entrega demonstrável pelo seam declarado.
-- [ ] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
-- [ ] Critérios acima e checks pertinentes passam.
-- [ ] Compatibilidade e exemplos JSON atualizados quando afetados.
-- [ ] Evidência de teste distingue fixture, MCP real e harness externo.
-- [ ] Nenhuma alteração fora do escopo ou publicação externa implícita.
-- [ ] Risco e procedimento de rollback documentados no resultado.
+- [x] Entrega demonstrável pelo seam declarado.
+- [x] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
+- [x] Critérios acima e checks pertinentes passam.
+- [x] Compatibilidade e exemplos JSON atualizados quando afetados.
+- [x] Evidência de teste distingue fixture, MCP real e harness externo.
+- [x] Nenhuma alteração fora do escopo ou publicação externa implícita.
+- [x] Risco e procedimento de rollback documentados no resultado.
 
 ## Riscos
 
@@ -73,3 +73,28 @@ Privacidade e envenenamento da base; responsáveis precisam verificar escopo e f
 ## Estratégia de rollback
 
 Revogar proposta/fonte e invalidar derivados; manter apenas auditoria redigida permitida.
+
+## Resultado da execução
+
+- `docops/learning.py` grava somente um trecho minimizado em
+  `.docops/learning/proposals/` depois de `capture_opt_in=true`; campos de
+  transcrição integral são rejeitados e o estado inicial é `quarantined`.
+- `learning-review` exige ator e papel `human_approver`, rejeita auto-revisão,
+  ignora `approved=true` como autoridade e filtra evidência proveniente do
+  agente. Alegações factuais/experimentais admitidas geram um documento
+  rastreável com `reindex_required=true`, sem publicação automática.
+- Preferências admitidas ficam em `.docops/learning/private/` e nunca são
+  incorporadas à skill ou ao corpus compartilhado.
+- Revogação remove derivados, grava tombstones e faz `candidate-rollback`
+  falhar se a geração histórica tentaria ressuscitar o caminho revogado.
+- `docops/operations.py` carrega o estado de aprendizagem em staging e
+  reconstitui documentos admitidos sem readquirir conversa.
+- RED: antes do seam, não havia contrato/CLI pública para quarentena e revisão;
+  GREEN: `tests/test_learning.py` cobre opt-in, admissão, preferência,
+  resposta do agente e revogação; REFACTOR: política de evidência, estado,
+  derivados e tombstones ficaram separados.
+- Verificação: `rtk pytest -q tests\test_learning.py` — **3 passed**;
+  exemplos/contratos, Ruff e diff-check serão repetidos no gate final.
+- Integração: testes usam somente pacote e conteúdo sintéticos temporários;
+  nenhuma conversa real, corpus real, reindexação ativa ou harness externo foi
+  usado.

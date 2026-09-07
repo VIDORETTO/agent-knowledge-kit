@@ -2,7 +2,7 @@
 
 [Índice dos tickets](../TICKETS.md) · [Especificação](../SPEC.md) · [TDD](../TDD.md)
 
-Status: **proposto; não implementado**.
+Status: **implementado em 2026-09-05**.
 
 ## Objetivo e entrega
 
@@ -14,7 +14,7 @@ E23: hand-off atual não garante fixação de sessão nem enforcement de ferrame
 
 ## Dependências
 
-Blocked by: [T08](./08-approve-publish.md), [T09](./09-history-rollback.md)
+Dependências concluídas: [T08](./08-approve-publish.md), [T09](./09-history-rollback.md)
 
 Decisões aplicáveis: D08; atualizar backend vendor e schemas do harness. Ver [registro de decisões](../DECISIONS.md).
 
@@ -48,23 +48,28 @@ comportamental, não por erro acidental da fixture.
 
 ## Critérios de aceite
 
-- [ ] Sessão nova recebe geração nova.
-- [ ] Writer do harness de consulta é recusado pelo servidor.
-- [ ] Cache respeita geração e revogação.
-- [ ] Sessão em geração revogada não continua consultando.
-- [ ] Backend sem capacidade compatível não habilita autopublicação concorrente.
+- [x] Sessão nova recebe a geração corrente e fixa `release_id` +
+  `composition_hash`.
+- [x] Writer do harness de consulta é recusado pelo servidor; a sessão aceita
+  somente `search_knowledge` e `get_document`.
+- [x] Cache é vinculado a sessão, ferramenta, consulta e geração.
+- [x] Revogação de sessão e de geração histórica bloqueia consultas futuras.
+- [x] Backend MCP sem `mode=read_only` e capacidades compatíveis falha fechado;
+  publicação concorrente permanece desabilitada.
 
 Rastreabilidade: A12, A14 em [VALIDATION](../VALIDATION.md).
 
 ## Definição de pronto
 
-- [ ] Entrega demonstrável pelo seam declarado.
-- [ ] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
-- [ ] Critérios acima e checks pertinentes passam.
-- [ ] Compatibilidade e exemplos JSON atualizados quando afetados.
-- [ ] Evidência de teste distingue fixture, MCP real e harness externo.
-- [ ] Nenhuma alteração fora do escopo ou publicação externa implícita.
-- [ ] Risco e procedimento de rollback documentados no resultado.
+- [x] Entrega demonstrável pela CLI pública `reader-session`,
+  `reader-query` e `reader-session-revoke`.
+- [x] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
+- [x] Critérios acima e checks pertinentes passam.
+- [x] Schemas, exemplos e documentação foram atualizados.
+- [x] Evidência de teste usa fixtures sintéticas; a capacidade MCP é validada
+  no manifesto, sem executar harness externo.
+- [x] Nenhuma publicação externa ou alteração do corpus ativo foi feita.
+- [x] Risco e procedimento de rollback estão documentados no resultado.
 
 ## Riscos
 
@@ -73,3 +78,21 @@ Windows e processos com arquivos abertos exigem validação própria; texto do r
 ## Estratégia de rollback
 
 Desabilitar publicação concorrente e usar atualização coordenada manual, sem alegar isolamento não comprovado.
+
+## Resultado da execução
+
+- RED: `tests/test_reader_sessions.py` começou com quatro falhas porque os
+  subcomandos ainda não existiam.
+- GREEN: `4 passed`; criação, pinagem, recusa de writer, troca de geração,
+  cache, revogação e perfil MCP read-only foram observados pela CLI.
+- REFACTOR: o estado runtime foi separado para
+  `.<package>.readers/`, evitando que uma substituição coordenada do pacote
+  apague sessões e tombstones; o diretório é ignorado pelo Git.
+- Arquivos principais: `docops/reader_sessions.py`, `docops/harness.py`,
+  `docops/__main__.py`, `docops/contracts.py`, os dois pares de schemas,
+  `tests/test_reader_sessions.py` e documentação.
+- Limitações: a fixture `memory` é sintética; o adapter MCP somente verifica o
+  contrato read-only do harness e não conecta um servidor externo neste ticket.
+- Rollback: parar de criar/aceitar novas sessões, manter a geração coordenada
+  manual e preservar o histórico/tombstones; remover a integração do reader
+  não deve apagar o histórico editorial nem revalidar sessões antigas.

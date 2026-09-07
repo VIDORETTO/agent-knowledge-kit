@@ -1,3 +1,243 @@
+# Análise comparativa para consolidação da main — 2026-09-05
+
+Objetivo: comparar o baseline `main`, o working tree local e
+`origin/feat/continuous-knowledge`; decidir a arquitetura-alvo para aprendizado
+contínuo e uso agente-first das skills; produzir somente documentação de
+especificação, tickets e TDD. Nenhuma implementação, merge, rebase, commit,
+push, publicação, reindexação ou alteração de estado ativo faz parte do escopo.
+
+## Plano
+
+- [x] Confirmar repositório, branch, remoto, baseline, working tree e instruções.
+- [x] Ler integralmente as skills `to-spec`, `to-tickets` e `tdd` e seus
+  materiais obrigatórios.
+- [x] Buscar `origin/feat/continuous-knowledge` e confirmar ancestralidade.
+- [x] Inventariar baseline, branch remota e working tree por capacidades,
+  contratos, estado, CLI, skills, segurança, testes e documentação.
+- [x] Simular integração fora do working tree e registrar conflitos textuais e
+  semânticos.
+- [x] Executar verificações somente leitura/proporcionais para validar as
+  conclusões, sem modificar a implementação.
+- [x] Definir a decisão arquitetural e a estratégia de consolidação da main.
+- [x] Criar uma especificação completa no formato `to-spec`.
+- [x] Criar tickets locais tracer-bullet, um arquivo por ticket, com blockers.
+- [x] Criar o plano TDD por seams públicos, RED → GREEN e gates de estabilidade.
+- [x] Revisar documentos contra as evidências, registrar limitações e concluir
+  esta seção com o veredito final.
+
+## Revisão
+
+- Baseline: `HEAD == origin/main == 15cfaa6a919eaac7fca315241a4b396b1902f8f8`.
+- Comparado com `origin/feat/continuous-knowledge == 2eaa9c24c9f809db0e0ce8b73206500ba1ed73e6`.
+- A branch remota está 10 commits à frente e 0 atrás; o histórico limpo permite
+  fast-forward, mas o working tree local sobrepõe 41 dos 88 caminhos remotos.
+- A simulação isolada encontrou 33 conflitos: 29 de conteúdo e 4 `add/add`.
+- Decisão: consolidação seletiva orientada por contratos, preservando o núcleo
+  modular local e portando `docops-agent`, distribuição, router/harness e
+  enforcement MCP read-only da branch remota.
+- Branch remota verificada em clone isolado: 260 testes passaram, 2 foram
+  ignorados; Ruff, contratos, documentação e `git diff --check` passaram.
+- Working tree: Ruff, 33 contratos e `git diff --check` passaram. O teste
+  `test_candidate_falls_back_when_bootstrap_no_install_leaves_a_venv_without_pip`
+  permanece falhando e bloqueia promoção.
+- Documentos produzidos em `docs/main-consolidation/`: comparação/decisão,
+  especificação, plano TDD e 13 tickets tracer-bullet.
+- Três auditorias independentes GPT-5.6 Luna/max revisaram Git/conflitos,
+  arquitetura e aderência às skills; os documentos foram corrigidos para
+  separar evidência observada de requisito futuro.
+- Tickets permanecem `draft-pending-confirmation`; publicação local em
+  `.scratch/main-consolidation/issues/` só ocorre após confirmação humana de
+  granularidade, seams e blockers.
+- Nenhuma implementação, integração, publicação, reindexação, commit ou push
+  foi realizada.
+
+---
+
+# Execução do planejamento de atualização contínua de conhecimento — T01–T18
+
+Objetivo: implementar os 18 tickets de `docs/continuous-knowledge/` por
+seams públicos, em ciclos RED → GREEN → REFACTOR, preservando compatibilidade
+e as invariantes de segurança. Esta seção pertence à execução atual; o
+histórico abaixo foi preservado.
+
+## Plano executável
+
+- [x] Revalidar estado inicial, contratos e seams públicos.
+- [x] T01 — proteger skill enriquecida contra sobrescrita.
+- [x] T02 — vincular revisões e evidências aos hashes exatos.
+- [x] T03 — separar atualização factual da camada conceitual.
+- [x] T04 — preparar candidata sem ativar.
+- [x] T05 — comprovar indexação, erros terminais e perfil real.
+- [x] T06 — receber enriquecimento externo em candidata.
+- [x] T07 — avaliar candidata/resposta com evidência independente.
+- [x] T08 — aprovar e publicar hashes exatos.
+- [x] T09 — reter e restaurar gerações publicadas.
+- [x] T10 — registrar fontes e reconciliar escopo completo.
+- [x] T11 — persistir eventos com deduplicação e debounce.
+- [x] T12 — executar jobs com lease, retomada e autorização.
+- [x] T13 — disparar enriquecimento por impacto conceitual.
+- [x] T14 — fixar geração por sessão e restringir MCP de consulta.
+- [x] T15 — reaproveitar índice apenas com snapshot consistente.
+- [x] T16 — preservar localizadores e avaliar português/formats.
+- [x] T17 — verificar propostas de conversa antes da admissão.
+- [x] T18 — priorizar investigação por uso e qualidade.
+- [x] Executar suíte completa, lint, contratos e verificações públicas.
+- [x] Atualizar documentação normativa, tickets, status e lições quando aplicável.
+- [x] Revisar diff final; não fazer deploy, push, release, reindex real ou captura.
+
+## Execução concluída — T10
+
+- [x] RED: registrar uma segunda fonte falhou porque o seam ainda não existia.
+- [x] GREEN: registrar fontes, versões, direitos, privacidade e completude.
+- [x] REFACTOR: separar registro desejado, observação de aquisição e retirada
+  autorizada.
+- [x] Rodar testes públicos e contratos; lint/formato e diff-check seguem no
+  gate regressivo da execução.
+- [x] Atualizar ticket/status/contratos sem publicar ou alterar corpus ativo.
+
+## Execução concluída — T11
+
+- [x] RED: o primeiro teste falhou porque `event-submit`/`jobs` ainda não
+  existiam.
+- [x] GREEN: registrar eventos duráveis por identidade e janela.
+- [x] REFACTOR: separar emissão, deduplicação e reconciliação.
+- [x] Rodar testes públicos, contratos, lint/formato e diff-check.
+- [x] Atualizar ticket/status/contratos sem publicar ou alterar corpus ativo.
+
+## Execução atual — T12
+
+- [x] Ler o ticket, confirmar T08/T11 e definir o primeiro seam de worker.
+- [x] RED: o primeiro teste falhou porque o comando `work --once` ainda não existia.
+- [x] GREEN: lease, retomada e autorização persistida.
+- [x] REFACTOR: separar aquisição de lease, execução e reconhecimento.
+- [x] Rodar cenários de política, autorização ausente, crash/retomada,
+  eventos durante execução e retry transitório limitado.
+- [x] Atualizar ticket/status/contratos sem publicar ou alterar corpus ativo.
+
+## Execução concluída — T12
+
+- [x] `work --once` reclama um job com lease e executa uma operação limitada.
+- [x] Recibo por job/revisão reconcilia o efeito após crash sem duplicação.
+- [x] Autorização RAG persistida é obrigatória e autopublicação fica bloqueada.
+- [x] Retries têm limite; eventos concorrentes ficam para lote posterior.
+- [x] Testes focados, contratos, Ruff e diff-check passam em fixtures sintéticas.
+
+## Execução concluída — T13
+
+- [x] Ler o ticket, confirmar T06/T10/T12 e definir o primeiro seam de impacto.
+- [x] RED: os testes públicos falharam porque `impact-assess` ainda não existia.
+- [x] GREEN: cursor por documento/revisão, impacto líquido, lote, backlog e
+  revogação.
+- [x] REFACTOR: contrato `conceptual-impact` e CLI sem acoplamento ao SQLite.
+- [x] Rodar testes focados, contratos, Ruff e diff-check em fixtures sintéticas.
+- [x] Atualizar ticket/status/contratos sem publicar ou alterar corpus ativo.
+
+## Execução concluída — T14
+
+- [x] Ler o ticket, confirmar T08/T09 e definir o seam público de sessão leitora.
+- [x] RED: os testes públicos falharam porque `reader-session` ainda não existia.
+- [x] GREEN: sessão pinada, query somente leitura, cache por geração e revogação.
+- [x] REFACTOR: mover estado runtime para `.<package>.readers/`, separado da
+  composição ativa e ignorado pelo Git.
+- [x] Atualizar schemas, contratos, ticket, status e uso operacional.
+- [x] Rodar teste focado; gates conjuntos ficam para a verificação final.
+
+## Execução concluída — T15
+
+- [x] Ler o ticket, confirmar T05/T09/T14 e definir o seam público de snapshot.
+- [x] RED: os testes públicos falharam porque `rag-snapshot` ainda não existia.
+- [x] GREEN: snapshot relocável, diff por hash, fallback de rebuild e
+  verificação de busca sem promoção.
+- [x] REFACTOR: encapsular inventário do backend e plano incremental no módulo
+  `docops.rag_sync`, com schemas e exemplos versionados.
+- [x] Rodar os cinco testes públicos focados e atualizar contrato/uso/status.
+- [x] Registrar limitações, evidência sintética e rollback sem tocar no índice
+  ativo.
+
+## Execução atual — T16
+
+- [x] Ler o ticket, confirmar T05/T07/T10 e definir o seam público de
+  localizadores e formatos.
+- [x] RED: a busca pública não devolvia `locators`; a comparação de perfil ainda
+  não tinha comando público.
+- [x] GREEN: preservar localizadores/citações, declarar limites sem localizador,
+  aceitar transcrição somente como Markdown externo, quarentenar extrações
+  suspeitas e expor `rag-profile-compare`.
+- [x] REFACTOR: padronizar o envelope de localizador e separar o diagnóstico de
+  perfil da mutação/reindexação.
+- [x] Rodar testes focados, contratos, Ruff, formato e diff-check.
+- [x] Atualizar ticket/status/contratos/uso sem publicar ou alterar corpus ativo.
+
+## Execução concluída — T17
+
+- [x] RED: propostas de conversa não tinham seam público nem quarentena.
+- [x] GREEN: `learning-submit` exige opt-in e minimização; `learning-review`
+  exige autoridade/evidência e mantém conversa não revisada fora do RAG ativo.
+- [x] REFACTOR: preferências privadas, fatos derivados, revogação e tombstones
+  ficaram separados da composição ativa; rollback não ressuscita revogados.
+- [x] Verificação: `rtk pytest -q tests\test_learning.py` — 3 passed;
+  contratos/Ruff/formato/diff-check no gate regressivo.
+- [x] Nenhuma conversa real, captura abrangente, publicação ou reindexação foi
+  executada.
+
+## Execução concluída — T18
+
+- [x] RED: o primeiro teste falhou porque `feedback-submit` ainda não existia.
+- [x] GREEN: `feedback-submit` redige perguntas e guarda hashes/métricas;
+  `feedback-report` agrega uma janela de sete dias, deduplica ocorrências por
+  sessão/pergunta/geração e abre investigação somente após três ocorrências.
+- [x] REFACTOR: `work --once` aceita o job `feedback_report` e reconhece um
+  recibo durável; a execução nunca altera Golden, resposta esperada ou RAG
+  ativo. Candidatas permanecem `reviewed=false`.
+- [x] Verificação: `rtk pytest -q tests\test_usage_feedback.py` — 3 passed;
+  `scripts/check_contracts.py --json` e Ruff PASS.
+- [x] Relatórios incluem latência/custo, denominadores e `not_comparable` para
+  gerações/conjuntos incompatíveis; nenhuma pergunta privada sai na projeção.
+- [x] Limite: o seam só prepara investigação/candidata local; revisão humana,
+  publicação e eventual reindexação continuam gates separados.
+
+## Verificação final da execução T01–T18
+
+- [x] Suíte completa no `.venv` alinhado ao lock: `317 passed, 2 skipped`;
+  os dois skips são apenas a indisponibilidade de criação de symlink neste
+  host Windows.
+- [x] Gates estáticos: Ruff lint, Ruff formato, `compileall`,
+  `scripts/check_contracts.py --json`, `scripts/check_support_matrix.py --json`,
+  `scripts/check_public_seams.py --json` e `git diff --check`.
+- [x] RED foi observado nos seams públicos registrados para cada ticket; os
+  focused checks de T17 e T18 passaram com 3 testes cada.
+- [x] As fixtures e estados operacionais usados nesta execução são sintéticos
+  e temporários; nenhum corpus, índice ativo, conversa real ou publicação foi
+  alterado.
+- [x] A evidência de MCP real permanece restrita ao pacote sintético isolado
+  documentado em T05; T17–T18 não executam MCP, harness externo ou captura real.
+- [x] Nenhum ticket foi fechado com stub essencial, TODO de implementação ou
+  gate ignorado; revisão final preservou mudanças preexistentes do worktree.
+
+## Critérios de execução
+
+- [x] T01 — proteção de artefatos gerados implementada e verificada.
+- [x] T02 — revisões estáveis e invalidação observável implementadas; a parte
+  de aprovação humana permanece no gate específico do T08.
+- [x] T03 — atualização factual preserva a camada conceitual e registra
+  defasagem/cobertura desconhecida.
+- [x] T04 — política candidata prepara artefato revisável/retomável sem
+  alterar a geração ativa; aprovação fica reservada ao T08.
+- [x] T05 — indexação só declara sucesso com conclusão, stats e busca
+  verificáveis; fingerprint efetivo e full rebuild por mudança de embedding
+  registrados; MCP real executado apenas em pacote sintético temporário.
+- [x] T06 — hand-off externo determinístico, recibo com hashes e importação
+  restrita à candidata; submissão não publica nem aceita credenciais.
+
+- [x] Cada ticket teve RED funcional observado antes do GREEN.
+- [x] Fixtures são sintéticas e os estados operacionais ficam em temporários.
+- [x] Integração MCP real, quando disponível, foi reportada separadamente das
+  fixtures.
+- [x] Nenhum ticket foi marcado concluído com stub essencial, TODO ou gate
+  ignorado.
+
+---
+
 # Registro de autoanálise e especificação pós-1.0
 
 ## Plano autônomo de prontidão para produção e divulgação — 2026-09-04
@@ -856,3 +1096,124 @@ significa que os tickets 23–29 foram implementados.
   `build/` compartilhados; a repetição sequencial passou. Os diretórios
   `build/` e `consulta_documentacao.egg-info/` foram removidos antes da
   repetição por serem artefatos gerados e ignorados.
+
+## Execução da consolidação main — T01–T13
+
+Objetivo: integrar seletivamente `origin/feat/continuous-knowledge` ao núcleo
+modular local em `codex/main-consolidation`, seguindo os contratos de
+`docs/main-consolidation/` e o ciclo RED → GREEN mínimo → verificação →
+refatoração. O checkout `main` foi preservado no baseline; não haverá push,
+merge em `main`, release, publicação, reindexação ou alteração de corpus/RAG
+real.
+
+### Plano executável
+
+- [x] Ler README, decisão, SPEC, TDD, índice e tickets na ordem prescrita.
+- [x] Registrar estado inicial, branch, remoto e mudanças locais.
+- [x] T01 — congelar baselines e decisão de integração seletiva.
+- [x] T02 — definir lifecycle, estado e compatibilidade canônicos.
+- [x] T03 — impor MCP read-only, pinning e revogação.
+- [x] T04 — consolidar geração, harness e router.
+- [x] T05 — distribuir e descobrir a skill operacional; checkout/wheel,
+  bootstrap idempotente/read-only e harness guidance verificados.
+- [x] T06 — unificar a CLI com aliases expand-contract; hierarquia canônica,
+  mapa explícito e equivalência de contrato verificados.
+- [x] T07 — consolidar candidata, avaliação, aprovação, publicação e rollback;
+  autoridade, revogação e recuperação de crash verificadas.
+- [x] T08 — consolidar fontes, eventos e worker retomável; gates de política,
+  reautorização, deduplicação e crash/retry verificados.
+- [x] T09 — consolidar readers e snapshots RAG; sessão fixa release/snapshot,
+  compatibilidade completa e revogação/smoke fail-closed verificados.
+- [x] T10 — governar aprendizado e feedback; consentimento, evidência,
+  feedback autenticado/anti-replay/rate-limit e revogação propagada verificados.
+- [x] T11 — eliminar drift de contratos e documentação.
+- [x] T12 — provar clean clone, wheel e plataformas.
+- [x] T13 — criar candidato de integração e preparar decisão humana.
+- [x] Executar gates finais sequenciais, sem promover `main`.
+
+### Registro inicial
+
+- Branch de trabalho: `codex/main-consolidation`, criada em
+  `origin/main`; `main` continua em `15cfaa6a919eaac7fca315241a4b396b1902f8f8`.
+- Mudanças locais existentes foram carregadas intactas na branch; não houve
+  reset, checkout destrutivo, merge ou cópia sobre o working tree.
+- T01 foi executado com o teste de supply chain conhecido em RED; a correção
+  fica bloqueada para o ticket/gate que a possui no escopo.
+
+### Execução concluída — main-consolidation T10
+
+- [x] RED: evidência independente declarada sem verificação e feedback sem
+  origem autenticada foram aceitos antes dos guards.
+- [x] GREEN: opt-in/minimização, consentimento escopado com validade/hash,
+  evidência verificável, exclusão de recursão, autenticação de feedback,
+  identidade de evento, anti-replay e rate limit.
+- [x] REFACTOR: tombstones de aprendizado passaram a compor a identidade de
+  revogação de snapshots e os guards de candidata/rollback.
+- [x] Verificação: `tests/test_learning.py tests/test_usage_feedback.py
+  tests/test_reader_sessions.py` — 18 passed; `tests/test_candidate_publication.py`
+  — 13 passed; Ruff PASS.
+- [x] Ticket, status, schemas e rollback documentados; nenhum corpus/RAG real
+  foi alterado.
+
+### Execução concluída — main-consolidation T11
+
+- [x] RED: o checker documental ainda não existia; a coleta do teste público
+  falhou antes da implementação.
+- [x] GREEN: fonte canônica `schemas/`, sincronização por conteúdo, política de
+  versão/compatibilidade e checkers de contratos/documentação.
+- [x] REFACTOR: documentação histórica foi explicitamente excluída do contrato
+  normativo, enquanto README/status/arquitetura/uso/tickets apontam para as
+  mesmas superfícies e comandos canônicos.
+- [x] Verificação: 35 testes passaram e 1 foi pulado por limitação de symlink;
+  `sync_schemas`, `check_contracts`, `check_documentation` e Ruff passaram.
+- [x] Nenhum corpus, índice RAG, publicação ou estado externo foi alterado.
+
+### Revisão
+
+- Atualizar esta seção após cada ticket com RED, GREEN, gates, limitações e
+  rollback observável.
+
+### Execução concluída — main-consolidation T12
+
+- [x] RED: o runner não existia; os ciclos seguintes capturaram e corrigiram
+  locale Windows, intérprete/vendor RAG do runtime temporário e o estado limpo
+  de recuperação (`recovery.status=none`).
+- [x] GREEN: `scripts/run_release_gates.py --profile full` executou os 22
+  estágios em série, sem diretórios de build compartilhados.
+- [x] Verificação: `artifacts/release-gates-final-20260907/release-gates.json`
+  registra `ok=true`, 22/22 `passed`, 7793 verificações passadas, 57 skips
+  explícitos e zero falhas; clean clone RAG, wheels, MCP real, crash matrix,
+  revogação e reindexação concorrente estão nos artefatos por estágio.
+- [x] POSIX/WSL: compileall, bootstrap sem instalação, doctor, contratos e
+  documentação passaram; limitações de pip/venv/Ruff/pytest/RAG ficaram como
+  skips documentados em `docs/DEPENDENCIES.md`.
+- [x] Refatoração/rollback: evidências permanecem em `artifacts/` ignorado e o
+  rollback não toca corpus, índice RAG real ou geração ativa.
+
+### Execução concluída — main-consolidation T13
+
+- [x] RED: `tests/test_integration_candidate.py` falhou antes de existir o
+  seam `scripts/prepare_integration_candidate.py`.
+- [x] GREEN: o relatório consolida comparação `origin/main` versus
+  `origin/feat/continuous-knowledge`, feature trace, compatibilidade, estado
+  versionado, riscos e o bundle opcional.
+- [x] Verificação: o teste focado passou; o relatório final foi gerado em
+  `artifacts/integration-candidate-final-20260907/`, com digest registrado no
+  JSON e bundle pronto em `artifacts/integration-bundle-final-20260907-v4/`,
+  usando o gate T12 acima; `verify_candidate.py` também retornou `ok=true` e
+  identidade consistente.
+- [x] Decisão: promoção para `main` permanece `performed=false` e `blocked`,
+  sem autorização humana, merge, push, release, publicação ou mutação de
+  corpus/RAG.
+
+### Revisão final
+
+- [x] Branch isolada: `codex/main-consolidation`; `main` e o remoto não foram
+  alterados.
+- [x] Gates Windows, POSIX/WSL, clean clone, wheel core/RAG e MCP real
+  registrados e verificáveis.
+- [x] Não foram versionados `.venv*`, `data/`, `models_cache/`,
+  `.rag_state.json` nem corpus privado; fixtures sintéticas e dados do vendor
+  revisado seguem a allowlist documentada.
+- [x] Próximo passo externo: revisão humana de um commit limpo e CI vinculada
+  ao digest antes de qualquer promoção.

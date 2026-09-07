@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "history_id",
+    "release_id",
+    "composition_hash",
+    "index_revision",
+    "retained_at",
+    "revoked",
+    "index_compatible"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "history_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "release_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "composition_hash": {
+      "type": "string",
+      "minLength": 1
+    },
+    "index_revision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "retained_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "revoked": {
+      "type": "boolean"
+    },
+    "index_compatible": {
+      "type": "boolean"
+    },
+    "parent_release_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "source_candidate_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

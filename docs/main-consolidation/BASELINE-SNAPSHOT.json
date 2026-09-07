@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-09-06",
+  "branch": "codex/main-consolidation",
+  "base": {
+    "head": "15cfaa6a919eaac7fca315241a4b396b1902f8f8",
+    "origin_main": "15cfaa6a919eaac7fca315241a4b396b1902f8f8",
+    "origin_feature": "2eaa9c24c9f809db0e0ce8b73206500ba1ed73e6",
+    "merge_base": "15cfaa6a919eaac7fca315241a4b396b1902f8f8"
+  },
+  "working_tree": {
+    "candidate_file_count": 525,
+    "candidate_digest": "b99c603e2ba10f2f5a69348ebce99eb09e46c7eee93f6ee365ee35ce789b0022",
+    "patch_sha256": "2360529c2aab1645226426f9e806c5437b6328b795410347d45c51f869ab011a",
+    "status_line_count": 139,
+    "status_sha256": "37a2e5ae7f1be4b95369bbb0a856341338d3ea8aef2b427d5ccc9d29f9dababa"
+  },
+  "decision": "preserve modular local core; selectively port agent-first distribution and enforced MCP read-only security",
+  "known_blockers": [
+    {
+      "test": "test_candidate_falls_back_when_bootstrap_no_install_leaves_a_venv_without_pip",
+      "failure_code": "candidate_failed",
+      "detail": "candidate supply-chain evidence failed independent verification"
+    }
+  ],
+  "prohibited_actions_observed": [
+    "merge",
+    "push",
+    "release",
+    "publication",
+    "real_corpus_or_rag_mutation"
+  ]
+}

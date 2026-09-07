@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consulta-documentacao.invalid/schemas/feedback.schema.json",
+  "title": "docops redacted usage feedback",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "feedback_id",
+    "event_id",
+    "package_id",
+    "generation",
+    "kind",
+    "question",
+    "question_hash",
+    "privacy",
+    "source",
+    "authentication",
+    "usage",
+    "occurred_at",
+    "state",
+    "occurrence_hash",
+    "feedback_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "feedback_id": {"type": "string", "minLength": 1},
+    "event_id": {"type": "string", "minLength": 1},
+    "package_id": {"type": "string", "minLength": 1},
+    "generation": {
+      "type": "object",
+      "required": [
+        "release_id",
+        "composition_hash",
+        "corpus_revision",
+        "index_revision",
+        "golden_revision",
+        "harness_revision",
+        "configuration_hash"
+      ],
+      "properties": {
+        "release_id": {"type": ["string", "null"]},
+        "composition_hash": {"type": ["string", "null"]},
+        "corpus_revision": {"type": ["string", "null"]},
+        "index_revision": {"type": ["string", "null"]},
+        "golden_revision": {"type": ["string", "null"]},
+        "harness_revision": {"type": ["string", "null"]},
+        "configuration_hash": {"type": ["string", "null"]}
+      }
+    },
+    "kind": {
+      "enum": ["wrong_answer", "retrieval_miss", "unhelpful", "abstention", "latency", "cost"]
+    },
+    "question": {"const": "<redacted-query>"},
+    "question_hash": {"type": "string", "minLength": 64},
+    "privacy": {"const": "redacted"},
+    "source": {
+      "type": "object",
+      "required": ["channel", "reporter_hash", "session_hash"],
+      "properties": {
+        "channel": {"type": "string", "minLength": 1},
+        "reporter_hash": {"type": "string", "minLength": 64},
+        "session_hash": {"type": "string", "minLength": 64}
+      }
+    },
+    "authentication": {
+      "type": "object",
+      "required": ["authenticated", "source", "subject_hash", "proof_hash"],
+      "properties": {
+        "authenticated": {"const": true},
+        "source": {"type": "string", "minLength": 1},
+        "subject_hash": {"type": "string", "minLength": 64},
+        "proof_hash": {"type": "string", "minLength": 64}
+      }
+    },
+    "usage": {
+      "type": "object",
+      "required": ["latency_ms", "cost_units", "denominator"],
+      "properties": {
+        "latency_ms": {"type": ["number", "null"]},
+        "cost_units": {"type": ["number", "null"]},
+        "denominator": {"type": "integer"}
+      }
+    },
+    "comparison": {
+      "type": ["object", "null"],
+      "properties": {
+        "metric": {"type": "string"},
+        "baseline": {"type": "object"},
+        "current": {"type": "object"}
+      }
+    },
+    "occurred_at": {"type": "string", "minLength": 1},
+    "state": {"const": "received"},
+    "occurrence_hash": {"type": "string", "minLength": 64},
+    "feedback_hash": {"type": "string", "minLength": 64}
+  }
+}

@@ -2,7 +2,7 @@
 
 [Índice dos tickets](../TICKETS.md) · [Especificação](../SPEC.md) · [TDD](../TDD.md)
 
-Status: **proposto; não implementado**.
+Status: **concluído localmente em 2026-09-05**.
 
 ## Objetivo e entrega
 
@@ -48,22 +48,41 @@ comportamental, não por erro acidental da fixture.
 
 ## Critérios de aceite
 
-- [ ] Ausência de harness mantém awaiting_enrichment.
-- [ ] Recibo registra ferramenta/versão e entradas/saídas, sem credenciais.
-- [ ] Symlink/path traversal e tentativa de editar Golden revisado são recusados.
-- [ ] Saída válida fica candidata; não é publicada por submissão.
+- [x] Ausência de harness mantém awaiting_enrichment.
+- [x] Recibo registra ferramenta/versão e entradas/saídas, sem credenciais.
+- [x] Symlink/path traversal e tentativa de editar Golden revisado são recusados.
+- [x] Saída válida fica candidata; não é publicada por submissão.
 
 Rastreabilidade: A07, A15 em [VALIDATION](../VALIDATION.md).
 
 ## Definição de pronto
 
-- [ ] Entrega demonstrável pelo seam declarado.
-- [ ] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
-- [ ] Critérios acima e checks pertinentes passam.
-- [ ] Compatibilidade e exemplos JSON atualizados quando afetados.
-- [ ] Evidência de teste distingue fixture, MCP real e harness externo.
-- [ ] Nenhuma alteração fora do escopo ou publicação externa implícita.
-- [ ] Risco e procedimento de rollback documentados no resultado.
+- [x] Entrega demonstrável pelo seam declarado.
+- [x] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
+- [x] Critérios acima e checks pertinentes passam.
+- [x] Compatibilidade e exemplos JSON atualizados quando afetados.
+- [x] Evidência de teste distingue fixture, MCP real e harness externo.
+- [x] Nenhuma alteração fora do escopo ou publicação externa implícita.
+- [x] Risco e procedimento de rollback documentados no resultado.
+
+## Resultado da execução
+
+- RED: `candidate-submit` inexistente foi observado pela CLI; depois a fixture
+  foi completada com o contrato de tarefa/recibo para que o teste alcançasse a
+  guarda de escopo.
+- GREEN: `candidate-request` grava uma tarefa com base, snapshot, hashes,
+  escopo, política, idioma e orçamento; `candidate-submit` verifica o recibo,
+  rejeita conteúdo sensível, caminhos fora de `skill/` e `router/`, hashes
+  divergentes e base obsoleta, e importa somente para a candidata.
+- REFACTOR: validação de caminho, hashes, orçamento, contrato e importação
+  transacional ficaram isolados em `docops/candidates.py`; o hand-off
+  determinístico ficou em `docops/harness.py`.
+- Verificação: `tests/test_enrichment.py` — **5 passed**; `scripts/check_contracts.py`
+  — **ok**; Ruff lint e formato do slice — **passaram**.
+- Integração: nenhum harness externo real foi executado. O resultado válido é
+  uma fixture sintética; T05 continua sendo a única prova MCP real isolada.
+- Rollback: rejeitar o recibo ou descartar a candidata; a geração ativa nunca
+  é alterada pela submissão.
 
 ## Riscos
 

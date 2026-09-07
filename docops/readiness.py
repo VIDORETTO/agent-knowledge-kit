@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .observability import redact_report, redact_text
+from .revisions import evidence_matches_package, package_revisions
 from .storage import write_json_atomic
 
 READINESS_ORDER = {
@@ -79,6 +80,7 @@ def assess_readiness(package_root: Path | str) -> dict[str, Any]:
     scaffold = skill_file.is_file() and (root / "router" / "SKILL.md").is_file()
     enrichment = _enrichment_evidence(root) if scaffold else None
     skill_state = "skill-enriched" if enrichment else "scaffold-ready" if scaffold else "not-ready"
+    enrichment_state = "skill-enriched" if enrichment else "awaiting_enrichment" if scaffold else "not-ready"
     index = _read_json(root / "rag" / "index.json")
     documents = root / "rag" / "documents"
     corpus_ready = bool(
@@ -95,12 +97,23 @@ def assess_readiness(package_root: Path | str) -> dict[str, Any]:
         else "not-ready"
     )
     evaluation = _read_json(root / ".docops" / "evaluation.json")
-    evaluated = bool(evaluation and evaluation.get("schema_version") == 1 and evaluation.get("ok") is True)
+    evaluation_status = "absent"
+    if evaluation and evaluation.get("schema_version") == 1 and evaluation.get("ok") is True:
+        _matches, evaluation_status = evidence_matches_package(root, evaluation)
+    elif evaluation:
+        evaluation_status = "invalidated"
+    evaluated = bool(
+        evaluation
+        and evaluation.get("schema_version") == 1
+        and evaluation.get("ok") is True
+        and evaluation_status == "valid"
+    )
     release_evidence = _read_json(root / ".docops" / "release-evidence.json")
     release_ready = bool(
         release_evidence
         and release_evidence.get("schema_version") == 1
         and release_evidence.get("validated") is True
+        and evaluated
         and _mcp_evaluation_evidence(evaluation)
         and enrichment
     )
@@ -122,11 +135,19 @@ def assess_readiness(package_root: Path | str) -> dict[str, Any]:
         "schema_version": 1,
         "state": state,
         "skill": skill_state,
+        "enrichment": enrichment_state,
         "rag": rag_state,
         "evaluation": "evaluated" if evaluated else "pending",
+        "evaluation_status": evaluation_status,
         "release": "release-ready" if release_ready else "pending",
         "evidence": {
             "skill": "skill/SKILL.md" if scaffold else None,
+            "enrichment_request": (
+                ".docops/enrichment-request.json"
+                if (root / ".docops" / "enrichment-request.json").is_file()
+                and not (root / ".docops" / "enrichment-request.json").is_symlink()
+                else None
+            ),
             "skill_enrichment": ".docops/skill-enrichment.json" if enrichment else None,
             "rag_index": "rag/index.json" if corpus_ready else None,
             "evaluation": ".docops/evaluation.json" if evaluated else None,
@@ -179,6 +200,14 @@ def record_skill_enrichment(
             manifest = None
         if isinstance(manifest, dict):
             manifest["readiness"] = assess_readiness(root)
+            previous_revisions = manifest.get("revisions")
+            previous_golden = (
+                previous_revisions.get("golden_revision")
+                if isinstance(previous_revisions, Mapping)
+                and isinstance(previous_revisions.get("golden_revision"), str)
+                else None
+            )
+            manifest["revisions"] = package_revisions(root, golden_revision=previous_golden)
             provenance_value = manifest.setdefault("provenance", {})
             if isinstance(provenance_value, dict):
                 provenance_value["skill_enrichment"] = {

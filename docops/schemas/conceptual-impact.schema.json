@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consulta-documentacao.invalid/schemas/conceptual-impact.schema.json",
+  "title": "docops conceptual impact report",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "ok",
+    "package_id",
+    "cursor",
+    "relevant_count",
+    "affected_ratio",
+    "documents",
+    "batch",
+    "backlog_count",
+    "backlog",
+    "revocations"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "ok": {"type": "boolean"},
+    "package_id": {"type": "string", "minLength": 1},
+    "cursor": {
+      "type": "object",
+      "required": ["last_event_at", "last_event_id"],
+      "properties": {
+        "last_event_at": {"type": ["string", "null"]},
+        "last_event_id": {"type": ["string", "null"]}
+      }
+    },
+    "relevant_count": {"type": "integer"},
+    "affected_ratio": {"type": "number"},
+    "documents": {"type": "array"},
+    "batch": {
+      "type": "object",
+      "required": ["status", "batch_id", "batch_key", "document_ids", "publication_allowed", "reason"],
+      "properties": {
+        "status": {"type": "string", "minLength": 1},
+        "batch_id": {"type": ["string", "null"]},
+        "batch_key": {"type": ["string", "null"]},
+        "document_ids": {"type": "array"},
+        "publication_allowed": {"type": "boolean"},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    },
+    "backlog_count": {"type": "integer"},
+    "backlog": {"type": "array"},
+    "revocations": {"type": "array"}
+  }
+}

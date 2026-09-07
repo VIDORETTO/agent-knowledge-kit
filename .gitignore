@@ -25,6 +25,10 @@ documents/*
 /artifacts/
 /build/
 /dist/
+# Durable coordination queues are runtime state, never source or release input.
+**/.docops/*.sqlite*
+# Reader sessions/caches/revocations live beside the active package and are runtime state.
+**/.*.readers/
 *.egg-info/
 /.scratch/
 skills/generated/

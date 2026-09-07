@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import locale
 import os
 import shutil
 import subprocess
@@ -50,19 +51,25 @@ def _clone_python(destination: Path) -> Path:
     return destination / ".venv" / relative
 
 
-def _preflight(python: str, destination: Path, *, tests_required: bool) -> dict[str, object]:
-    required = ["docops"] + (["pytest"] if tests_required else [])
+def _preflight(
+    python: str, destination: Path, *, tests_required: bool, rag_required: bool = False
+) -> dict[str, object]:
+    required = ["docops"] + (["pytest"] if tests_required else []) + (["chromadb"] if rag_required else [])
     missing: list[str] = []
     for module in required:
         try:
             completed = subprocess.run(
                 [python, "-c", f"import {module}"],
                 cwd=destination,
-                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                env={
+                    key: value
+                    for key, value in os.environ.items()
+                    if key.casefold() not in {"pythonioencoding", "pythonutf8"}
+                },
                 check=False,
                 capture_output=True,
                 text=True,
-                encoding="utf-8",
+                encoding=locale.getpreferredencoding(False),
                 errors="replace",
             )
         except OSError:
@@ -70,7 +77,11 @@ def _preflight(python: str, destination: Path, *, tests_required: bool) -> dict[
         if completed is None or completed.returncode:
             missing.append(module)
     return {
-        "profile": "core-dev" if tests_required else "core",
+        "profile": (
+            "core-dev-rag"
+            if tests_required and rag_required
+            else ("core-rag" if rag_required else ("core-dev" if tests_required else "core"))
+        ),
         "required_modules": required,
         "missing_modules": missing,
         "ok": not missing,
@@ -82,6 +93,7 @@ def main() -> int:
     parser.add_argument("--source", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--python", default=sys.executable)
     parser.add_argument("--skip-tests", action="store_true")
+    parser.add_argument("--rag", action="store_true", help="bootstrap the optional knowledge-rag runtime in the clone")
     parser.add_argument(
         "--bootstrap",
         action="store_true",
@@ -94,10 +106,14 @@ def main() -> int:
     destination = Path(temporary) / source.name
     copy_distributable_tree(source, destination)
     environment = {
-        key: value for key, value in os.environ.items() if key.casefold() not in {"pythonpath", "pythonhome"}
+        key: value
+        for key, value in os.environ.items()
+        if key.casefold() not in {"pythonpath", "pythonhome", "pythonioencoding", "pythonutf8", "docops_skip_rag"}
     }
-    environment.update({"DOCOPS_SKIP_RAG": "1", "PYTHONNOUSERSITE": "1"})
-    preflight = _preflight(args.python, destination, tests_required=not args.skip_tests)
+    environment["PYTHONNOUSERSITE"] = "1"
+    if not args.rag:
+        environment["DOCOPS_SKIP_RAG"] = "1"
+    preflight = _preflight(args.python, destination, tests_required=not args.skip_tests, rag_required=args.rag)
     reports: list[dict[str, object]] = [{"step": "preflight", **preflight}]
     release_audited = False
     if args.bootstrap and Path(args.python).is_file():
@@ -134,6 +150,8 @@ def main() -> int:
     if args.bootstrap or not preflight["ok"]:
         if not args.bootstrap:
             bootstrap = [args.python, "scripts/bootstrap.py", "--root", str(destination), "--dev"]
+            if args.rag:
+                bootstrap.append("--rag")
             payload = {
                 "ok": False,
                 "code": "bootstrap_required",
@@ -147,6 +165,8 @@ def main() -> int:
                 shutil.rmtree(Path(temporary), ignore_errors=True)
             return 2
         bootstrap_command = [args.python, "scripts/bootstrap.py", "--root", str(destination), "--dev"]
+        if args.rag:
+            bootstrap_command.append("--rag")
         try:
             bootstrap = subprocess.run(
                 bootstrap_command,

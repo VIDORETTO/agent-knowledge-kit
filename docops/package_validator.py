@@ -14,6 +14,7 @@ from .contracts import validate_artifact
 from .divergence import inspect_package_divergence
 from .observability import redact_report
 from .readiness import READINESS_ORDER, assess_readiness
+from .revisions import package_revisions
 
 
 @dataclass
@@ -364,6 +365,26 @@ def validate_package(package_root: Path | str) -> ValidationResult:
                 _error(errors, "manifest_document_count", "accepted manifest entries do not match rag/documents")
 
     checks["manifest"] = {"ok": not any(error["code"].startswith("manifest") for error in errors)}
+    declared_revisions = manifest.get("revisions")
+    if isinstance(declared_revisions, dict):
+        golden_revision = declared_revisions.get("golden_revision")
+        observed_revisions = package_revisions(
+            root, golden_revision=golden_revision if isinstance(golden_revision, str) else None
+        )
+        revision_keys = {
+            "corpus_revision",
+            "index_revision",
+            "skill_revision",
+            "router_revision",
+            "policy_revision",
+            "golden_revision",
+            "composition_hash",
+            "release_id",
+        }
+        mismatches = sorted(key for key in revision_keys if declared_revisions.get(key) != observed_revisions.get(key))
+        checks["revisions"] = {"ok": not mismatches, "mismatches": mismatches}
+        if mismatches:
+            _error(errors, "revision_mismatch", "manifest revision evidence does not match package content")
     if not config_targets:
         config_targets = [root / "config.yaml"]
     unique_config_targets = list(dict.fromkeys(config_targets))

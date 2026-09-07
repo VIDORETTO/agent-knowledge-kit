@@ -12,6 +12,22 @@ from .observability import redact_report, redact_text
 from .package_validator import ValidationResult
 from .primitives import absolute_path_without_resolving
 
+SUPPORTED_LAYERS = ("conceptual", "factual")
+
+
+def normalize_layers(value: tuple[str, ...] | list[str] | None) -> tuple[str, ...]:
+    """Normalize the explicit conceptual/factual update selection."""
+
+    if value is None:
+        return SUPPORTED_LAYERS
+    normalized = tuple(dict.fromkeys(str(item).strip().casefold() for item in value if str(item).strip()))
+    if not normalized:
+        raise ValueError("layers must include conceptual, factual or both")
+    unsupported = sorted(set(normalized) - set(SUPPORTED_LAYERS))
+    if unsupported:
+        raise ValueError(f"unsupported layers: {', '.join(unsupported)}")
+    return tuple(layer for layer in SUPPORTED_LAYERS if layer in normalized)
+
 
 @dataclass
 class PipelineOptions:
@@ -24,6 +40,8 @@ class PipelineOptions:
     scope: str | None = None
     language: str | None = None
     mode: str = "run"
+    layers: tuple[str, ...] = SUPPORTED_LAYERS
+    publication_policy: str = "direct"
     license: str | None = None
     redistribution: str = "private-only"
     index_rag: bool = False
@@ -42,6 +60,9 @@ class PipelineOptions:
         self.output_dir = absolute_path_without_resolving(self.output_dir)
         if self.mode not in {"create", "update", "run", "dry-run"}:
             raise ValueError("mode must be create, update, run or dry-run")
+        self.layers = normalize_layers(self.layers)
+        if self.publication_policy not in {"direct", "candidate"}:
+            raise ValueError("publication_policy must be direct or candidate")
         if self.redistribution not in {"private-only", "internal", "public"}:
             raise ValueError("redistribution must be private-only, internal or public")
         if (

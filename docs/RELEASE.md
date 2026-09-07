@@ -28,6 +28,28 @@ refer to the same Git `HEAD` and candidate digest recorded by
 `candidate-manifest.json`. The runbook produces local evidence only; it never
 commits, tags, pushes, publishes or creates a release.
 
+For the consolidation, the canonical local orchestration is the sequential
+runner below. It creates one unique ignored workspace per stage, captures the
+exact redacted commands and denominators, fails closed on required gates, and
+uses the reviewed vendor plus the selected interpreter for the temporary RAG
+stage:
+
+```text
+python scripts/run_release_gates.py --root . --profile full --json
+```
+
+The final integration decision is recorded without promotion by:
+
+```text
+python scripts/prepare_integration_candidate.py --root . \
+  --output artifacts/integration-candidate \
+  --gates-report artifacts/release-gates-final-20260907/release-gates.json --json
+```
+
+This report compares `origin/main` and `origin/feat/continuous-knowledge`,
+records feature provenance and residual risks, and keeps promotion blocked until
+a human authorization record, a clean commit and matching CI evidence exist.
+
 Run the gates in this order from a clean clone or the explicitly selected
 working-tree candidate:
 

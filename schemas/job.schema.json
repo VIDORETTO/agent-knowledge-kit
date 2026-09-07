@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DOCOPS Job",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "job_id",
+    "job_key",
+    "type",
+    "package_id",
+    "target_revision",
+    "state",
+    "attempt",
+    "due_at",
+    "first_event_at",
+    "last_event_at",
+    "event_count"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "job_id": {"type": "string", "minLength": 1},
+    "job_key": {"type": "string", "minLength": 1},
+    "type": {"type": "string", "minLength": 1},
+    "package_id": {"type": "string", "minLength": 1},
+    "target_revision": {"type": "string", "minLength": 1},
+    "state": {"enum": ["pending", "running", "succeeded", "failed", "blocked"]},
+    "attempt": {"type": "integer"},
+    "due_at": {"type": "string", "minLength": 1},
+    "first_event_at": {"type": "string", "minLength": 1},
+    "last_event_at": {"type": "string", "minLength": 1},
+    "event_count": {"type": "integer"},
+    "lease_until": {"type": ["string", "null"]},
+    "result_ref": {"type": ["string", "null"]},
+    "error_code": {"type": ["string", "null"]},
+    "policy_revision": {"type": ["string", "null"]},
+    "completed_files": {"type": "array", "items": {"type": "string"}},
+    "deferred_files": {"type": "array", "items": {"type": "string"}}
+  }
+}

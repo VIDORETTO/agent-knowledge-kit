@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DOCOPS AcquisitionSnapshot",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "source_id",
+    "revision",
+    "entries",
+    "scope",
+    "completeness",
+    "observation_time",
+    "errors"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "source_id": {"type": "string", "minLength": 1},
+    "revision": {"type": "string", "minLength": 1},
+    "version": {"type": ["string", "null"]},
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["canonical"],
+        "properties": {
+          "canonical": {"type": "string", "minLength": 1},
+          "content_hash": {"type": ["string", "null"]},
+          "status": {"type": ["string", "null"]},
+          "destination": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "scope": {"type": "string", "minLength": 1},
+    "completeness": {"enum": ["complete", "partial", "incomplete", "failed", "unknown"]},
+    "observation_time": {"type": "string", "minLength": 1},
+    "errors": {"type": "array"},
+    "warnings": {"type": "array"}
+  }
+}

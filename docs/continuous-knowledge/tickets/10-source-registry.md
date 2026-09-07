@@ -2,7 +2,7 @@
 
 [Índice dos tickets](../TICKETS.md) · [Especificação](../SPEC.md) · [TDD](../TDD.md)
 
-Status: **proposto; não implementado**.
+Status: **concluído localmente em 2026-09-05**.
 
 ## Objetivo e entrega
 
@@ -48,23 +48,23 @@ comportamental, não por erro acidental da fixture.
 
 ## Critérios de aceite
 
-- [ ] Nova fonte preserva as cadastradas.
-- [ ] Timeout/limite/robots não vira tombstone.
-- [ ] Duplicata física preserva proveniências e direitos.
-- [ ] Versionamento fixado não avança sozinho.
-- [ ] Última fonte removida produz retirada explícita, não ready vazio.
+- [x] Nova fonte preserva as cadastradas.
+- [x] Timeout/limite/robots não vira tombstone.
+- [x] Duplicata física preserva proveniências e direitos.
+- [x] Versionamento fixado não avança sozinho.
+- [x] Última fonte removida produz retirada explícita, não ready vazio.
 
 Rastreabilidade: A10, A16 em [VALIDATION](../VALIDATION.md).
 
 ## Definição de pronto
 
-- [ ] Entrega demonstrável pelo seam declarado.
-- [ ] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
-- [ ] Critérios acima e checks pertinentes passam.
-- [ ] Compatibilidade e exemplos JSON atualizados quando afetados.
-- [ ] Evidência de teste distingue fixture, MCP real e harness externo.
-- [ ] Nenhuma alteração fora do escopo ou publicação externa implícita.
-- [ ] Risco e procedimento de rollback documentados no resultado.
+- [x] Entrega demonstrável pelo seam declarado.
+- [x] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
+- [x] Critérios acima e checks pertinentes passam.
+- [x] Compatibilidade e exemplos JSON atualizados quando afetados.
+- [x] Evidência de teste distingue fixture, MCP real e harness externo.
+- [x] Nenhuma alteração fora do escopo ou publicação externa implícita.
+- [x] Risco e procedimento de rollback documentados no resultado.
 
 ## Riscos
 
@@ -73,3 +73,18 @@ Escopo incorreto pode causar exclusão indevida; ausência web não comprova rem
 ## Estratégia de rollback
 
 Reverter registro e reconciliar sob revisão; preservar ativa até snapshot válido.
+
+## Resultado desta execução
+
+- `docops/source_policy.py` implementa registro, snapshot e retirada explícita;
+  `.docops/source-registry.json` é escrito atomicamente.
+- `source-register` preserva outros `source_id`; `source-reconcile` bloqueia
+  observações incompletas, divergência de escopo e avanço de versão pinada.
+- `docops.plan` zera o diff destrutivo quando a aquisição não produz conteúdo
+  utilizável, mantendo a geração ativa.
+- RED: o primeiro teste falhou pela ausência do comando de registro. GREEN:
+  seis testes comportamentais passaram, incluindo todos os critérios de aceite.
+- Verificação: `rtk pytest -q tests/test_source_registry.py` (**6 passed**);
+  `rtk python scripts/check_contracts.py --json` (**PASS**). Fixtures locais
+  em temporários; nenhuma fonte real, MCP/harness externo ou publicação foi
+  usada.

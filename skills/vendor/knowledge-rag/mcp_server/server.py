@@ -1354,7 +1354,9 @@ class KnowledgeOrchestrator:
         ``stdio`` transport is single-process, so it keeps Chroma's default
         journal mode.
         """
-        if config.transport != "stdio":
+        if config.read_only and not config.chroma_dir.exists():
+            raise RuntimeError("read-only session requires an existing indexed Chroma directory")
+        if config.transport != "stdio" and not config.read_only:
             _enable_wal_mode(config.chroma_dir)
         return chromadb.PersistentClient(path=str(config.chroma_dir))
 
@@ -1370,6 +1372,15 @@ class KnowledgeOrchestrator:
         Recovery: deletes corrupted data and starts fresh.
         """
         import shutil
+
+        if config.read_only:
+            # ``get_or_create_collection`` is a mutation and can silently
+            # create an empty collection. A reader fails closed until a
+            # maintenance worker has produced the index.
+            return self.chroma_client.get_collection(
+                name=config.collection_name,
+                embedding_function=self.embed_fn,
+            )
 
         try:
             return self.chroma_client.get_or_create_collection(
@@ -2167,6 +2178,8 @@ class KnowledgeOrchestrator:
         prefix = f"{config.collection_name}__staging_"
         now = int(time.time())
         stats = {"scanned": 0, "removed": 0, "preserved": 0}
+        if config.read_only:
+            return stats
         try:
             existing = self.chroma_client.list_collections()
         except Exception as e:
@@ -2604,6 +2617,11 @@ class KnowledgeOrchestrator:
         Interrupted migrations (``in_progress`` with a partial
         ``docs_indexed`` count) resume from the last checkpointed batch.
         """
+        if config.read_only:
+            # FTS5 startup creates SQLite schema and migration markers. The
+            # query-only capability uses Chroma/BM25 and leaves those files
+            # to the maintenance worker.
+            return
         db_path = config.data_dir / "fts5_index.db"
         state_path = config.data_dir / "fts5_migration.state"
         self.fts5_index = Fts5LexicalIndex(db_path=db_path, state_path=state_path)
@@ -4032,6 +4050,53 @@ def _make_snippet(content: str, max_chars: int = 500) -> str:
     return truncated + "..."
 
 
+def _mutation_blocked() -> Optional[str]:
+    """Return a stable JSON error when a query-only reader calls a writer."""
+
+    if not getattr(config, "read_only", False):
+        return None
+    return json.dumps(
+        {
+            "status": "error",
+            "code": "read_only_session",
+            "message": "this MCP session is query-only; use a maintenance worker to mutate the index",
+        },
+        indent=2,
+    )
+
+
+def _revoked_destinations() -> set[str]:
+    """Load coordinator tombstones without making them an external service."""
+
+    blocked: set[str] = set()
+    roots = (config.documents_dir.parent.parent, config.documents_dir.parent)
+    for root in dict.fromkeys(roots):
+        path = root / ".docops" / "revocations.json"
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            continue
+        records = payload.get("sources") if isinstance(payload, dict) else []
+        if isinstance(records, list):
+            for record in records:
+                if isinstance(record, dict) and isinstance(record.get("destinations"), list):
+                    blocked.update(str(item).replace("\\", "/").lstrip("./") for item in record["destinations"])
+    return blocked
+
+
+def _is_revoked_path(filepath: str) -> bool:
+    """Check a result/document path against coordinator revocation tombstones."""
+
+    normalized = str(filepath).replace("\\", "/")
+    docs_root = config.documents_dir.resolve()
+    try:
+        relative = Path(filepath).resolve().relative_to(docs_root).as_posix()
+    except (OSError, ValueError):
+        marker = "/documents/"
+        relative = normalized.split(marker, 1)[1] if marker in normalized else normalized
+    return relative in _revoked_destinations()
+
+
 # =============================================================================
 # MCP Tools — Existing (6)
 # =============================================================================
@@ -4127,6 +4192,10 @@ def search_knowledge(
     if not results:
         return json.dumps({"status": "no_results", "query": query, "message": "No relevant documents found."})
 
+    results = [result for result in results if not _is_revoked_path(str(result.get("source") or ""))]
+    if not results:
+        return json.dumps({"status": "no_results", "query": query, "message": "No relevant documents found."})
+
     total_before_filter = len(results)
     if min_score > 0.0:
         results = [r for r in results if r.get("score", 0) >= min_score]
@@ -4174,6 +4243,9 @@ def get_document(filepath: str) -> str:
     returns chunks, not full docs. Use search_knowledge() first to find the filepath
     if unknown. Use list_documents() to browse all available files by category.
     """
+    if _is_revoked_path(filepath):
+        return json.dumps({"status": "error", "code": "source_revoked", "message": "document is revoked"})
+
     orchestrator = get_orchestrator()
     doc = orchestrator.get_document(filepath)
 
@@ -4270,6 +4342,10 @@ def reindex_documents(
     ``reindex.active`` becomes false. Add/update/URL tools already auto-index —
     use these flags only for the recovery/rebuild scenarios above.
     """
+    blocked = _mutation_blocked()
+    if blocked is not None:
+        return blocked
+
     orchestrator = get_orchestrator()
 
     if resume and full_rebuild:
@@ -4350,7 +4426,11 @@ def list_documents(category: str = None) -> str:
     to read a specific file once you have its filepath.
     """
     orchestrator = get_orchestrator()
-    docs = orchestrator.list_documents(category=category)
+    docs = [
+        doc
+        for doc in orchestrator.list_documents(category=category)
+        if not _is_revoked_path(str(doc.get("source") or doc.get("filepath") or doc.get("filename") or ""))
+    ]
     return json.dumps(
         {"status": "success", "filter": category or "all", "count": len(docs), "documents": docs},
         indent=2,
@@ -4409,6 +4489,10 @@ def add_document(content: str, filepath: str, category: str = "general") -> str:
     the source is a web page. Use update_document() to replace content of an existing file.
     The document is immediately searchable after this call — no manual reindex needed.
     """
+    blocked = _mutation_blocked()
+    if blocked is not None:
+        return blocked
+
     if not content or not content.strip():
         return json.dumps({"status": "error", "message": "Content cannot be empty"})
     if not filepath or not filepath.strip():
@@ -4445,6 +4529,10 @@ def update_document(filepath: str, content: str) -> str:
     a new file instead. Use remove_document() to delete without replacing. Changes are
     immediately searchable — no manual reindex needed.
     """
+    blocked = _mutation_blocked()
+    if blocked is not None:
+        return blocked
+
     if not filepath:
         return json.dumps({"status": "error", "message": "Filepath required"})
     if not content or not content.strip():
@@ -4483,6 +4571,10 @@ def remove_document(filepath: str, delete_file: bool = False) -> str:
     content instead of removing. Use reindex_documents(force=True) if you deleted
     the file manually on disk outside of this tool.
     """
+    blocked = _mutation_blocked()
+    if blocked is not None:
+        return blocked
+
     if not filepath:
         return json.dumps({"status": "error", "message": "Filepath required"})
 
@@ -4518,6 +4610,10 @@ def add_from_url(url: str, category: str = "general", title: str = None) -> str:
     by URL. Use add_document() instead when you already have the text content. The document
     is immediately searchable after this call — no manual reindex needed.
     """
+    blocked = _mutation_blocked()
+    if blocked is not None:
+        return blocked
+
     if not url or not url.strip():
         return json.dumps({"status": "error", "message": "URL cannot be empty"})
 
@@ -4760,13 +4856,21 @@ def main():
             os.environ["KNOWLEDGE_RAG_SINGLE_INSTANCE"] = "1"
 
         with single_instance_lock():
-            run_preflight()
+            if config.read_only:
+                print("[READER] Startup preflight skipped in query-only mode", file=sys.stderr)
+            else:
+                run_preflight()
 
             orchestrator = get_orchestrator()
 
             # Migration: check dimension mismatch AFTER full init (avoids segfault during __init__)
             orchestrator._needs_rebuild = orchestrator._check_dimension_mismatch()
-            if orchestrator._needs_rebuild:
+            if orchestrator._needs_rebuild and config.read_only:
+                print(
+                    "[READER] Embedding/index dimensions differ; refusing automatic rebuild in query-only mode",
+                    file=sys.stderr,
+                )
+            elif orchestrator._needs_rebuild:
                 print("[MIGRATION] Running nuclear rebuild for embedding model change...")
                 try:
                     stats = orchestrator.nuclear_rebuild()
@@ -4778,13 +4882,17 @@ def main():
                     print(f"[ERROR] Migration failed: {e}")
                     print("[FALLBACK] Attempting regular index instead...")
                     stats = orchestrator.index_all(force=True)
-            elif orchestrator.collection.count() == 0:
+            elif orchestrator.collection.count() == 0 and not config.read_only:
                 print("[INFO] No documents indexed. Running initial indexing...")
                 stats = orchestrator.index_all()
                 print(f"[INFO] Indexed {stats['indexed']} documents with {stats['chunks_added']} chunks")
+            elif orchestrator.collection.count() == 0 and config.read_only:
+                print("[READER] Empty index left untouched; maintenance worker must index it", file=sys.stderr)
 
             # Start file watcher for auto-reindex on document changes
-            if os.environ.get("KNOWLEDGE_RAG_WATCHER_DISABLED", "").strip() == "1":
+            if config.read_only:
+                print("[READER] Query-only capability; watcher disabled", file=sys.stderr)
+            elif os.environ.get("KNOWLEDGE_RAG_WATCHER_DISABLED", "").strip() == "1":
                 print("[WATCHER] Disabled via KNOWLEDGE_RAG_WATCHER_DISABLED=1")
             else:
                 try:

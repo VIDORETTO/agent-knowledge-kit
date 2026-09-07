@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consulta-documentacao.invalid/schemas/reader-query.schema.json",
+  "title": "docops pinned reader query",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "ok",
+    "session_id",
+    "generation",
+    "tool",
+    "query",
+    "results",
+    "cache_hit",
+    "metadata"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "ok": {"const": true},
+    "session_id": {"type": "string", "minLength": 1},
+    "generation": {
+      "type": "object",
+      "required": ["release_id", "composition_hash"],
+      "properties": {
+        "release_id": {"type": "string", "minLength": 1},
+        "composition_hash": {"type": "string", "minLength": 1}
+      }
+    },
+    "tool": {"enum": ["search_knowledge", "get_document"]},
+    "query": {"type": "string", "minLength": 1},
+    "results": {"type": "array"},
+    "cache_hit": {"type": "boolean"},
+    "metadata": {"type": "object"}
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consulta-documentacao.invalid/schemas/rag-reuse-plan.schema.json",
+  "title": "docops RAG reuse plan",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "ok",
+    "snapshot_id",
+    "mode",
+    "reason",
+    "reused_count",
+    "changed_count",
+    "removed_count",
+    "changed_paths",
+    "removed_paths",
+    "logical_stats",
+    "active_preserved",
+    "publication_allowed"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "ok": {"const": true},
+    "snapshot_id": {"type": "string", "minLength": 1},
+    "mode": {"enum": ["incremental", "full_rebuild"]},
+    "reason": {"type": "string", "minLength": 1},
+    "reused_count": {"type": "integer", "minimum": 0},
+    "changed_count": {"type": "integer", "minimum": 0},
+    "removed_count": {"type": "integer", "minimum": 0},
+    "changed_paths": {"type": "array", "items": {"type": "string"}},
+    "removed_paths": {"type": "array", "items": {"type": "string"}},
+    "logical_stats": {"type": "object"},
+    "active_preserved": {"const": true},
+    "publication_allowed": {"const": false}
+  }
+}

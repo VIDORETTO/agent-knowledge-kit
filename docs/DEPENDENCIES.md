@@ -61,9 +61,12 @@ plataformas; o pacote não depende de caminhos absolutos. Nesta release, a
 execução manual local foi comprovada no Windows. O doctor e o compileall
 rodaram em uma cópia Ubuntu WSL, mas o bootstrap completo não pôde ser
 executado porque o host não tinha `python3-venv`/`pip` e não permitiu a
-instalação administrativa; não há host macOS disponível. Portanto, Linux/macOS
-não são apresentados como validação manual local; o CI é evidência adicional,
-não substituto dessa limitação declarada.
+instalação administrativa; não há host macOS disponível. No gate T12, a
+evidência POSIX observada foi Python 3.12.3, Bash 5.2.21, `bootstrap.sh
+--no-install`, doctor, contratos e documentação passando; pip check, pytest,
+Ruff e o backend RAG ficaram como skips explícitos por essas dependências
+ausentes. Portanto, Linux/macOS não são apresentados como validação manual
+local; o CI é evidência adicional, não substituto dessa limitação declarada.
 
 O perfil RAG é opcional. O doctor informa `rag: missing` quando ele não está
 instalado; defina `DOCOPS_REQUIRE_RAG=1` quando a validação depender do

@@ -2,7 +2,7 @@
 
 [Índice dos tickets](../TICKETS.md) · [Especificação](../SPEC.md) · [TDD](../TDD.md)
 
-Status: **proposto; não implementado**.
+Status: **implementado localmente em 2026-09-05**.
 
 ## Objetivo e entrega
 
@@ -48,23 +48,38 @@ comportamental, não por erro acidental da fixture.
 
 ## Critérios de aceite
 
-- [ ] Alteração de mesmo mtime/tamanho é detectada.
-- [ ] Embedding diferente força full rebuild.
-- [ ] Falha de snapshot preserva ativa.
-- [ ] Estatísticas lógicas e busca pós-promoção conferem.
-- [ ] Backend sem suporte faz rebuild declarado, nunca falsa alegação de incremental.
+- [x] Alteração de mesmo mtime/tamanho é detectada.
+- [x] Embedding diferente força full rebuild.
+- [x] Falha de snapshot preserva ativa.
+- [x] Estatísticas lógicas e busca de verificação no pacote corrente conferem.
+- [x] Backend sem suporte faz rebuild declarado, nunca falsa alegação de incremental.
 
 Rastreabilidade: A05, A06, A07 em [VALIDATION](../VALIDATION.md).
 
-## Definição de pronto
+## Resultado da execução
 
-- [ ] Entrega demonstrável pelo seam declarado.
-- [ ] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
-- [ ] Critérios acima e checks pertinentes passam.
-- [ ] Compatibilidade e exemplos JSON atualizados quando afetados.
-- [ ] Evidência de teste distingue fixture, MCP real e harness externo.
-- [ ] Nenhuma alteração fora do escopo ou publicação externa implícita.
-- [ ] Risco e procedimento de rollback documentados no resultado.
+- RED: os cinco testes públicos falharam porque `rag-snapshot` ainda não
+  existia.
+- GREEN: a CLI passou a produzir `rag-snapshot` e `rag-reuse-plan`, com
+  inventário relocável, diff por SHA-256, identidade de embedding e fallback
+  explícito para rebuild.
+- REFACTOR: a estratégia ficou isolada em `docops/rag_sync.py`; o relatório
+  inclui o inventário lógico de `rag/index.json`/`rag/data`, preserva a ativa,
+  pode gravar snapshot atomicamente e aceita busca de verificação pelo adapter
+  escolhido sem promover nada.
+- Verificação: `rtk pytest -q tests\test_rag_snapshots.py` — **5 passed**;
+  contratos, Ruff lint/formato e `rtk git diff --check` foram revalidados no
+  gate conjunto.
+- Arquivos principais: `docops/rag_sync.py`, `docops/__main__.py`,
+  `docops/contracts.py`, os schemas `rag-snapshot`/`rag-reuse-plan`, os
+  exemplos de contrato, `tests/test_rag_snapshots.py` e a documentação de uso.
+- Evidência: somente fixtures sintéticas em diretórios temporários; nenhuma
+  cópia do índice ativo, conversa, corpus real, publicação, reindexação real ou
+  harness externo foi executada. A busca opcional usa o adapter `memory` nos
+  testes públicos.
+- Rollback: desabilitar o reuso, ignorar snapshots incompatíveis e executar
+  rebuild em candidata isolada. Snapshot inválido falha fechado e não altera a
+  geração ativa.
 
 ## Riscos
 

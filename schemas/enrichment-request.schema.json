@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consulta-documentacao.invalid/schemas/enrichment-request.schema.json",
+  "title": "docops external enrichment request",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "request_id",
+    "candidate_id",
+    "base_release_id",
+    "base_composition_hash",
+    "snapshot",
+    "diff",
+    "allowed_artifacts",
+    "policy_revision",
+    "language",
+    "budget"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "request_id": {"type": "string", "minLength": 1},
+    "candidate_id": {"type": "string", "minLength": 1},
+    "base_release_id": {"type": "string", "minLength": 1},
+    "base_composition_hash": {"type": "string", "minLength": 1},
+    "snapshot": {
+      "type": "object",
+      "required": ["candidate_revisions", "input_hashes"],
+      "properties": {
+        "candidate_revisions": {"type": "object"},
+        "input_hashes": {"type": "object"}
+      }
+    },
+    "diff": {
+      "type": "object",
+      "required": ["kind", "layers"],
+      "properties": {
+        "kind": {"const": "conceptual_enrichment"},
+        "layers": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+      }
+    },
+    "allowed_artifacts": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "policy_revision": {"type": "string", "minLength": 1},
+    "language": {"type": "string", "minLength": 1},
+    "budget": {"type": "object"}
+  }
+}

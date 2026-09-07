@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consulta-documentacao.invalid/schemas/rag-snapshot.schema.json",
+  "title": "docops relocatable RAG snapshot",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "snapshot_id",
+    "package_id",
+    "release",
+    "documents_root",
+    "documents",
+    "document_count",
+    "total_bytes",
+    "corpus_hash",
+    "embedding",
+    "model",
+    "configuration",
+    "artifacts",
+    "backend",
+    "backend_snapshot",
+    "revocation"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "snapshot_id": {"type": "string", "minLength": 1},
+    "package_id": {"type": "string", "minLength": 1},
+    "release": {
+      "type": "object",
+      "required": ["release_id", "composition_hash"],
+      "properties": {
+        "release_id": {"type": "string", "minLength": 1},
+        "composition_hash": {"type": "string", "minLength": 1},
+        "corpus_revision": {"type": "string", "minLength": 1},
+        "index_revision": {"type": "string", "minLength": 1}
+      }
+    },
+    "documents_root": {"const": "rag/documents"},
+        "documents": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["sha256", "size"],
+        "properties": {
+          "sha256": {"type": "string", "minLength": 64},
+          "size": {"type": "integer", "minimum": 0},
+          "mtime_ns": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "document_count": {"type": "integer", "minimum": 0},
+    "total_bytes": {"type": "integer", "minimum": 0},
+    "corpus_hash": {"type": "string", "minLength": 1},
+    "embedding": {
+      "type": "object",
+      "required": ["profile", "embedding_fingerprint"],
+      "properties": {
+        "profile": {"type": "string", "minLength": 1},
+        "embedding_fingerprint": {"type": "string", "minLength": 1},
+        "configured": {"type": "object"},
+        "effective": {"type": "object"}
+      }
+    },
+    "model": {
+      "type": "object",
+      "properties": {
+        "name": {"type": ["string", "null"]},
+        "revision": {"type": ["string", "null"]},
+        "configured_dimensions": {"type": ["integer", "null"]},
+        "effective_name": {"type": ["string", "null"]},
+        "effective_dimensions": {"type": ["integer", "null"]}
+      }
+    },
+    "configuration": {
+      "type": "object",
+      "required": ["path", "sha256", "content_hash", "redacted"],
+      "properties": {
+        "path": {"const": "config.yaml"},
+        "sha256": {"type": "string", "minLength": 64},
+        "content_hash": {"type": "string", "minLength": 1},
+        "redacted": {"const": true}
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "required": ["content_hash", "file_count", "files"],
+      "properties": {
+        "content_hash": {"type": "string", "minLength": 1},
+        "file_count": {"type": "integer", "minimum": 0},
+        "files": {"type": "object"}
+      }
+    },
+    "backend": {
+      "type": "object",
+      "required": ["name", "supports_incremental", "version"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "supports_incremental": {"type": "boolean"},
+        "version": {"type": ["string", "null"]}
+      }
+    },
+    "backend_snapshot": {
+      "type": "object",
+      "required": ["index", "data"],
+      "properties": {
+        "index": {"type": "object"},
+        "data": {"type": "object"}
+      }
+    },
+    "revocation": {
+      "type": "object",
+      "required": ["content_hash", "files", "blocked_documents"],
+      "properties": {
+        "content_hash": {"type": "string", "minLength": 1},
+        "files": {"type": "array"},
+        "blocked_documents": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

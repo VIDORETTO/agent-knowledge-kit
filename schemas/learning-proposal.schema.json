@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consulta-documentacao.invalid/schemas/learning-proposal.schema.json",
+  "title": "docops quarantined learning proposal",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "proposal_id",
+    "capture_opt_in",
+    "excerpt",
+    "claim",
+    "evidence",
+    "source",
+    "consent",
+    "privacy",
+    "state",
+    "submitted_at",
+    "proposal_hash"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "proposal_id": {"type": "string", "minLength": 1},
+    "capture_opt_in": {"const": true},
+    "excerpt": {"type": "string", "minLength": 1},
+    "claim": {
+      "type": "object",
+      "required": ["text", "kind", "scope"],
+      "properties": {
+        "text": {"type": "string", "minLength": 1},
+        "kind": {
+          "enum": [
+            "preference",
+            "project_decision",
+            "factual_correction",
+            "observation_experiment",
+            "hypothesis",
+            "opinion",
+            "agent_response",
+            "question"
+          ]
+        },
+        "scope": {"enum": ["private", "project", "shared"]}
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "reference", "independent", "verification"],
+        "properties": {
+          "kind": {"type": "string", "minLength": 1},
+          "reference": {"type": "string", "minLength": 1},
+          "quote": {"type": ["string", "null"]},
+          "independent": {"type": "boolean"},
+          "verification": {
+            "type": "object",
+            "required": [
+              "status",
+              "verifier",
+              "provenance",
+              "authority",
+              "license",
+              "supports_claim",
+              "evidence_hash",
+              "receipt_hash"
+            ],
+            "properties": {
+              "status": {"enum": ["verified", "unverified"]},
+              "verifier": {"type": ["string", "null"]},
+              "provenance": {"type": ["string", "null"]},
+              "authority": {"type": ["string", "null"]},
+              "license": {"type": ["string", "null"]},
+              "supports_claim": {"type": "boolean"},
+              "evidence_hash": {"type": ["string", "null"]},
+              "receipt_hash": {"type": ["string", "null"]}
+            }
+          }
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": {"enum": ["conversation", "operator", "import"]},
+        "conversation_id": {"type": ["string", "null"]},
+        "author_id": {"type": ["string", "null"]}
+      }
+    },
+    "consent": {
+      "type": "object",
+      "required": [
+        "holder_id",
+        "scope",
+        "purpose",
+        "granted_at",
+        "expires_at",
+        "revoked_at",
+        "consent_hash"
+      ],
+      "properties": {
+        "holder_id": {"type": "string", "minLength": 1},
+        "scope": {"enum": ["private", "project", "shared"]},
+        "purpose": {"type": "string", "minLength": 1},
+        "granted_at": {"type": "string", "minLength": 1},
+        "expires_at": {"type": "string", "minLength": 1},
+        "revoked_at": {"type": ["string", "null"]},
+        "consent_hash": {"type": "string", "minLength": 64}
+      }
+    },
+    "privacy": {"enum": ["private", "project", "shared"]},
+    "state": {"enum": ["quarantined", "admitted", "rejected", "revoked"]},
+    "submitted_at": {"type": "string", "minLength": 1},
+    "proposal_hash": {"type": "string", "minLength": 64},
+    "approved": {"type": "boolean"},
+    "derived": {"type": "array"},
+    "review": {"type": ["object", "null"]}
+  }
+}
