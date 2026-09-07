@@ -46,6 +46,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/update_docs.ps1 -Sources documents/fixtures/acme-docs -Slug support-matrix -Output artifacts/support-matrix -License MIT
+      - name: Remove no-install bootstrap probe environment
+        run: python -c "import shutil; shutil.rmtree('.venv', ignore_errors=True)"
       - name: Doctor
         run: python -m docops doctor --json
       - name: Dependency audit
