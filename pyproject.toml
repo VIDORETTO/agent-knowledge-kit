@@ -32,6 +32,12 @@ packages = ["docops", "docops.templates", "docops.schemas"]
 [tool.setuptools.package-data]
 docops = ["templates/*.md", "schemas/*.json"]
 
+[tool.setuptools.data-files]
+"share/docops/skills/docops-agent" = ["skills/docops-agent/SKILL.md"]
+"share/docops/skills/docops-agent/agents" = ["skills/docops-agent/agents/openai.yaml"]
+"share/docops/skills/docops-agent/references" = ["skills/docops-agent/references/*.md"]
+"share/docops/skills/docops-agent/scripts" = ["skills/docops-agent/scripts/*.py"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"

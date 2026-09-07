@@ -152,7 +152,7 @@ def main() -> int:
             f"FALHOU [rag_required_unavailable]: Python do knowledge-rag não encontrado: {redact_text(rag_python.path)}"
         )
         return 2
-    env = runtime_environment(PROJECT_ROOT)
+    env = runtime_environment(PROJECT_ROOT, read_only=True)
     contract = runtime_contract(
         PROJECT_ROOT,
         python=rag_python.path,

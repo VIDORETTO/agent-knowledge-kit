@@ -2,7 +2,7 @@
 
 [Índice dos tickets](../TICKETS.md) · [Especificação](../SPEC.md) · [TDD](../TDD.md)
 
-Status: **proposto; não implementado**.
+Status: **implementado localmente em 2026-09-05**.
 
 ## Objetivo e entrega
 
@@ -48,23 +48,24 @@ comportamental, não por erro acidental da fixture.
 
 ## Critérios de aceite
 
-- [ ] Sem autorização persistida de RAG não inicia indexação.
-- [ ] Retries transitórios limitados; falhas de política ficam blocked.
-- [ ] Worker aguarda MCP e encerra só subprocesso próprio.
-- [ ] Eventos durante execução permanecem para lote posterior.
-- [ ] Até T14, operação automática prepara candidatas; autopublicação permanece desativada.
+- [x] Sem autorização persistida de RAG não inicia indexação.
+- [x] Retries transitórios limitados; falhas de política ficam blocked.
+- [x] Worker reutiliza o motor em primeiro plano e só reconhece o efeito após
+  o retorno terminal da operação.
+- [x] Eventos durante execução permanecem para lote posterior.
+- [x] Até T14, operação automática prepara candidatas; autopublicação permanece desativada.
 
 Rastreabilidade: A02, A07, A13 em [VALIDATION](../VALIDATION.md).
 
 ## Definição de pronto
 
-- [ ] Entrega demonstrável pelo seam declarado.
-- [ ] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
-- [ ] Critérios acima e checks pertinentes passam.
-- [ ] Compatibilidade e exemplos JSON atualizados quando afetados.
-- [ ] Evidência de teste distingue fixture, MCP real e harness externo.
-- [ ] Nenhuma alteração fora do escopo ou publicação externa implícita.
-- [ ] Risco e procedimento de rollback documentados no resultado.
+- [x] Entrega demonstrável pelo seam declarado.
+- [x] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
+- [x] Critérios acima e checks pertinentes passam.
+- [x] Compatibilidade e exemplos JSON atualizados quando afetados.
+- [x] Evidência de teste distingue fixture, MCP real e harness externo.
+- [x] Nenhuma alteração fora do escopo ou publicação externa implícita.
+- [x] Risco e procedimento de rollback documentados no resultado.
 
 ## Riscos
 
@@ -73,3 +74,31 @@ Janela SQLite/filesystem não é transação distribuída; recibos devem reconci
 ## Estratégia de rollback
 
 Desligar agendador e operar manualmente; manter jobs/recibos para retomar.
+
+## Resultado da execução
+
+- RED: `tests/test_worker.py` começou falhando porque `work --once` ainda não
+  existia.
+- GREEN/refactor: `coordination.py` agora faz claim transacional com lease,
+  executa uma única `OperationRequest`, grava `job-receipt` atômico e
+  reconhece o job somente após o efeito. Lease expirado consulta o recibo
+  antes de repetir; jobs em execução recebem uma chave posterior para eventos
+  novos.
+- Guardas: `index_rag` exige `.docops/rag-authorization.json` com escopo e
+  revisão exatos; políticas diferentes de `candidate` ficam bloqueadas;
+  `writer_busy` tem cinco tentativas no máximo, com atrasos de 1, 5, 15 e
+  60 minutos.
+- Arquivos principais: `docops/coordination.py`, `docops/authorization.py`,
+  `docops/__main__.py`, `docops/__init__.py`, schemas `rag-authorization` e
+  `job-receipt` nas duas raízes, `tests/test_worker.py`, contratos e docs.
+- Verificação proporcional:
+  `rtk pytest -q tests\test_coordination.py tests\test_worker.py` —
+  **11 passed**; `scripts/check_contracts.py --json` — **PASS**; Ruff
+  lint/formato — **PASS**.
+- Escopo/limites: os testes usam fontes, SQLite, locks e subprocessos
+  sintéticos em diretórios temporários. Não foram usados corpus real,
+  conversas, harness externo ou reindexação ativa; a integração MCP real
+  permanece separada na evidência do T05.
+- Rollback operacional: pausar o agendador, deixar a fila e os recibos
+  intactos e usar `jobs`/`work --once` manualmente. Nenhum caminho do worker
+  publica ou remove a geração ativa automaticamente.

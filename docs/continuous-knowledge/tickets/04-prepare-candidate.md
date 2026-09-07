@@ -2,7 +2,7 @@
 
 [Índice dos tickets](../TICKETS.md) · [Especificação](../SPEC.md) · [TDD](../TDD.md)
 
-Status: **proposto; não implementado**.
+Status: **concluído localmente; aprovação/publicação permanece no T08**.
 
 ## Objetivo e entrega
 
@@ -48,22 +48,54 @@ comportamental, não por erro acidental da fixture.
 
 ## Critérios de aceite
 
-- [ ] Candidata possui base e hashes identificados.
-- [ ] Ativa não muda durante preparação.
-- [ ] Candidata interrompida é retomável e caminhos arbitrários são rejeitados.
-- [ ] Falha estrutural impede estado publicável.
+- [x] Candidata possui base e hashes identificados no recibo
+  `.docops/candidate.json`.
+- [x] Ativa não muda durante preparação; `publication_policy="candidate"`
+  nunca executa promoção.
+- [x] Candidata interrompida é retomável por staging persistido e caminhos
+  arbitrários aparecem como entradas rejeitadas pelo `inspect` seguro.
+- [x] Falha estrutural impede estado publicável; `validate` falha e a
+  candidata fica `rejected`, sem alterar a ativa.
 
 Rastreabilidade: A07, A16 em [VALIDATION](../VALIDATION.md).
 
 ## Definição de pronto
 
-- [ ] Entrega demonstrável pelo seam declarado.
-- [ ] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
-- [ ] Critérios acima e checks pertinentes passam.
-- [ ] Compatibilidade e exemplos JSON atualizados quando afetados.
-- [ ] Evidência de teste distingue fixture, MCP real e harness externo.
-- [ ] Nenhuma alteração fora do escopo ou publicação externa implícita.
-- [ ] Risco e procedimento de rollback documentados no resultado.
+- [x] Entrega demonstrável pelo seam declarado.
+- [x] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
+- [x] Critérios acima e checks pertinentes passam.
+- [x] Envelope de outcome e os dois schemas foram atualizados com
+  `candidate_id`/`candidate_locator`.
+- [x] Evidência usa fixtures sintéticas e subprocesso local; MCP real e
+  harness externo não foram executados neste ticket.
+- [x] Nenhuma alteração fora do escopo ou publicação externa implícita.
+- [x] Risco e procedimento de rollback documentados no resultado.
+
+## Evidência da execução
+
+- RED: o primeiro teste de política candidata observou a promoção normal e
+  não encontrou uma candidata inspecionável.
+- GREEN/refactor: `docops/candidates.py` materializa staging em um diretório
+  irmão controlado, grava base/revisões/hash do plano e mantém o pacote ativo
+  intocado; `inspect` valida e classifica candidatos, enquanto `validate`
+  continua sendo o gate estrutural.
+- Verificação focada:
+  `rtk pytest -q tests/test_continuous_knowledge.py` — **14 passed**.
+- Lint do slice:
+  `rtk proxy python -m ruff check docops/candidates.py
+  docops/operations.py docops/api_types.py docops/__main__.py
+  tests/test_continuous_knowledge.py` — **PASS**.
+
+## Operação e rollback
+
+Use `--publication-policy candidate` em `run`/`update`; o resultado retorna
+`candidate_id` e `candidate_locator`. Inspecione a saída ativa e a lista
+`candidates` antes de qualquer aprovação futura. A retenção fica no diretório
+irmão `.<nome-do-pacote>.candidates`, fora da geração ativa.
+
+Para rollback, descarte somente a candidata identificada ou mantenha-a
+`review_required`/`rejected`; não substitua a ativa. Aprovação e promoção por
+hash/base exatos pertencem ao T08.
 
 ## Riscos
 

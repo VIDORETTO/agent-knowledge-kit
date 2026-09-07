@@ -25,7 +25,7 @@ def test_manifest_preserves_resolution_provenance_and_entry_outcomes(tmp_path: P
     assert manifest["schema_version"] == 1
     assert manifest["run_id"] == "run-test"
     assert manifest["source"]["canonical"] == "https://docs.example.test/guide"
-    assert manifest["counts"] == {"accepted": 1, "ignored": 1, "errors": 0}
+    assert manifest["counts"] == {"accepted": 1, "ignored": 1, "quarantined": 0, "errors": 0}
     assert manifest["provenance"]["license"] == "unknown"
 
     output = tmp_path / "manifest.json"

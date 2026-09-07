@@ -40,10 +40,10 @@ class _FakeMcpClient:
         if self.fail:
             return {"error": {"code": "fixture_rag_failure", "message": "fixture failure"}}
         payload = {
-            "reindex_documents": {"status": "started"},
-            "get_reindex_status": {"active": False, "progress": 1},
+            "reindex_documents": {"status": "started", "operation": "smart_reindex"},
+            "get_reindex_status": {"active": False, "last_result": {"errors": 0, "total_files": 1}},
             "get_index_stats": {"stats": {"total_documents": 1, "total_chunks": 1}},
-            "search_knowledge": {"results": []},
+            "search_knowledge": {"results": [{"source": "guide.md"}]},
         }[name]
         return {"result": {"content": [{"text": json.dumps(payload)}]}}
 

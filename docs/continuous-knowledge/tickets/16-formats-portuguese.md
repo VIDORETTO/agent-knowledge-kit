@@ -2,7 +2,7 @@
 
 [Índice dos tickets](../TICKETS.md) · [Especificação](../SPEC.md) · [TDD](../TDD.md)
 
-Status: **proposto; não implementado**.
+Status: **concluído localmente em 2026-09-05**.
 
 ## Objetivo e entrega
 
@@ -48,23 +48,44 @@ comportamental, não por erro acidental da fixture.
 
 ## Critérios de aceite
 
-- [ ] Quando localizador não existir, declarar limite e citar seção normalizada.
-- [ ] Transcrição entra como Markdown externo; não prometer ASR/VTT nativo.
-- [ ] Comparar perfis antes da escolha; rebuild obrigatório na troca.
-- [ ] Unidades de planilha e identificadores de código são preservados.
-- [ ] Fonte de baixa qualidade permanece em quarentena.
+- [x] Quando localizador não existir, declarar limite e citar seção normalizada.
+- [x] Transcrição entra como Markdown externo; não prometer ASR/VTT nativo.
+- [x] Comparar perfis antes da escolha; rebuild obrigatório na troca.
+- [x] Unidades de planilha e identificadores de código são preservados.
+- [x] Fonte de baixa qualidade permanece em quarentena.
 
 Rastreabilidade: A05, A15 em [VALIDATION](../VALIDATION.md).
 
 ## Definição de pronto
 
-- [ ] Entrega demonstrável pelo seam declarado.
-- [ ] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
-- [ ] Critérios acima e checks pertinentes passam.
-- [ ] Compatibilidade e exemplos JSON atualizados quando afetados.
-- [ ] Evidência de teste distingue fixture, MCP real e harness externo.
-- [ ] Nenhuma alteração fora do escopo ou publicação externa implícita.
-- [ ] Risco e procedimento de rollback documentados no resultado.
+- [x] Entrega demonstrável pelo seam declarado.
+- [x] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
+- [x] Critérios acima e checks pertinentes passam.
+- [x] Compatibilidade e exemplos JSON atualizados quando afetados.
+- [x] Evidência de teste distingue fixture, MCP real e harness externo.
+- [x] Nenhuma alteração fora do escopo ou publicação externa implícita.
+- [x] Risco e procedimento de rollback documentados no resultado.
+
+## Resultado da execução
+
+- RED: o primeiro teste falhou porque a busca não devolvia `locators`; os
+  testes seguintes também expuseram a ausência do comando público de comparação
+  de perfis.
+- GREEN: a normalização preserva páginas, slides, abas/células, timestamps e
+  identificadores de código; a busca devolve localizadores e citações estáveis.
+  Formatos de transcrição (`.vtt`, `.srt`, `.ass`, `.ssa`) exigem Markdown
+  externo com timestamps.
+- REFACTOR: localizadores usam um envelope comum com `kind`, disponibilidade e
+  limite explícito; extrações suspeitas entram em quarentena e não são
+  indexadas; `rag-profile-compare` produz decisão somente leitura e não permite
+  escolher perfil sem avaliação Golden nativa.
+- Verificação: fixtures sintéticas temporárias cobrem o fluxo público; contratos,
+  Ruff, formato e `git diff --check` foram executados no gate do ticket.
+- Integração: nenhum corpus real, reindexação real, conversa, publicação externa
+  ou harness externo foi usado neste ticket.
+- Rollback: manter a fonte autorizada, devolver a extração à quarentena e exigir
+  um conversor externo para transcrição; mudança de embedding exige full rebuild
+  antes de qualquer promoção.
 
 ## Riscos
 

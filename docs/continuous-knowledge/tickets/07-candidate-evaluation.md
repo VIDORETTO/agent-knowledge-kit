@@ -2,7 +2,7 @@
 
 [Índice dos tickets](../TICKETS.md) · [Especificação](../SPEC.md) · [TDD](../TDD.md)
 
-Status: **proposto; não implementado**.
+Status: **concluído localmente em 2026-09-05**.
 
 ## Objetivo e entrega
 
@@ -14,7 +14,7 @@ E13/E14: avaliação atual busca arquivo e usa política lexical; não mede fide
 
 ## Dependências
 
-Blocked by: [T05](./05-verify-index.md), [T06](./06-external-enrichment.md)
+Dependências confirmadas: [T05](./05-verify-index.md) e [T06](./06-external-enrichment.md)
 
 Decisões aplicáveis: D02 e D05. Ver [registro de decisões](../DECISIONS.md).
 
@@ -46,25 +46,45 @@ Depois do primeiro ciclo, adicionar os demais casos de aceite um por vez. Não
 implementar todos os testes primeiro. O RED precisa falhar pela expectativa
 comportamental, não por erro acidental da fixture.
 
+## Implementação e evidência
+
+- **RED:** o teste público tentou importar uma resposta com afirmação sem
+  suporte e o seam ainda não aceitava `response_receipt`.
+- **GREEN:** `evaluation-receipt` valida julgamentos independentes ligados a
+  `generation_id`, `candidate_id`, `package_composition_hash` e
+  `golden_revision`; `evaluate` calcula fidelidade e cobertura de citação sem
+  alterar as métricas legadas.
+- **REFACTOR:** recuperação, rota e resposta permanecem métricas separadas.
+  O adapter lexical continua explicitamente diagnóstico; resposta só é
+  medida quando um recibo externo válido é fornecido.
+- **Verificação:** `tests/test_candidate_evaluation.py` — **7 passed**;
+  integração com evaluator, CLI, contratos e conhecimento contínuo — **49
+  passed**; Ruff lint/formato, `scripts/check_contracts.py --json` e
+  `git diff --check` — **PASS**.
+- **Integração:** a prova usa pacote e Golden sintéticos em diretórios
+  temporários. Nenhum harness externo, conversa real, corpus real ou índice
+  ativo foi usado neste ticket. O MCP real isolado continua coberto apenas
+  pela evidência do T05.
+
 ## Critérios de aceite
 
-- [ ] Golden não revisado é recusado.
-- [ ] Avaliação informa backend, adapter, configuração e hashes.
-- [ ] Zero denominador produz not_applicable.
-- [ ] Diagnóstico lexical não substitui MCP nem avaliação de resposta.
-- [ ] Casos críticos falham individualmente mesmo com boa média.
+- [x] Golden não revisado é recusado.
+- [x] Avaliação informa backend, adapter, configuração e hashes.
+- [x] Zero denominador produz `not_applicable`.
+- [x] Diagnóstico lexical não substitui MCP nem avaliação de resposta.
+- [x] Casos críticos falham individualmente mesmo com boa média.
 
 Rastreabilidade: A06, A15 em [VALIDATION](../VALIDATION.md).
 
 ## Definição de pronto
 
-- [ ] Entrega demonstrável pelo seam declarado.
-- [ ] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
-- [ ] Critérios acima e checks pertinentes passam.
-- [ ] Compatibilidade e exemplos JSON atualizados quando afetados.
-- [ ] Evidência de teste distingue fixture, MCP real e harness externo.
-- [ ] Nenhuma alteração fora do escopo ou publicação externa implícita.
-- [ ] Risco e procedimento de rollback documentados no resultado.
+- [x] Entrega demonstrável pelo seam declarado.
+- [x] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
+- [x] Critérios acima e checks pertinentes passam.
+- [x] Compatibilidade e exemplos JSON atualizados quando afetados.
+- [x] Evidência de teste distingue fixture, MCP real e harness externo.
+- [x] Nenhuma alteração fora do escopo ou publicação externa implícita.
+- [x] Risco e procedimento de rollback documentados no resultado.
 
 ## Riscos
 
@@ -73,3 +93,7 @@ Juiz enviesado pode repetir erro do gerador. Usar rubrica e revisão independent
 ## Estratégia de rollback
 
 Bloquear publicação e manter ativa; não relaxar threshold silenciosamente para aprovar candidata.
+Um recibo ausente, inválido, stale ou com falha crítica mantém o resultado
+reprovado e não altera a geração ativa. Para desfazer a alteração local, remova
+o arquivo de evidência da candidata ou descarte a candidata identificada, sem
+copiar conteúdo de volta para a ativa.

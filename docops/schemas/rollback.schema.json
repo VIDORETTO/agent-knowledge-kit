@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "rollback_id",
+    "target_release_id",
+    "previous_release_id",
+    "rolled_back_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "rollback_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target_release_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "previous_release_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rolled_back_at": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

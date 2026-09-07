@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DOCOPS SourceRegistration",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "source_id",
+    "canonical",
+    "kind",
+    "scope",
+    "version_policy",
+    "version",
+    "language",
+    "rights",
+    "privacy",
+    "authority",
+    "owner",
+    "status",
+    "registered_at",
+    "withdrawn_at"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "source_id": {"type": "string", "minLength": 1},
+    "canonical": {"type": "string", "minLength": 1},
+    "kind": {"enum": ["local", "repository", "web"]},
+    "scope": {"type": "string", "minLength": 1},
+    "version_policy": {"enum": ["latest", "pinned"]},
+    "version": {"type": ["string", "null"]},
+    "language": {"type": ["string", "null"]},
+    "rights": {"type": "string", "minLength": 1},
+    "privacy": {"type": "string", "minLength": 1},
+    "authority": {"type": "string", "minLength": 1},
+    "owner": {"type": "string", "minLength": 1},
+    "status": {"enum": ["active", "withdrawn"]},
+    "registered_at": {"type": "string", "minLength": 1},
+    "withdrawn_at": {"type": ["string", "null"]},
+    "last_observed_revision": {"type": ["string", "null"]},
+    "last_observed_version": {"type": ["string", "null"]},
+    "last_observed_at": {"type": ["string", "null"]},
+    "last_observed_entries": {"type": "integer"}
+  }
+}

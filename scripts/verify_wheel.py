@@ -70,11 +70,16 @@ def main(argv: list[str] | None = None) -> int:
         wheel = wheels[0]
         with zipfile.ZipFile(wheel) as archive:
             names = set(archive.namelist())
+            data_prefix = wheel.stem.rsplit("-", 3)[0]
             required = {
                 "docops/__init__.py",
                 "docops/templates/router.md",
                 "docops/schemas/manifest.schema.json",
                 "docops/schemas/evaluation.schema.json",
+                f"{data_prefix}.data/data/share/docops/skills/docops-agent/SKILL.md",
+                f"{data_prefix}.data/data/share/docops/skills/docops-agent/agents/openai.yaml",
+                f"{data_prefix}.data/data/share/docops/skills/docops-agent/references/skill-interoperability.md",
+                f"{data_prefix}.data/data/share/docops/skills/docops-agent/scripts/install_agents_bootstrap.py",
             }
             missing = sorted(required - names)
             if missing:
@@ -115,6 +120,23 @@ def main(argv: list[str] | None = None) -> int:
             cwd=workspace,
             env=environment,
         )
+        skill_probe = subprocess.run(
+            [sys.executable, "-m", "docops", "skill", "path", "--json"],
+            check=False,
+            cwd=workspace,
+            env=environment,
+            capture_output=True,
+            text=True,
+        )
+        if skill_probe.returncode:
+            raise RuntimeError(f"installed wheel could not locate docops-agent: {skill_probe.stderr[-2000:]}")
+        try:
+            skill_payload = json.loads(skill_probe.stdout)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("installed wheel skill probe did not emit JSON") from exc
+        skill_path = Path(str(skill_payload.get("path", "")))
+        if skill_payload.get("name") != "docops-agent" or not (skill_path / "SKILL.md").is_file():
+            raise RuntimeError(f"installed wheel returned an invalid skill path: {skill_payload!r}")
         source = workspace / "source"
         source.mkdir()
         (source / "guide.md").write_text("# Guide\nRetry policy and exact defaults.\n", encoding="utf-8")

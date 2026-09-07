@@ -1,6 +1,11 @@
-# Atualização contínua de conhecimento
+# Atualização contínua de conhecimento — arquivo histórico
 
-Status: **proposta técnica; implementação não iniciada**.
+Status: **histórico; não normativo para a consolidação da main**.
+
+Este diretório preserva o plano anterior T01–T18 e suas evidências para
+auditoria. O contrato normativo atual está em `docs/main-consolidation/`,
+`docs/USE.md`, `docs/ARCHITECTURE.md`, `docs/HARNESSES.md` e
+`docs/CONTRACT-COMPATIBILITY.md`.
 
 Este conjunto documenta a evolução do DOCOPS para atualizar RAG e skill com
 cadências distintas, candidatas revisáveis, evidências e rollback. Criar estes
@@ -40,9 +45,11 @@ evidências. Números históricos FastAPI não são novas medições deste plano
 O processo utilizado foi `to-spec → to-tickets → tdd`, com vocabulário de seams
 de `codebase-design`. As instruções do usuário prevaleceram: documentação no
 projeto, arquivos/módulos explícitos, sem implementação nem publicação externa.
-Os tickets são documentos de planejamento, não issues abertas ou trabalho concluído.
+Os tickets eram documentos de planejamento da iniciativa anterior, não issues
+abertas. Não use este arquivo histórico para inferir o status da consolidação.
 
 Para evitar duplicação normativa: SPEC define a política; CONTRACTS detalha
 interfaces; VALIDATION define os critérios; os tickets referenciam esses
 documentos. Se uma decisão mudar, atualizar primeiro a especificação e depois
-os tickets afetados. Nenhuma proposta aqui altera o contrato atual por si só.
+os tickets afetados. Nenhuma proposta histórica aqui altera o contrato atual
+por si só.

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consulta-documentacao.invalid/schemas/investigation.schema.json",
+  "title": "docops usage investigation",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "investigation_id",
+    "package_id",
+    "kind",
+    "status",
+    "reviewed",
+    "occurrence_ids",
+    "golden_candidate",
+    "publication_allowed",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "investigation_id": {"type": "string", "minLength": 1},
+    "package_id": {"type": "string", "minLength": 1},
+    "kind": {"type": "string", "minLength": 1},
+    "status": {"enum": ["candidate_requested", "not_applicable"]},
+    "reviewed": {"const": false},
+    "occurrence_ids": {"type": "array", "minItems": 1},
+    "golden_candidate": {
+      "type": "object",
+      "required": ["candidate_id", "reviewed", "publication_allowed"],
+      "properties": {
+        "candidate_id": {"type": "string", "minLength": 1},
+        "reviewed": {"const": false},
+        "publication_allowed": {"const": false}
+      }
+    },
+    "publication_allowed": {"const": false},
+    "created_at": {"type": "string", "minLength": 1}
+  }
+}

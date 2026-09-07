@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DOCOPS lifecycle status",
+  "type": "object",
+  "required": ["schema_version", "ok", "runtime", "lifecycle", "compatibility", "errors"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "ok": {"type": "boolean"},
+    "code": {"type": "string"},
+    "runtime": {
+      "type": "object",
+      "required": ["schema_version", "layout_version", "package_id", "status", "migration", "storage"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "layout_version": {"const": 1},
+        "package_id": {"type": "string", "minLength": 1},
+        "status": {"type": "string", "minLength": 1},
+        "migration": {"type": "string", "minLength": 1},
+        "storage": {"const": "external-runtime"}
+      }
+    },
+    "lifecycle": {"type": "object"},
+    "compatibility": {
+      "type": "object",
+      "required": ["cli", "json", "artifacts"],
+      "properties": {
+        "cli": {"type": "string"},
+        "json": {"type": "string"},
+        "artifacts": {"type": "string"}
+      }
+    },
+    "errors": {"type": "array"}
+  }
+}

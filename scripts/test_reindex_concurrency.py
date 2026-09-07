@@ -23,7 +23,7 @@ def _runtime_environment_for_package(package: Path) -> dict[str, str]:
     """Start the stress workload with the reviewed backend used by DOCOPS."""
 
     vendor = ROOT / "skills" / "vendor" / "knowledge-rag"
-    return runtime_environment(package, vendor_root=vendor)
+    return runtime_environment(package, vendor_root=vendor, read_only=False)
 
 
 def _gate_event(code: str) -> dict[str, object]:
@@ -72,7 +72,7 @@ def stress_gate_findings(
     if (
         final_state.get("managed") is not True
         or not isinstance(recovery, Mapping)
-        or recovery.get("status") != "stable"
+        or recovery.get("status") not in {"stable", "none"}
     ):
         findings.append(_gate_event("stress_final_state_invalid"))
     if not all(

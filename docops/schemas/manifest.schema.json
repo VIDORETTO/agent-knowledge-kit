@@ -15,12 +15,22 @@
     "discovery": {"type": "object"},
     "provenance": {"type": "object", "required": ["license", "redistribution"]},
     "entries": {"type": "array", "items": {"type": "object"}},
-    "counts": {"type": "object", "required": ["accepted", "ignored", "errors"]},
+    "counts": {
+      "type": "object",
+      "required": ["accepted", "ignored", "errors"],
+      "properties": {
+        "accepted": {"type": "integer"},
+        "ignored": {"type": "integer"},
+        "quarantined": {"type": "integer"},
+        "errors": {"type": "integer"}
+      }
+    },
     "artifacts": {"type": "object", "required": ["skill", "router", "rag"]},
     "checkpoints": {"type": "object"},
     "metrics": {"type": "object"},
     "readiness": {"type": "object"},
-    "outcome": {"type": "object", "required": ["status", "code", "phase", "message", "exit_code"], "properties": {"status": {"enum": ["succeeded", "blocked", "failed", "cancelled"]}, "code": {"type": "string", "minLength": 1}, "phase": {"type": "string", "minLength": 1}, "message": {"type": "string"}, "exit_code": {"type": "integer"}}},
+    "revisions": {"type": "object"},
+    "outcome": {"type": "object", "required": ["schema_version", "status", "code", "phase", "message", "exit_code"], "properties": {"schema_version": {"const": 1}, "status": {"enum": ["succeeded", "blocked", "failed", "cancelled"]}, "code": {"type": "string", "minLength": 1}, "phase": {"type": "string", "minLength": 1}, "message": {"type": "string"}, "exit_code": {"type": "integer"}}},
     "warnings": {"type": "array", "items": {"type": "string"}},
     "errors": {"type": "array", "items": {"type": "object"}}
   },

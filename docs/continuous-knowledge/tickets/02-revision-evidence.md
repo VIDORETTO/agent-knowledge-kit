@@ -2,7 +2,7 @@
 
 [Índice dos tickets](../TICKETS.md) · [Especificação](../SPEC.md) · [TDD](../TDD.md)
 
-Status: **proposto; não implementado**.
+Status: **concluído localmente; aprovação/publicação permanece no T08**.
 
 ## Objetivo e entrega
 
@@ -48,22 +48,26 @@ comportamental, não por erro acidental da fixture.
 
 ## Critérios de aceite
 
-- [ ] Mudança relevante invalida avaliação e aprovação dependentes.
-- [ ] Repetição sem mudança preserva identidade estável.
-- [ ] Duração/timestamp não entram nos hashes de conteúdo.
-- [ ] Pacotes v1 continuam legíveis; evidência incompleta não habilita autopublicação.
+- [x] Mudança relevante invalida avaliação e readiness dependentes.
+- [x] Repetição sem mudança preserva identidade estável.
+- [x] Duração/timestamp não entram nos hashes de conteúdo.
+- [x] Pacotes v1 continuam legíveis; evidência incompleta não habilita
+  autopublicação.
+
+Nota: o mecanismo de aprovação/autorização não é inventado neste ticket; a
+dependência exata entre aprovação, base e hashes será fechada no T08.
 
 Rastreabilidade: A03, A16 em [VALIDATION](../VALIDATION.md).
 
 ## Definição de pronto
 
-- [ ] Entrega demonstrável pelo seam declarado.
-- [ ] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
-- [ ] Critérios acima e checks pertinentes passam.
-- [ ] Compatibilidade e exemplos JSON atualizados quando afetados.
-- [ ] Evidência de teste distingue fixture, MCP real e harness externo.
-- [ ] Nenhuma alteração fora do escopo ou publicação externa implícita.
-- [ ] Risco e procedimento de rollback documentados no resultado.
+- [x] Entrega demonstrável pelo seam declarado.
+- [x] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
+- [x] Critérios acima e checks pertinentes passam.
+- [x] Compatibilidade e schemas JSON atualizados.
+- [x] Evidência de teste distingue fixture, MCP real e harness externo.
+- [x] Nenhuma alteração fora do escopo ou publicação externa implícita.
+- [x] Risco e procedimento de rollback documentados no resultado.
 
 ## Riscos
 

@@ -18,6 +18,12 @@ entrada (nome | URL | repo | pasta)
  harness externo decide como carregar contexto e qual modelo usar
 ```
 
+Operações contínuas seguem a mesma fronteira: `source register/reconcile` →
+evento idempotente → worker com lease → candidata → avaliação → aprovação →
+publicação. Conversa e feedback entram apenas como proposta/sinal em
+quarentena; `reader-session` fixa uma geração e snapshot RAG read-only, e
+revogação invalida derivados, snapshots, readers e rollback dependentes.
+
 O comando `docops` é determinístico nas partes sob seu controle. Ele não
 interpreta a documentação como instruções executáveis e não chama modelos.
 `book-to-skill` continua sendo uma Agent Skill executada pelo harness: pode
@@ -50,6 +56,10 @@ O pacote só é considerado consultável quando
 documentos e metadados estão prontos; `indexed` significa que `--index-rag`
 executou o servidor real e registrou suas estatísticas.
 
+Os schemas canônicos ficam em `schemas/` e a cópia `docops/schemas/` é gerada
+por `scripts/sync_schemas.py`; a política de compatibilidade expand-contract
+está em `docs/CONTRACT-COMPATIBILITY.md`.
+
 ## Estado e recuperação
 
 `StateStore` usa `canonical + version` como chave lógica e inclui o hash no
@@ -76,21 +86,21 @@ O avaliador mantém o scorer lexical como diagnóstico nomeado. O adapter em
 memória serve ao TDD; o gate de release usa `--adapter mcp`, que exige um
 pacote realmente indexado e registra perfil, corpus, top-k e resultados.
 
-Antes do primeiro rename, `apply()` grava um journal local de promoÃ§Ã£o com o
+Antes do primeiro rename, `apply()` grava um journal local de promoção com o
 nome do staging, backup, hash do plano e fase (`prepared`, `active-moved` ou
-`active-installed`). Se o processo morrer entre os renames, a prÃ³xima chamada
-pÃºblica reaproveita o journal sob o lease, valida a geraÃ§Ã£o anterior e a
-restaura; o staging vÃ¡lido permanece retomÃ¡vel. `inspect()` classifica o caso
+`active-installed`). Se o processo morrer entre os renames, a próxima chamada
+pública reaproveita o journal sob o lease, valida a geração anterior e a
+restaura; o staging válido permanece retomável. `inspect()` classifica o caso
 como `stable`, `recoverable`, `incomplete` ou `writer_busy`, sem expor caminho
 privado, corpus ou traceback. Um owner local comprovadamente morto pode ser
 reclamado imediatamente; locks de host remoto conservam a janela stale.
 
-`rag/index.json` usa mÃ©tricas nomeadas: `corpus_documents` Ã© a quantidade
-de documentos aceitos pelo operador, `operator_chunks` Ã© a estimativa de
+`rag/index.json` usa métricas nomeadas: `corpus_documents` é a quantidade
+de documentos aceitos pelo operador, `operator_chunks` é a estimativa de
 chunks calculada antes do backend e `backend_total_chunks`/
-`backend_total_documents` sÃ£o estatÃ­sticas devolvidas pelo knowledge-rag (ou
-`null` quando o RAG nÃ£o foi executado). NÃ£o hÃ¡ um alias `chunks` na geraÃ§Ã£o
-nova, portanto valores diferentes nÃ£o podem ser confundidos.
+`backend_total_documents` são estatísticas devolvidas pelo knowledge-rag (ou
+`null` quando o RAG não foi executado). Não há um alias `chunks` na geração
+nova, portanto valores diferentes não podem ser confundidos.
 
 ## Limites deliberados
 

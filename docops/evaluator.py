@@ -6,7 +6,7 @@ import json
 import math
 import re
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping
 
 from .contracts import validate_artifact
@@ -15,6 +15,7 @@ from .observability import redact_report, redact_text
 from .package_validator import validate_package
 from .readiness import assess_readiness
 from .retrieval import RetrievalError, SkillRetrievalAdapter, adapter_for_package, route_query
+from .revisions import content_hash, package_revisions
 from .storage import write_json_atomic
 
 _TOKEN = re.compile(r"[\wÀ-ÿ][\wÀ-ÿ./:-]*", re.UNICODE)
@@ -24,12 +25,12 @@ _WINDOWS_ABSOLUTE = re.compile(r"^[A-Za-z]:[/\\]")
 @dataclass
 class EvaluationResult:
     ok: bool
-    metrics: dict[str, float]
+    metrics: dict[str, Any]
     cases: list[dict[str, Any]]
     errors: list[dict[str, str]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     diagnostics: list[str] = field(default_factory=list)
-    thresholds: dict[str, float] = field(default_factory=dict)
+    thresholds: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -82,6 +83,16 @@ def _case_payload(
     if len(case_list) != len(raw_cases):
         errors.append({"code": "golden_case_shape", "message": "every golden case must be an object"})
     for index, case in enumerate(case_list, 1):
+        for identifier_key in ("id", "case_id"):
+            if identifier_key in case and (
+                not isinstance(case.get(identifier_key), str) or not case[identifier_key].strip()
+            ):
+                errors.append(
+                    {
+                        "code": "golden_case_id",
+                        "message": f"golden case {index} has an invalid {identifier_key}",
+                    }
+                )
         query = case.get("query")
         expected_filepath = case.get("expected_filepath")
         kind = case.get("kind", "factual")
@@ -100,7 +111,7 @@ def _case_payload(
                 )
         if not isinstance(kind, str) or kind not in {"conceptual", "factual", "router"}:
             errors.append({"code": "golden_case_kind", "message": f"golden case {index} has an unsupported kind"})
-        if kind == "router" and case.get("expected_route") not in {"skill", "rag", "both"}:
+        if kind == "router" and case.get("expected_route") not in {"skill", "rag", "both", "lifecycle"}:
             errors.append({"code": "golden_case_route", "message": f"golden case {index} needs expected_route"})
         if case.get("reviewed") is not True:
             errors.append(
@@ -108,6 +119,332 @@ def _case_payload(
             )
     reviewed = reviewed and bool(case_list) and not errors
     return reviewed, case_list, errors
+
+
+def _case_identifier(case: Mapping[str, Any], index: int) -> str:
+    for key in ("case_id", "id"):
+        value = case.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return f"case-{index}"
+
+
+def _load_response_receipt(
+    receipt: Mapping[str, Any] | Path | str | None,
+) -> tuple[dict[str, Any] | None, list[dict[str, str]]]:
+    if receipt is None:
+        return None, []
+    if isinstance(receipt, Mapping):
+        payload: Any = dict(receipt)
+    elif isinstance(receipt, (Path, str)):
+        try:
+            payload = json.loads(Path(receipt).read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            return None, [{"code": "response_receipt_unreadable", "message": redact_text(exc)}]
+    else:
+        return None, [
+            {"code": "response_receipt_invalid", "message": "response receipt must be an object or JSON file"}
+        ]
+    if not isinstance(payload, dict):
+        return None, [{"code": "response_receipt_invalid", "message": "response receipt must be a JSON object"}]
+    contract = validate_artifact("evaluation-receipt", payload)
+    if not contract.ok:
+        return payload, [
+            {
+                "code": "response_receipt_schema",
+                "message": f"response evaluation receipt violates its contract at {error.get('path', '$')}",
+            }
+            for error in contract.errors
+        ]
+    return payload, []
+
+
+def _safe_response_citation(package_root: Path, raw: Any) -> str | None:
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    normalized = raw.strip().replace("\\", "/")
+    path_value, separator, fragment = normalized.partition("#")
+    if separator and (not fragment or any(ord(char) < 32 for char in fragment)):
+        return None
+    relative = PurePosixPath(path_value)
+    if (
+        relative.is_absolute()
+        or _WINDOWS_ABSOLUTE.match(path_value)
+        or any(part in {"", ".", ".."} for part in relative.parts)
+    ):
+        return None
+    roots = (
+        ("rag/documents/", package_root / "rag" / "documents"),
+        ("documents/", package_root / "rag" / "documents"),
+        ("skill/", package_root / "skill"),
+        ("router/", package_root / "router"),
+    )
+    for prefix, root in roots:
+        candidate_name = path_value[len(prefix) :] if path_value.startswith(prefix) else None
+        if candidate_name:
+            candidate = root / Path(*PurePosixPath(candidate_name).parts)
+            try:
+                candidate.relative_to(root)
+            except ValueError:
+                return None
+            if candidate.is_file() and not candidate.is_symlink():
+                return normalized
+    for root in (package_root / "rag" / "documents", package_root / "skill", package_root / "router"):
+        candidate = root / Path(*relative.parts)
+        try:
+            candidate.relative_to(root)
+        except ValueError:
+            continue
+        if candidate.is_file() and not candidate.is_symlink():
+            return normalized
+    return None
+
+
+def _evaluate_response_receipt(
+    package_root: Path,
+    receipt: Mapping[str, Any] | None,
+    receipt_errors: list[dict[str, str]],
+    golden_cases: list[Mapping[str, Any]],
+    revisions: Mapping[str, Any],
+    *,
+    thresholds: Mapping[str, float] | None,
+) -> tuple[
+    dict[str, Any],
+    dict[str, Any],
+    list[dict[str, str]],
+    dict[str, dict[str, Any]],
+    dict[str, float],
+]:
+    if receipt is None and not receipt_errors:
+        return {}, {}, [], {}, {}
+
+    errors = list(receipt_errors)
+    receipt_hash = content_hash(receipt) if receipt is not None else None
+    if receipt is None:
+        return (
+            {},
+            {
+                "status": "failed",
+                "receipt_hash": receipt_hash,
+                "metric_status": {
+                    "response_fidelity": "not_applicable",
+                    "citation_coverage": "not_applicable",
+                },
+            },
+            errors,
+            {},
+            {},
+        )
+    evaluator = receipt.get("evaluator") if isinstance(receipt.get("evaluator"), Mapping) else {}
+    response_metadata: dict[str, Any] = {
+        "status": "failed" if errors else "not_applicable",
+        "generation_id": receipt.get("generation_id"),
+        "candidate_id": receipt.get("candidate_id"),
+        "evaluator": {
+            "name": evaluator.get("name"),
+            "version": evaluator.get("version"),
+            "independent": evaluator.get("independent") is True,
+        },
+        "rubric_revision": receipt.get("rubric_revision"),
+        "receipt_hash": receipt_hash,
+        "case_count": 0,
+        "claim_count": 0,
+        "supported_claims": 0,
+        "critical_failures": 0,
+        "citation_required": 0,
+        "citation_supported": 0,
+        "metric_status": {
+            "response_fidelity": "not_applicable",
+            "citation_coverage": "not_applicable",
+        },
+    }
+    metrics: dict[str, Any] = {}
+    case_reports: dict[str, dict[str, Any]] = {}
+    response_thresholds: dict[str, float] = {}
+
+    expected_composition = revisions.get("composition_hash")
+    expected_golden = revisions.get("golden_revision")
+    if receipt.get("package_composition_hash") != expected_composition:
+        errors.append(
+            {
+                "code": "response_receipt_stale",
+                "message": "response evaluation receipt does not match the package composition",
+            }
+        )
+    if receipt.get("golden_revision") != expected_golden:
+        errors.append(
+            {
+                "code": "response_receipt_stale",
+                "message": "response evaluation receipt does not match the reviewed Golden",
+            }
+        )
+    candidate_receipt_path = package_root / ".docops" / "candidate.json"
+    if candidate_receipt_path.is_file() and not candidate_receipt_path.is_symlink():
+        try:
+            candidate_receipt = json.loads(candidate_receipt_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            candidate_receipt = None
+        if isinstance(candidate_receipt, Mapping) and candidate_receipt.get("candidate_id") != receipt.get(
+            "candidate_id"
+        ):
+            errors.append(
+                {
+                    "code": "response_candidate_mismatch",
+                    "message": "response evaluation receipt does not identify this candidate",
+                }
+            )
+
+    golden_by_id = {_case_identifier(case, index): case for index, case in enumerate(golden_cases, 1)}
+    raw_cases = receipt.get("cases")
+    if not isinstance(raw_cases, list):
+        errors.append({"code": "response_receipt_cases", "message": "response receipt cases must be a list"})
+        raw_cases = []
+    seen_cases: set[str] = set()
+    total_claims = 0
+    supported_claims = 0
+    critical_failures = 0
+    citation_required = 0
+    citation_supported = 0
+
+    for item in raw_cases:
+        if not isinstance(item, Mapping):
+            errors.append({"code": "response_case_invalid", "message": "response receipt case must be an object"})
+            continue
+        case_id = item.get("case_id")
+        if not isinstance(case_id, str) or not case_id.strip():
+            errors.append({"code": "response_case_invalid", "message": "response receipt case_id is required"})
+            continue
+        case_id = case_id.strip()
+        if case_id in seen_cases:
+            errors.append({"code": "response_case_duplicate", "message": "response receipt repeats a case_id"})
+            continue
+        seen_cases.add(case_id)
+        golden_case = golden_by_id.get(case_id)
+        if golden_case is None:
+            errors.append({"code": "response_case_unknown", "message": "response receipt references an unknown case"})
+        claims = item.get("claims")
+        if not isinstance(claims, list):
+            errors.append({"code": "response_claims_invalid", "message": "response case claims must be a list"})
+            claims = []
+        case_critical = item.get("critical") is True or bool(
+            golden_case.get("critical") if isinstance(golden_case, Mapping) else False
+        )
+        case_total = 0
+        case_supported = 0
+        case_critical_failures = 0
+        case_citation_required = 0
+        case_citation_supported = 0
+        for claim in claims:
+            if not isinstance(claim, Mapping):
+                errors.append({"code": "response_claim_invalid", "message": "response receipt claim must be an object"})
+                continue
+            if not isinstance(claim.get("claim_id"), str) or not claim["claim_id"].strip():
+                errors.append({"code": "response_claim_invalid", "message": "response claim_id is required"})
+                continue
+            if not isinstance(claim.get("supported"), bool):
+                errors.append({"code": "response_claim_invalid", "message": "response supported must be boolean"})
+                continue
+            case_total += 1
+            total_claims += 1
+            supported = claim["supported"]
+            if supported:
+                case_supported += 1
+                supported_claims += 1
+            requires_citation = claim.get("requires_citation")
+            if not isinstance(requires_citation, bool):
+                requires_citation = str((golden_case or {}).get("kind", "factual")) != "conceptual"
+            citations = claim.get("citations", [])
+            if not isinstance(citations, list):
+                errors.append({"code": "response_citations_invalid", "message": "response citations must be a list"})
+                citations = []
+            valid_citations = [
+                citation
+                for citation in (_safe_response_citation(package_root, value) for value in citations)
+                if citation is not None
+            ]
+            if requires_citation:
+                case_citation_required += 1
+                citation_required += 1
+                if valid_citations:
+                    case_citation_supported += 1
+                    citation_supported += 1
+                elif supported:
+                    errors.append(
+                        {
+                            "code": "response_citation_missing",
+                            "message": "a supported response claim lacks a valid citation",
+                        }
+                    )
+            claim_critical = case_critical or claim.get("critical") is True
+            if claim_critical and not supported:
+                case_critical_failures += 1
+                critical_failures += 1
+        response_metadata["case_count"] += 1
+        case_reports[case_id] = {
+            "response_claim_count": case_total,
+            "response_supported_claims": case_supported,
+            "response_critical_failures": case_critical_failures,
+            "response_citation_required": case_citation_required,
+            "response_citation_supported": case_citation_supported,
+        }
+
+    response_metadata.update(
+        {
+            "claim_count": total_claims,
+            "supported_claims": supported_claims,
+            "critical_failures": critical_failures,
+            "citation_required": citation_required,
+            "citation_supported": citation_supported,
+        }
+    )
+    if total_claims:
+        metrics["response_fidelity"] = supported_claims / total_claims
+        response_metadata["metric_status"]["response_fidelity"] = "measured"
+    else:
+        metrics["response_fidelity"] = None
+    if citation_required:
+        metrics["citation_coverage"] = citation_supported / citation_required
+        response_metadata["metric_status"]["citation_coverage"] = "measured"
+    else:
+        metrics["citation_coverage"] = None
+
+    for key, default in (("response_fidelity", 0.98), ("citation_coverage", 0.98)):
+        if metrics[key] is None:
+            continue
+        raw_threshold = thresholds.get(key, default) if thresholds else default
+        try:
+            numeric_threshold = float(raw_threshold)
+        except (TypeError, ValueError, OverflowError):
+            errors.append({"code": "response_threshold_invalid", "message": f"{key} threshold must be numeric"})
+            continue
+        if not math.isfinite(numeric_threshold) or not 0 <= numeric_threshold <= 1:
+            errors.append(
+                {"code": "response_threshold_invalid", "message": f"{key} threshold must be from 0 through 1"}
+            )
+            continue
+        response_thresholds[key] = numeric_threshold
+        if metrics[key] < numeric_threshold:
+            errors.append(
+                {
+                    "code": f"{key}_below_threshold",
+                    "message": f"{key} {metrics[key]:.4f} < {numeric_threshold:.4f}",
+                }
+            )
+    if critical_failures:
+        errors.append(
+            {
+                "code": "critical_response_claim_unsupported",
+                "message": "a critical response claim is unsupported",
+            }
+        )
+    if errors:
+        response_metadata["status"] = "failed"
+    elif total_claims:
+        response_metadata["status"] = "passed"
+    else:
+        response_metadata["status"] = "not_applicable"
+    response_metadata["thresholds"] = dict(response_thresholds)
+    return metrics, response_metadata, errors, case_reports, response_thresholds
 
 
 def _expected_relative(value: str, documents_dir: Path) -> str:
@@ -219,12 +556,15 @@ def evaluate_package(
     top_k: int = 5,
     adapter: Any = None,
     runtime_root: Path | str | None = None,
+    response_receipt: Mapping[str, Any] | Path | str | None = None,
 ) -> EvaluationResult:
     """Evaluate cases through a named retrieval/skill adapter.
 
     The default remains the fast lexical diagnostic for compatibility.  A
     release gate must pass ``adapter="mcp"`` so its metrics are produced by
-    the same backend delivered to the harness.
+    the same backend delivered to the harness.  When supplied, an external
+    response-evaluation receipt adds an independent fidelity and citation gate
+    without importing response text into the package report.
     """
 
     root = Path(package_root).resolve()
@@ -243,6 +583,7 @@ def evaluate_package(
         payload = cases
     reviewed, case_list, payload_errors = _case_payload(payload)
     errors: list[dict[str, str]] = list(payload_errors)
+    response_payload, response_receipt_errors = _load_response_receipt(response_receipt)
     if not reviewed:
         errors.append(
             {"code": "golden_not_reviewed", "message": "golden cases require explicit review before evaluation"}
@@ -332,6 +673,7 @@ def evaluate_package(
                     "adapter": selected_metadata.get("adapter"),
                     "backend": selected_metadata.get("backend"),
                     "profile": selected_metadata.get("profile"),
+                    "case_id": _case_identifier(case, len(evaluated) + 1),
                 }
             )
         total = sum(1 for case in case_list if str(case.get("kind", "factual")) != "router")
@@ -401,6 +743,12 @@ def evaluate_package(
                 {"code": "route_cases_missing", "message": "route_accuracy requires at least one reviewed router case"}
             )
         metadata = redact_report(redact_metadata(dict(route_metadata["factual"])))
+        golden_payload = (
+            payload
+            if isinstance(payload, Mapping)
+            else {"schema_version": 1, "reviewed": reviewed, "cases": list(case_list)}
+        )
+        revisions = package_revisions(root, golden=golden_payload)
         metadata.update(
             {
                 "top_k": metric_top_k,
@@ -409,8 +757,38 @@ def evaluate_package(
                 "package_readiness": assess_readiness(root).get("state"),
                 "kind_counts": kind_totals,
                 "kind_recall": {kind: kind_hits[kind] / count if count else 0.0 for kind, count in kind_totals.items()},
+                "configuration": {
+                    "top_k": metric_top_k,
+                    "thresholds": dict(required),
+                    "adapter": route_metadata["factual"].get("adapter"),
+                    "backend": route_metadata["factual"].get("backend"),
+                    "mode": route_metadata["factual"].get("mode"),
+                },
+                "revisions": revisions,
             }
         )
+        response_metrics, response_metadata, response_errors, response_case_reports, response_thresholds = (
+            _evaluate_response_receipt(
+                root,
+                response_payload,
+                response_receipt_errors,
+                case_list,
+                revisions,
+                thresholds=thresholds,
+            )
+        )
+        errors.extend(response_errors)
+        metrics.update(response_metrics)
+        required.update(response_thresholds)
+        configuration = metadata.get("configuration")
+        if isinstance(configuration, dict):
+            configuration["thresholds"] = dict(required)
+        if response_metadata:
+            metadata["response"] = response_metadata
+        for case in evaluated:
+            case_id = case.get("case_id")
+            if isinstance(case_id, str) and case_id in response_case_reports:
+                case["response"] = response_case_reports[case_id]
         diagnostics: list[str] = []
         if metadata.get("mode") == "diagnostic":
             diagnostics.append("Lexical retrieval is a diagnostic; use adapter=mcp for the release gate.")
@@ -437,6 +815,13 @@ def evaluate_package(
             for error in contract.errors
         )
         result.ok = False
+    golden_payload = (
+        payload
+        if isinstance(payload, Mapping)
+        else {"schema_version": 1, "reviewed": reviewed, "cases": list(case_list)}
+    )
+    revisions = package_revisions(root, golden=golden_payload)
+    result.metadata["revisions"] = revisions
     evidence = {
         "schema_version": 1,
         "ok": result.ok,
@@ -447,7 +832,13 @@ def evaluate_package(
         "top_k": result.metadata.get("top_k"),
         "case_count": len(result.cases),
         "metrics": result.metrics,
+        "revisions": revisions,
+        "cases_hash": revisions["golden_revision"],
+        "composition_hash": revisions["composition_hash"],
+        "configuration": result.metadata.get("configuration"),
     }
+    if "response" in result.metadata:
+        evidence["response"] = result.metadata["response"]
     try:
         (root / ".docops").mkdir(parents=True, exist_ok=True)
         write_json_atomic(root / ".docops" / "evaluation.json", evidence)
@@ -459,6 +850,7 @@ def evaluate_package(
                 metrics_value = manifest.setdefault("metrics", {})
                 if isinstance(metrics_value, dict):
                     metrics_value["evaluation"] = evidence
+                manifest["revisions"] = revisions
                 write_json_atomic(manifest_path, manifest)
     except (OSError, UnicodeError, json.JSONDecodeError, TypeError):
         result.warnings.append("evaluation evidence could not be persisted")

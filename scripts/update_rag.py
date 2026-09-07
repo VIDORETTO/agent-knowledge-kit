@@ -145,7 +145,7 @@ def connect() -> McpClient:
     rag_python = discover_rag_python(PROJECT_ROOT)
     if not rag_python.exists:
         sys.exit(f"Python do knowledge-rag não encontrado: {rag_python.path} — rode bootstrap com --rag")
-    env = runtime_environment(PROJECT_ROOT)
+    env = runtime_environment(PROJECT_ROOT, read_only=False)
     # The explicit add/update calls below already synchronize the corpus. The
     # filesystem watcher would otherwise launch a concurrent reindex for every
     # write, racing the MCP call and leaving duplicate/stale metadata.

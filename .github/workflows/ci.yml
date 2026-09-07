@@ -32,7 +32,7 @@ jobs:
       - name: Pin installer
         run: python -m pip install --disable-pip-version-check --upgrade "pip==26.2.1" "setuptools==84.0.0"
       - name: Install operator and test profile
-        run: python -m pip install --disable-pip-version-check -e ".[dev,formats]"
+        run: python -m pip install --disable-pip-version-check -e ".[dev,formats,rag]"
       - name: Exercise Python bootstrap wrapper
         run: python scripts/bootstrap.py --no-install
       - name: Exercise POSIX bootstrap wrapper
@@ -46,6 +46,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/update_docs.ps1 -Sources documents/fixtures/acme-docs -Slug support-matrix -Output artifacts/support-matrix -License MIT
+      - name: Remove no-install bootstrap probe environment
+        run: python -c "import shutil; shutil.rmtree('.venv', ignore_errors=True)"
       - name: Doctor
         run: python -m docops doctor --json
       - name: Dependency audit
@@ -92,9 +94,9 @@ jobs:
       - name: Pin installer
         run: python -m pip install --disable-pip-version-check --upgrade "pip==26.2.1" "setuptools==84.0.0"
       - name: Install clean-clone test profile
-        run: python -m pip install --disable-pip-version-check -e ".[dev,formats]"
+        run: python -m pip install --disable-pip-version-check -e ".[dev,formats,rag]"
       - name: Verify outside checkout state
-        run: python scripts/verify_clean_clone.py --bootstrap
+        run: python scripts/verify_clean_clone.py --bootstrap --rag
 
   package:
     name: wheel / Python 3.12

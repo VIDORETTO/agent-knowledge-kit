@@ -2,7 +2,7 @@
 
 [Índice dos tickets](../TICKETS.md) · [Especificação](../SPEC.md) · [TDD](../TDD.md)
 
-Status: **proposto; não implementado**.
+Status: **concluído localmente**.
 
 ## Objetivo e entrega
 
@@ -48,22 +48,24 @@ comportamental, não por erro acidental da fixture.
 
 ## Critérios de aceite
 
-- [ ] Atualização factual preserva skill e router.
-- [ ] Defasagem e cobertura desconhecida aparecem na inspeção.
-- [ ] Fonte removida invalida suporte dependente; não declara skill sincronizada indevidamente.
-- [ ] Atualização não indexada continua corpus-ready; não inicia MCP implicitamente.
+- [x] Atualização factual preserva skill e router.
+- [x] Defasagem e cobertura desconhecida aparecem na inspeção.
+- [x] Fonte removida invalida suporte dependente; não declara skill sincronizada
+  indevidamente.
+- [x] Atualização não indexada continua corpus-ready; não inicia MCP
+  implicitamente.
 
 Rastreabilidade: A01, A03, A16 em [VALIDATION](../VALIDATION.md).
 
 ## Definição de pronto
 
-- [ ] Entrega demonstrável pelo seam declarado.
-- [ ] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
-- [ ] Critérios acima e checks pertinentes passam.
-- [ ] Compatibilidade e exemplos JSON atualizados quando afetados.
-- [ ] Evidência de teste distingue fixture, MCP real e harness externo.
-- [ ] Nenhuma alteração fora do escopo ou publicação externa implícita.
-- [ ] Risco e procedimento de rollback documentados no resultado.
+- [x] Entrega demonstrável pelo seam declarado.
+- [x] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
+- [x] Critérios acima e checks pertinentes passam.
+- [x] Compatibilidade e schemas JSON atualizados.
+- [x] Evidência de teste distingue fixture, MCP real e harness externo.
+- [x] Nenhuma alteração fora do escopo ou publicação externa implícita.
+- [x] Risco e procedimento de rollback documentados no resultado.
 
 ## Riscos
 

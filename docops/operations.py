@@ -20,10 +20,18 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Iterable, Mapping
 
-from .api_types import PipelineOptions, PipelineResult
+from .api_types import PipelineOptions, PipelineResult, normalize_layers
+from .candidates import (
+    CandidateError,
+    candidate_locator,
+    candidate_path,
+    finalize_candidate,
+    list_candidates,
+)
 from .contracts import validate_artifact
-from .generation import write_router, write_skill
+from .generation import check_generated_artifacts, write_generated_artifact_inventory, write_router, write_skill
 from .harness import build_harness_manifest
+from .learning import admitted_learning_documents, copy_learning_state, rollback_learning_guard
 from .lease import LeaseBusyError, PackageLease
 from .manifest import build_manifest, read_manifest, redact_entry, redact_metadata, redact_url, utc_now, write_manifest
 from .normalizer import normalize_file
@@ -53,9 +61,10 @@ from .primitives import (
 from .primitives import (
     write_if_changed as _write_if_changed,
 )
-from .rag_sync import RagSynchronizer, package_rag_config_text
+from .rag_sync import RagSynchronizer, embedding_configuration, package_rag_config_text
 from .readiness import assess_readiness
 from .repository_acquirer import RepositoryAcquirer
+from .revisions import evidence_matches_package, file_hash, package_revisions
 from .runtime import runtime_provenance
 from .source_resolver import SourceResolution, SourceResolver, canonicalize_url
 from .state import CheckpointStore, SourceRecord, StateStore
@@ -65,12 +74,39 @@ from .web_acquirer import CrawlOptions, FetchPolicy, WebAcquirer
 PLAN_VERSION = 1
 _ARTIFACTS = {"skill": "skill", "router": "router", "rag": "rag", "harness": "harness.json", "config": "config.yaml"}
 _GENERATED_ROOTS = {"skill", "router", "rag", "harness.json", "manifest.json", "config.yaml", ".docops"}
+_PRESERVED_CONCEPTUAL_METADATA = (
+    ".docops/generated-artifacts.json",
+    ".docops/generated-skill.json",
+    ".docops/skill-enrichment.json",
+    ".docops/evaluation.json",
+    ".docops/release-evidence.json",
+    ".docops/policy.json",
+    ".docops/approval.json",
+    ".docops/publication.json",
+)
 
 
 class OperationFailure(RuntimeError):
     """An expected, reportable failure in one apply phase."""
 
     def __init__(self, code: str, message: str, *, phase: str, details: Mapping[str, Any] | None = None) -> None:
+        self.code = code
+        self.phase = phase
+        self.details = dict(details or {})
+        super().__init__(message)
+
+
+class CandidatePublicationError(ValueError):
+    """Raised when candidate approval or publication cannot proceed safely."""
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        phase: str = "approval",
+        details: Mapping[str, Any] | None = None,
+    ) -> None:
         self.code = code
         self.phase = phase
         self.details = dict(details or {})
@@ -88,6 +124,8 @@ class OperationOptions:
     scope: str | None = None
     language: str | None = None
     mode: str = "run"
+    layers: tuple[str, ...] = ("conceptual", "factual")
+    publication_policy: str = "direct"
     license: str | None = None
     redistribution: str = "private-only"
     index_rag: bool = False
@@ -112,8 +150,11 @@ class OperationOptions:
             object.__setattr__(self, "source_root", Path(self.source_root).expanduser().resolve())
         object.__setattr__(self, "include_patterns", tuple(self.include_patterns))
         object.__setattr__(self, "exclude_patterns", tuple(self.exclude_patterns))
+        object.__setattr__(self, "layers", normalize_layers(self.layers))
         if self.mode not in {"create", "update", "run", "dry-run"}:
             raise ValueError("mode must be create, update, run or dry-run")
+        if self.publication_policy not in {"direct", "candidate"}:
+            raise ValueError("publication_policy must be direct or candidate")
         if self.redistribution not in {"private-only", "internal", "public"}:
             raise ValueError("redistribution must be private-only, internal or public")
         if (
@@ -140,6 +181,8 @@ class OperationOptions:
             scope=options.scope,
             language=options.language,
             mode=options.mode,
+            layers=tuple(options.layers),
+            publication_policy=options.publication_policy,
             license=options.license,
             redistribution=options.redistribution,
             index_rag=options.index_rag,
@@ -181,6 +224,8 @@ class OperationRequest:
             "scope": options.scope,
             "language": options.language,
             "mode": options.mode,
+            "layers": list(options.layers),
+            "publication_policy": options.publication_policy,
             "license": options.license or "unknown",
             "redistribution": options.redistribution,
             "index_rag": options.index_rag,
@@ -205,6 +250,8 @@ class OperationRequest:
             "scope": options.scope,
             "language": options.language,
             "mode": options.mode,
+            "layers": list(options.layers),
+            "publication_policy": options.publication_policy,
             "license": options.license,
             "redistribution": options.redistribution,
             "index_rag": options.index_rag,
@@ -509,11 +556,14 @@ def _collect(source: str | Path, resolution: SourceResolution, options: Pipeline
             used_destinations: set[str] = set()
             for file_path in files:
                 normalized = normalize_file(file_path)
+                effective_status = normalized.status
+                if normalized.status == "accepted" and normalized.quality_status == "quarantine":
+                    effective_status = "quarantined"
                 relative_destination = (
                     _unique_destination(
                         _destination_for_file(file_path, base, normalized), file_path, used_destinations
                     )
-                    if normalized.status == "accepted"
+                    if effective_status == "accepted"
                     else None
                 )
                 if relative_destination:
@@ -521,14 +571,17 @@ def _collect(source: str | Path, resolution: SourceResolution, options: Pipeline
                 entry: dict[str, Any] = {
                     "source": normalized.origin,
                     "canonical": canonicalize_url(normalized.origin),
-                    "status": normalized.status if normalized.status != "dependency_missing" else "error",
+                    "status": effective_status if effective_status != "dependency_missing" else "error",
                     "destination": relative_destination,
                     "title": normalized.title,
                     "format": normalized.format,
                     "warnings": normalized.warnings,
                     "untrusted": normalized.untrusted,
+                    "locators": normalized.locators,
+                    "quality_status": normalized.quality_status,
+                    "quality_reason": normalized.quality_reason,
                 }
-                if normalized.status == "accepted" and relative_destination:
+                if effective_status == "accepted" and relative_destination:
                     entry["content"] = normalized.content
                     entry["content_hash"] = hashlib.sha256(normalized.content.encode("utf-8")).hexdigest()
                     record_canonical = _local_record_canonical(resolution.selected.canonical, relative_destination)
@@ -541,8 +594,10 @@ def _collect(source: str | Path, resolution: SourceResolution, options: Pipeline
                         )
                     )
                 else:
-                    entry["code"] = normalized.error_code
-                    entry["reason"] = normalized.error
+                    entry["code"] = normalized.error_code or (
+                        "quality_quarantine" if effective_status == "quarantined" else None
+                    )
+                    entry["reason"] = normalized.error or normalized.quality_reason
                     if normalized.status in {"ocr_required", "dependency_missing", "error"}:
                         errors.append(
                             {
@@ -784,8 +839,11 @@ def plan(source: str | Path | OperationRequest, *, options: PipelineOptions | No
                 {"code": "output_inside_source", "message": "output directory must be outside the local source"}
             )
     effective = _effective_mode(options, root, managed)
+    if managed and effective in {"update", "run"} and "conceptual" in options.layers:
+        blockers.extend(check_generated_artifacts(root))
     expected_readiness = {
         "skill": "scaffold-ready",
+        "enrichment": "awaiting_enrichment",
         "rag": "indexed" if options.index_rag else "corpus-ready",
         "evaluation": "pending",
         "package": "indexed" if options.index_rag else "corpus-ready",
@@ -803,6 +861,7 @@ def plan(source: str | Path | OperationRequest, *, options: PipelineOptions | No
     )
     config_content: str | None = None
     state_diff = {"added": 0, "updated": 0, "removed": 0}
+    acquisition_blocked = False
     if not blockers and resolution.selected:
         collection = _collect(request.source, resolution, options)
         resolution = collection.resolution
@@ -810,6 +869,7 @@ def plan(source: str | Path | OperationRequest, *, options: PipelineOptions | No
         records = collection.records
         warnings.extend(collection.warnings)
         blockers.extend(collection.errors)
+        acquisition_blocked = bool(collection.errors)
         provenance = collection.provenance
     if root.is_dir() and (root / "config.yaml").is_symlink():
         blockers.append({"code": "unsafe_config_path", "message": "package config.yaml must not be a symbolic link"})
@@ -824,7 +884,7 @@ def plan(source: str | Path | OperationRequest, *, options: PipelineOptions | No
         except ValueError:
             blockers.append({"code": "unsafe_state_path", "message": "normalized destination is not safely relative"})
         desired.setdefault(record.logical_key, record)
-    if state is not None:
+    if state is not None and not acquisition_blocked:
         diff = state.plan(desired.values())
         state_diff = {"added": len(diff.added), "updated": len(diff.updated), "removed": len(diff.removed)}
     elif desired:
@@ -1145,6 +1205,50 @@ def _copy_preserved_user_files(source: Path, stage: Path) -> list[str]:
     return sorted(set(copied))
 
 
+def _copy_preserved_conceptual_layer(source: Path, stage: Path) -> list[str]:
+    """Copy conceptual artifacts byte-for-byte for an explicit factual update."""
+
+    required = ("skill", "router")
+    copied: list[str] = []
+    for relative_name in (*required, *_PRESERVED_CONCEPTUAL_METADATA):
+        origin = source / relative_name
+        if not (origin.exists() or origin.is_symlink()):
+            if relative_name in required:
+                raise OperationFailure(
+                    "conceptual_layer_unavailable",
+                    "factual update requires an existing skill and router to preserve",
+                    phase="artifacts",
+                )
+            continue
+        if origin.is_symlink():
+            raise OperationFailure(
+                "unsafe_user_artifact",
+                "conceptual artifacts must not be symbolic links",
+                phase="artifacts",
+            )
+        destination = stage / relative_name
+        if origin.is_dir():
+            if any(path.is_symlink() for path in origin.rglob("*")):
+                raise OperationFailure(
+                    "unsafe_user_artifact",
+                    "conceptual artifacts must not contain symbolic links",
+                    phase="artifacts",
+                )
+            shutil.copytree(origin, destination, dirs_exist_ok=True)
+            copied.extend(path.relative_to(stage).as_posix() for path in destination.rglob("*") if path.is_file())
+        elif origin.is_file():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(origin, destination)
+            copied.append(relative_name)
+        else:
+            raise OperationFailure(
+                "conceptual_layer_unavailable",
+                "conceptual artifact path is not a regular file or directory",
+                phase="artifacts",
+            )
+    return sorted(set(copied))
+
+
 def _write_acquisition(stage: Path, plan_value: OperationPlan) -> None:
     documents = stage / "rag" / "documents"
     if documents.is_symlink():
@@ -1182,30 +1286,75 @@ def _write_acquisition(stage: Path, plan_value: OperationPlan) -> None:
         payload = {key: value for key, value in entry.items() if key != "content"}
         payload["version"] = plan_value.resolution.selected.version if plan_value.resolution.selected else None
         source_entries.append(redact_entry(payload))
+    for learning_document in admitted_learning_documents(plan_value.request.options.output_dir):
+        destination = documents / _safe_relpath(str(learning_document["destination"]))
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        _write_if_changed(destination, str(learning_document["content"]))
+        source_entries.append(redact_entry(dict(learning_document["source"])))
     write_json_atomic(stage / "rag" / "sources.json", {"schema_version": 1, "sources": source_entries})
 
 
 def _write_artifacts(stage: Path, plan_value: OperationPlan) -> None:
-    selected = plan_value.resolution.selected
-    source = selected.to_dict() if selected else {}
-    source["input"] = plan_value.request.source
-    source["license"] = plan_value.provenance.get("license", "unknown")
-    accepted = [entry for entry in (_thaw(item) for item in plan_value.entries) if entry.get("status") == "accepted"]
-    write_skill(stage, selected.slug if selected else "documentation", accepted, source)
-    write_router(stage, selected.slug if selected else "documentation")
+    options = plan_value.request.options
+    existing_managed, _reason = _managed_package(options.output_dir)
+    preserve_conceptual = "conceptual" not in options.layers and existing_managed
+    if preserve_conceptual:
+        _copy_preserved_conceptual_layer(options.output_dir, stage)
+    else:
+        selected = plan_value.resolution.selected
+        source = selected.to_dict() if selected else {}
+        source["input"] = plan_value.request.source
+        source["license"] = plan_value.provenance.get("license", "unknown")
+        accepted = [
+            entry for entry in (_thaw(item) for item in plan_value.entries) if entry.get("status") == "accepted"
+        ]
+        write_skill(stage, selected.slug if selected else "documentation", accepted, source)
+        write_router(stage, selected.slug if selected else "documentation")
     harness_text = json.dumps(build_harness_manifest(stage), indent=2, ensure_ascii=False, sort_keys=True) + "\n"
     _write_if_changed(stage / "harness.json", harness_text)
+    if not preserve_conceptual:
+        write_generated_artifact_inventory(stage)
 
 
 def _write_index(stage: Path, plan_value: OperationPlan) -> dict[str, Any]:
+    document_paths = [
+        path for path in (stage / "rag" / "documents").rglob("*") if path.is_file() and not path.is_symlink()
+    ]
+    corpus_documents = len(document_paths)
     operator_chunks = sum(
         max(1, (len(str(entry.get("content", ""))) + 949) // 950)
         for entry in (_thaw(item) for item in plan_value.entries)
         if entry.get("status") == "accepted" and entry.get("content")
     )
+    operator_chunks += sum(
+        max(1, (len(path.read_text(encoding="utf-8")) + 949) // 950)
+        for path in document_paths
+        if path.relative_to(stage / "rag" / "documents").parts[:1] == ("learning",)
+    )
     rag_sync_result = None
     if plan_value.request.options.index_rag:
-        rag_sync_result = RagSynchronizer(runtime_root=_runtime_root(plan_value.request.options)).sync(stage)
+        full_rebuild = False
+        active_index = plan_value.request.options.output_dir / "rag" / "index.json"
+        if active_index.is_file() and not active_index.is_symlink():
+            try:
+                previous_index = json.loads(active_index.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, json.JSONDecodeError):
+                previous_index = {}
+            if previous_index.get("mode") == "indexed":
+                previous_configuration = previous_index.get("configuration")
+                previous_fingerprint = (
+                    previous_configuration.get("embedding_fingerprint")
+                    if isinstance(previous_configuration, Mapping)
+                    else None
+                )
+                current_configuration = embedding_configuration(stage)
+                full_rebuild = not isinstance(previous_fingerprint, str) or (
+                    previous_fingerprint != current_configuration.get("embedding_fingerprint")
+                )
+        rag_sync_result = RagSynchronizer(runtime_root=_runtime_root(plan_value.request.options)).sync(
+            stage,
+            full_rebuild=full_rebuild,
+        )
         if not rag_sync_result.ok:
             raise OperationFailure(
                 (rag_sync_result.error or {}).get("code", "rag_integration_failed"),
@@ -1225,12 +1374,12 @@ def _write_index(stage: Path, plan_value: OperationPlan) -> dict[str, Any]:
         "backend": "knowledge-rag",
         "mode": "indexed" if rag_sync_result is not None and rag_sync_result.ok else "corpus-ready",
         "profile": "compact",
-        "corpus_documents": len(plan_value.records),
+        "corpus_documents": corpus_documents,
         "operator_chunks": operator_chunks,
         "backend_total_documents": backend_total_documents,
         "backend_total_chunks": backend_total_chunks,
         "metrics": {
-            "corpus_documents": len(plan_value.records),
+            "corpus_documents": corpus_documents,
             "operator_chunks": operator_chunks,
             "backend_total_documents": backend_total_documents,
             "backend_total_chunks": backend_total_chunks,
@@ -1244,6 +1393,8 @@ def _write_index(stage: Path, plan_value: OperationPlan) -> dict[str, Any]:
         index_payload["server_stats"] = safe_sync["stats"]
         index_payload["reindex"] = safe_sync["reindex"]
         index_payload["smoke"] = safe_sync["smoke"]
+        index_payload["configuration"] = safe_sync["configuration"]
+        index_payload["profile"] = safe_sync["configuration"].get("profile", "unknown")
         index_payload["provenance"] = safe_sync["provenance"]
         index_payload["diagnostics"] = safe_sync["diagnostics"]
     else:
@@ -1258,7 +1409,14 @@ def _write_state(stage: Path, plan_value: OperationPlan) -> None:
 
 
 def _outcome(status: str, code: str, phase: str, message: str, *, exit_code: int) -> dict[str, Any]:
-    return {"status": status, "code": code, "phase": phase, "message": message, "exit_code": exit_code}
+    return {
+        "schema_version": 1,
+        "status": status,
+        "code": code,
+        "phase": phase,
+        "message": message,
+        "exit_code": exit_code,
+    }
 
 
 def _timed_outcome(outcome: Mapping[str, Any], started: float) -> dict[str, Any]:
@@ -1388,13 +1546,20 @@ def _build_stage(plan_value: OperationPlan, stage: Path) -> tuple[dict[str, Any]
             write_text_atomic(stage / "config.yaml", (existing_output / "config.yaml").read_text(encoding="utf-8"))
         else:
             write_text_atomic(stage / "config.yaml", package_rag_config_text())
+
+    def preserve_user_state() -> list[str]:
+        copied = _copy_preserved_user_files(existing_output, stage)
+        if existing_output.is_dir():
+            copy_learning_state(existing_output, stage)
+        return copied
+
     _run_phase(
         checkpoint,
         "prepare",
         plan_value,
         stage,
         ("config.yaml",),
-        lambda: _copy_preserved_user_files(existing_output, stage),
+        preserve_user_state,
     )
     rag_dir = stage / "rag"
     if rag_dir.is_symlink() or (rag_dir.exists() and not rag_dir.is_dir()):
@@ -1425,7 +1590,7 @@ def _build_stage(plan_value: OperationPlan, stage: Path) -> tuple[dict[str, Any]
         "artifacts",
         plan_value,
         stage,
-        ("skill", "router", "harness.json"),
+        ("skill", "router", "harness.json", ".docops/generated-artifacts.json"),
         lambda: _write_artifacts(stage, plan_value),
     )
     index_payload: dict[str, Any] = {}
@@ -1442,18 +1607,57 @@ def _build_stage(plan_value: OperationPlan, stage: Path) -> tuple[dict[str, Any]
             raise OperationFailure("invalid_rag_index", str(exc), phase="index") from exc
     _run_phase(checkpoint, "state", plan_value, stage, (".docops/state.json",), lambda: _write_state(stage, plan_value))
     readiness = assess_readiness(stage)
-    metrics = {"rag": index_payload, "state_diff": dict(plan_value.state_diff), "readiness": readiness}
+    layers = {
+        "updated": list(plan_value.request.options.layers),
+        "conceptual": "updated" if "conceptual" in plan_value.request.options.layers else "preserved",
+        "factual": "updated" if "factual" in plan_value.request.options.layers else "preserved",
+    }
+    conceptual_lag = (
+        {
+            "status": "pending_review",
+            "coverage": "unknown",
+            "reason": "factual_update_preserved_conceptual_layer",
+        }
+        if "conceptual" not in plan_value.request.options.layers
+        else {
+            "status": "none",
+            "coverage": "generated",
+            "reason": "conceptual_layer_updated",
+        }
+    )
+    metrics = {
+        "rag": index_payload,
+        "state_diff": dict(plan_value.state_diff),
+        "readiness": readiness,
+        "layers": layers,
+        "conceptual_lag": conceptual_lag,
+    }
 
     def validate_callback() -> None:
         selected = plan_value.resolution.selected
         source = selected.to_dict() if selected else {}
         source["input"] = plan_value.request.source
         source["license"] = plan_value.provenance.get("license", "unknown")
+        manifest_entries = [
+            {key: value for key, value in _thaw(entry).items() if key != "content"} for entry in plan_value.entries
+        ]
+        for learning_document in admitted_learning_documents(stage):
+            source_metadata = dict(learning_document["source"])
+            manifest_entries.append(
+                {
+                    "status": "accepted",
+                    "canonical": source_metadata["source_id"],
+                    "version": "admitted",
+                    "title": source_metadata["title"],
+                    "format": source_metadata["format"],
+                    "privacy": source_metadata["privacy"],
+                    "destination": f"rag/documents/{source_metadata['destination']}",
+                    "source_id": source_metadata["source_id"],
+                }
+            )
         manifest = build_manifest(
             plan_value.resolution,
-            entries=[
-                {key: value for key, value in _thaw(entry).items() if key != "content"} for entry in plan_value.entries
-            ],
+            entries=manifest_entries,
             provenance=_thaw(plan_value.provenance),
             artifacts=_ARTIFACTS,
             checkpoints=checkpoint.all(),
@@ -1463,6 +1667,9 @@ def _build_stage(plan_value: OperationPlan, stage: Path) -> tuple[dict[str, Any]
             outcome=_outcome("succeeded", "completed", "validate", "operation completed", exit_code=0),
             readiness=readiness,
         )
+        manifest["layers"] = layers
+        manifest["conceptual_lag"] = conceptual_lag
+        manifest["revisions"] = package_revisions(stage)
         write_manifest(stage / "manifest.json", manifest)
 
     validate_done = _run_phase(checkpoint, "validate", plan_value, stage, ("manifest.json",), validate_callback)
@@ -1518,6 +1725,7 @@ def _build_stage(plan_value: OperationPlan, stage: Path) -> tuple[dict[str, Any]
 _PROMOTION_RETRY_ATTEMPTS = 80
 _PROMOTION_JOURNAL_VERSION = 1
 _PROMOTION_FAILPOINT_EXIT_CODE = 86
+_CANDIDATE_FAILPOINT_EXIT_CODE = 87
 
 
 def _replace_with_retry(source: Path, destination: Path) -> None:
@@ -1589,6 +1797,13 @@ def _promotion_failpoint(name: str) -> None:
 
     if os.environ.get("DOCOPS_TEST_PROMOTION_FAILPOINT") == name:
         os._exit(_PROMOTION_FAILPOINT_EXIT_CODE)
+
+
+def _candidate_failpoint(name: str) -> None:
+    """Exit only at an explicit test seam used to reproduce candidate crashes."""
+
+    if os.environ.get("DOCOPS_TEST_CANDIDATE_FAILPOINT") == name:
+        os._exit(_CANDIDATE_FAILPOINT_EXIT_CODE)
 
 
 def _opaque_residue_id(path: Path) -> str:
@@ -1888,6 +2103,1273 @@ def _restore_after_failed_promotion(output: Path, backup: Path | None, *, promot
         return
 
 
+_CANDIDATE_REVISION_KEYS = (
+    "corpus_revision",
+    "index_revision",
+    "skill_revision",
+    "router_revision",
+    "policy_revision",
+    "golden_revision",
+    "composition_hash",
+    "release_id",
+)
+_APPROVAL_ROLES = {"human_approver", "delegated_policy"}
+_APPROVAL_KINDS = {"conceptual_manual", "delegated_factual"}
+
+
+def _read_candidate_json(path: Path, label: str, *, code: str) -> dict[str, Any]:
+    if path.is_symlink() or not path.is_file():
+        raise CandidatePublicationError(code, f"{label} must be a regular file")
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise CandidatePublicationError(code, f"{label} is unreadable") from exc
+    if not isinstance(value, dict):
+        raise CandidatePublicationError(code, f"{label} must contain a JSON object")
+    return value
+
+
+def _candidate_contract_or_raise(artifact: str, payload: Mapping[str, Any], *, code: str) -> None:
+    contract = validate_artifact(artifact, payload)
+    if contract.ok:
+        return
+    raise CandidatePublicationError(code, f"{artifact} receipt violates its contract")
+
+
+def _read_optional_revocation_file(path: Path) -> dict[str, Any] | None:
+    if not path.exists() and not path.is_symlink():
+        return None
+    if path.is_symlink() or not path.is_file():
+        raise CandidatePublicationError("revocation_state_invalid", "revocation state must be a regular file")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise CandidatePublicationError("revocation_state_invalid", "revocation state is unreadable") from exc
+    if not isinstance(payload, dict):
+        raise CandidatePublicationError("revocation_state_invalid", "revocation state must be a JSON object")
+    return payload
+
+
+def _candidate_dependency_keys(manifest: Mapping[str, Any]) -> tuple[set[str], set[str]]:
+    source_keys: set[str] = set()
+    destinations: set[str] = set()
+    source = manifest.get("source")
+    if isinstance(source, Mapping):
+        for key in ("source_id", "canonical", "input"):
+            value = source.get(key)
+            if isinstance(value, str) and value.strip():
+                source_keys.add(value.strip())
+    entries = manifest.get("entries")
+    if isinstance(entries, list):
+        for entry in entries:
+            if not isinstance(entry, Mapping):
+                continue
+            for key in ("source_id", "canonical", "source"):
+                value = entry.get(key)
+                if isinstance(value, str) and value.strip():
+                    source_keys.add(value.strip())
+            destination = entry.get("destination")
+            if isinstance(destination, str) and destination.strip():
+                normalized = destination.strip().replace("\\", "/").lstrip("/")
+                destinations.add(normalized)
+                if normalized.startswith("rag/documents/"):
+                    destinations.add(normalized.removeprefix("rag/documents/"))
+                else:
+                    destinations.add(f"rag/documents/{normalized}")
+    return source_keys, destinations
+
+
+def _revocation_matches(record: Mapping[str, Any], *, source_keys: set[str], destinations: set[str]) -> bool:
+    record_keys = {
+        str(record.get(key)).strip()
+        for key in ("source_id", "canonical", "source")
+        if isinstance(record.get(key), str) and str(record.get(key)).strip()
+    }
+    if record_keys & source_keys:
+        return True
+    record_destinations: set[str] = set()
+    raw_destinations = record.get("destinations")
+    if isinstance(raw_destinations, str):
+        raw_destinations = [raw_destinations]
+    if isinstance(raw_destinations, list):
+        for value in raw_destinations:
+            if not isinstance(value, str) or not value.strip():
+                continue
+            normalized = value.strip().replace("\\", "/").lstrip("/")
+            record_destinations.add(normalized)
+            if normalized.startswith("rag/documents/"):
+                record_destinations.add(normalized.removeprefix("rag/documents/"))
+            else:
+                record_destinations.add(f"rag/documents/{normalized}")
+    return bool(record_destinations & destinations)
+
+
+def _candidate_revocation_conflict(
+    package_root: Path, manifest: Mapping[str, Any], candidate_root: Path | None = None
+) -> dict[str, Any] | None:
+    """Fail closed when a candidate depends on withdrawn or revoked source data."""
+
+    source_keys, destinations = _candidate_dependency_keys(manifest)
+    roots = [package_root]
+    if candidate_root is not None and candidate_root != package_root:
+        roots.append(candidate_root)
+    for root in roots:
+        registry = _read_optional_revocation_file(root / ".docops" / "source-registry.json")
+        if registry is not None:
+            registrations = registry.get("registrations")
+            if not isinstance(registrations, list):
+                raise CandidatePublicationError("revocation_state_invalid", "source registry registrations are invalid")
+            for registration in registrations:
+                if not isinstance(registration, Mapping):
+                    raise CandidatePublicationError("revocation_state_invalid", "source registry entry is invalid")
+                if registration.get("status") in {"withdrawn", "revoked"} and _revocation_matches(
+                    registration,
+                    source_keys=source_keys,
+                    destinations=destinations,
+                ):
+                    return {
+                        "source_id": registration.get("source_id"),
+                        "canonical": registration.get("canonical"),
+                        "status": registration.get("status"),
+                    }
+        revocations = _read_optional_revocation_file(root / ".docops" / "revocations.json")
+        if revocations is not None:
+            records = revocations.get("sources")
+            if not isinstance(records, list):
+                raise CandidatePublicationError("revocation_state_invalid", "revocation sources are invalid")
+            for record in records:
+                if not isinstance(record, Mapping):
+                    raise CandidatePublicationError("revocation_state_invalid", "revocation entry is invalid")
+                if record.get("revoked", True) is not False and _revocation_matches(
+                    record,
+                    source_keys=source_keys,
+                    destinations=destinations,
+                ):
+                    return {
+                        "source_id": record.get("source_id"),
+                        "canonical": record.get("canonical"),
+                        "status": "revoked",
+                    }
+        rag_sources = _read_optional_revocation_file(root / "rag" / "sources.json")
+        if rag_sources is not None:
+            records = rag_sources.get("sources")
+            if not isinstance(records, list):
+                raise CandidatePublicationError("revocation_state_invalid", "RAG source entries are invalid")
+            for record in records:
+                if (
+                    isinstance(record, Mapping)
+                    and record.get("revoked") is True
+                    and _revocation_matches(
+                        record,
+                        source_keys=source_keys,
+                        destinations=destinations,
+                    )
+                ):
+                    return {
+                        "source_id": record.get("source_id"),
+                        "canonical": record.get("canonical"),
+                        "status": "revoked",
+                    }
+        learning_tombstones = _read_optional_revocation_file(root / ".docops" / "learning" / "tombstones.json")
+        if learning_tombstones is not None:
+            records = learning_tombstones.get("tombstones")
+            if not isinstance(records, list):
+                raise CandidatePublicationError(
+                    "revocation_state_invalid",
+                    "learning tombstones are invalid",
+                )
+            for tombstone in records:
+                if not isinstance(tombstone, Mapping):
+                    raise CandidatePublicationError(
+                        "revocation_state_invalid",
+                        "learning tombstone entry is invalid",
+                    )
+                raw_path = tombstone.get("path")
+                if not isinstance(raw_path, str) or not raw_path.strip():
+                    raise CandidatePublicationError(
+                        "revocation_state_invalid",
+                        "learning tombstone path is required",
+                    )
+                normalized = raw_path.strip().replace("\\", "/").lstrip("/")
+                if not normalized or ".." in normalized.split("/"):
+                    raise CandidatePublicationError(
+                        "revocation_state_invalid",
+                        "learning tombstone path is unsafe",
+                    )
+                tombstone_destinations = {normalized}
+                if normalized.startswith("rag/documents/"):
+                    tombstone_destinations.add(normalized.removeprefix("rag/documents/"))
+                else:
+                    tombstone_destinations.add(f"rag/documents/{normalized}")
+                if tombstone_destinations & destinations:
+                    return {
+                        "proposal_id": tombstone.get("proposal_id"),
+                        "path": normalized,
+                        "status": "revoked_learning_derivative",
+                    }
+    return None
+
+
+def _approval_authority(actor: str, role: str, authority: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Normalize an authenticated adapter attestation without storing proof."""
+
+    if authority is None:
+        # The compatibility CLI has always received the actor at a process
+        # boundary.  Preserve that interface while making the boundary
+        # explicit in the receipt; real harnesses should pass their own
+        # attestation through --authority-json.
+        proof = f"local-process-adapter:{actor}:{role}"
+        return {
+            "authenticated": True,
+            "source": "local-process-adapter",
+            "subject": actor,
+            "role": role,
+            "proof_hash": hashlib.sha256(proof.encode("utf-8")).hexdigest(),
+        }
+    if not isinstance(authority, Mapping) or authority.get("authenticated") is not True:
+        raise CandidatePublicationError(
+            "approval_authority_invalid",
+            "approval requires an authenticated authority attestation",
+        )
+    source = authority.get("source")
+    subject = authority.get("subject")
+    if not isinstance(source, str) or not source.strip():
+        raise CandidatePublicationError("approval_authority_invalid", "authority source is required")
+    if not isinstance(subject, str) or subject.strip() != actor:
+        raise CandidatePublicationError("approval_authority_invalid", "authority subject does not match the actor")
+    roles = authority.get("roles")
+    if isinstance(roles, str):
+        roles = [roles]
+    if not isinstance(roles, list) or role not in roles:
+        raise CandidatePublicationError("approval_authority_invalid", "authority does not grant the approval role")
+    proof = authority.get("proof") or authority.get("signature")
+    if not isinstance(proof, str) or not proof.strip():
+        raise CandidatePublicationError("approval_authority_invalid", "authority proof is required")
+    return {
+        "authenticated": True,
+        "source": redact_text(source.strip()),
+        "subject": redact_text(subject.strip()),
+        "role": role,
+        "proof_hash": hashlib.sha256(proof.encode("utf-8")).hexdigest(),
+    }
+
+
+def _candidate_scope_kind(manifest: Mapping[str, Any]) -> tuple[str, str]:
+    layers = manifest.get("layers")
+    if not isinstance(layers, Mapping):
+        raise CandidatePublicationError(
+            "approval_scope_unknown",
+            "candidate manifest does not declare its update scope",
+        )
+    updated = layers.get("updated")
+    if not isinstance(updated, list) or not all(isinstance(item, str) for item in updated):
+        raise CandidatePublicationError(
+            "approval_scope_unknown",
+            "candidate manifest has no valid updated layer list",
+        )
+    normalized = set(updated)
+    if normalized == {"factual"} and layers.get("conceptual") == "preserved":
+        return "delegated_factual", "delegated_policy"
+    if "conceptual" in normalized:
+        return "conceptual_manual", "human_approver"
+    raise CandidatePublicationError(
+        "approval_scope_unknown",
+        "candidate update scope is neither conceptual nor factual-only",
+    )
+
+
+def _candidate_context(package_root: Path | str, candidate_id: str) -> dict[str, Any]:
+    output = Path(os.path.abspath(os.fspath(Path(package_root).expanduser())))
+    if output.is_symlink():
+        raise CandidatePublicationError(
+            "unsafe_output_path",
+            "output directory must not be a symbolic link",
+        )
+    try:
+        candidate = candidate_path(output, candidate_id)
+    except CandidateError as exc:
+        raise CandidatePublicationError("candidate_not_found", str(exc)) from exc
+    if candidate.is_symlink() or not candidate.is_dir():
+        raise CandidatePublicationError("candidate_not_found", "candidate is missing or unsafe")
+    if _contains_symlink(candidate):
+        raise CandidatePublicationError("unsafe_candidate_path", "candidate contains a symbolic link")
+
+    candidate_receipt = _read_candidate_json(
+        candidate / ".docops" / "candidate.json",
+        "candidate receipt",
+        code="candidate_receipt_invalid",
+    )
+    if candidate_receipt.get("candidate_id") != candidate_id:
+        raise CandidatePublicationError(
+            "candidate_receipt_invalid",
+            "candidate receipt does not identify the requested candidate",
+        )
+
+    active_manifest_path = output / "manifest.json"
+    if output.is_symlink() or not output.is_dir() or not active_manifest_path.is_file():
+        raise CandidatePublicationError(
+            "active_generation_missing",
+            "candidate publication requires an existing active generation",
+        )
+    try:
+        active_manifest = read_manifest(active_manifest_path)
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        raise CandidatePublicationError(
+            "active_generation_invalid",
+            "active generation manifest is invalid",
+        ) from exc
+    active_validation = validate_package(output)
+    if not active_validation.ok:
+        raise CandidatePublicationError(
+            "active_generation_invalid",
+            "active generation must validate before candidate publication",
+        )
+
+    try:
+        candidate_manifest = read_manifest(candidate / "manifest.json")
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        raise CandidatePublicationError(
+            "candidate_validation_failed",
+            "candidate manifest is invalid",
+        ) from exc
+    candidate_validation = validate_package(candidate)
+    if not candidate_validation.ok:
+        raise CandidatePublicationError(
+            "candidate_validation_failed",
+            "candidate package failed validation",
+            details={"errors": candidate_validation.errors},
+        )
+    revocation = _candidate_revocation_conflict(output, candidate_manifest, candidate)
+    if revocation is not None:
+        raise CandidatePublicationError(
+            "source_revoked",
+            "candidate depends on withdrawn or revoked source content",
+            details=revocation,
+        )
+
+    active_revisions = active_manifest.get("revisions")
+    candidate_revisions = candidate_manifest.get("revisions")
+    if not isinstance(active_revisions, Mapping) or any(
+        not isinstance(active_revisions.get(key), str) or not active_revisions.get(key)
+        for key in _CANDIDATE_REVISION_KEYS
+    ):
+        raise CandidatePublicationError(
+            "active_revision_evidence_missing",
+            "active generation has incomplete revision evidence",
+        )
+    if not isinstance(candidate_revisions, Mapping) or any(
+        not isinstance(candidate_revisions.get(key), str) or not candidate_revisions.get(key)
+        for key in _CANDIDATE_REVISION_KEYS
+    ):
+        raise CandidatePublicationError(
+            "candidate_revision_evidence_missing",
+            "candidate has incomplete revision evidence",
+        )
+
+    base_release_id = candidate_receipt.get("base_release_id")
+    base_composition_hash = candidate_receipt.get("base_composition_hash")
+    if not isinstance(base_release_id, str) or not isinstance(base_composition_hash, str):
+        raise CandidatePublicationError(
+            "stale_base",
+            "candidate has no complete active-base evidence",
+        )
+    if (
+        active_revisions.get("release_id") != base_release_id
+        or active_revisions.get("composition_hash") != base_composition_hash
+    ):
+        raise CandidatePublicationError(
+            "stale_base",
+            "active generation advanced after candidate preparation",
+        )
+
+    evaluation_path = candidate / ".docops" / "evaluation.json"
+    evaluation = _read_candidate_json(
+        evaluation_path,
+        "candidate evaluation",
+        code="evaluation_missing",
+    )
+    if (
+        evaluation.get("schema_version") != 1
+        or evaluation.get("ok") is not True
+        or not isinstance(evaluation.get("revisions"), Mapping)
+        or not isinstance(evaluation.get("metrics"), Mapping)
+    ):
+        raise CandidatePublicationError(
+            "evaluation_invalidated",
+            "candidate evaluation did not pass",
+        )
+    matches, reason = evidence_matches_package(candidate, evaluation)
+    if not matches:
+        raise CandidatePublicationError(
+            "evaluation_invalidated",
+            f"candidate evaluation evidence is {reason}",
+        )
+    evaluated_revisions = evaluation.get("revisions")
+    if not isinstance(evaluated_revisions, Mapping) or any(
+        evaluated_revisions.get(key) != candidate_revisions.get(key) for key in _CANDIDATE_REVISION_KEYS
+    ):
+        raise CandidatePublicationError(
+            "evaluation_invalidated",
+            "candidate evaluation does not match current candidate revisions",
+        )
+
+    approval_kind, expected_role = _candidate_scope_kind(candidate_manifest)
+    return {
+        "output": output,
+        "candidate": candidate,
+        "candidate_receipt": candidate_receipt,
+        "candidate_manifest": candidate_manifest,
+        "active_manifest": active_manifest,
+        "active_revisions": dict(active_revisions),
+        "candidate_revisions": dict(candidate_revisions),
+        "evaluation": evaluation,
+        "evaluation_hash": file_hash(evaluation_path),
+        "approval_kind": approval_kind,
+        "expected_role": expected_role,
+    }
+
+
+def _candidate_lease(package_root: Path | str) -> tuple[Path, PackageLease]:
+    output = Path(os.path.abspath(os.fspath(Path(package_root).expanduser())))
+    lease = PackageLease(output, policy="fail", wait_seconds=0.0, stale_after_seconds=300.0)
+    try:
+        lease.acquire()
+    except LeaseBusyError as exc:
+        raise CandidatePublicationError("writer_busy", redact_text(str(exc)), phase="lease") from exc
+    except OSError as exc:
+        raise CandidatePublicationError(
+            "lease_unavailable",
+            "could not acquire the package writer lease",
+            phase="lease",
+        ) from exc
+    return output, lease
+
+
+def _recover_candidate_promotion(output: Path) -> dict[str, Any]:
+    """Make candidate publish/rollback retryable after a journaled crash."""
+
+    recovery = _recover_interrupted_promotion(output)
+    if recovery.get("ok") is not True:
+        raise CandidatePublicationError(
+            str(recovery.get("code", "promotion_recovery_failed")),
+            str(recovery.get("error", "interrupted promotion could not be recovered")),
+            phase="recover",
+            details={key: value for key, value in recovery.items() if key not in {"error", "code"}},
+        )
+    if recovery.get("status") == "stable" and _valid_generation(output):
+        # A crash can happen after the active rename but before the journal is
+        # written.  In that window the active directory is valid and the
+        # generated backup is no longer needed; only remove names reserved
+        # for this promotion protocol and only when they are valid packages.
+        prefix = f".{output.name}.backup-"
+        for residue in output.parent.glob(f"{prefix}*"):
+            if not residue.is_symlink() and _valid_generation(residue):
+                _remove_generated_path(residue)
+    return recovery
+
+
+def _recovered_candidate_publication(output: Path, candidate_id: str) -> dict[str, Any] | None:
+    """Return an idempotent result when a crash already installed a candidate."""
+
+    manifest_path = output / "manifest.json"
+    publication_path = output / ".docops" / "publication.json"
+    if output.is_symlink() or not output.is_dir() or not manifest_path.is_file():
+        return None
+    publication = (
+        _read_candidate_json(
+            publication_path,
+            "recovered publication",
+            code="publication_recovery_invalid",
+        )
+        if publication_path.exists() or publication_path.is_symlink()
+        else None
+    )
+    if not isinstance(publication, dict) or publication.get("candidate_id") != candidate_id:
+        return None
+    _candidate_contract_or_raise("publication", publication, code="publication_recovery_invalid")
+    validation = validate_package(output)
+    if not validation.ok:
+        raise CandidatePublicationError(
+            "publication_recovery_invalid",
+            "recovered candidate does not validate",
+            phase="recover",
+            details={"errors": validation.errors},
+        )
+    manifest = read_manifest(manifest_path)
+    if manifest.get("publication") != publication:
+        manifest["publication"] = dict(publication)
+        manifest["outcome"] = _outcome(
+            "succeeded",
+            "candidate_published",
+            "promote",
+            "candidate publication recovered after a crash",
+            exit_code=0,
+        )
+        manifest["validation"] = validation.to_dict()
+        write_manifest(manifest_path, manifest)
+    candidate = candidate_path(output, candidate_id)
+    if candidate.is_dir() and not candidate.is_symlink():
+        candidate_metadata = candidate / ".docops"
+        candidate_metadata.mkdir(parents=True, exist_ok=True)
+        write_json_atomic(candidate_metadata / "publication.json", publication)
+        receipt_path = candidate_metadata / "candidate.json"
+        if receipt_path.is_file() and not receipt_path.is_symlink():
+            receipt = _read_candidate_json(receipt_path, "candidate receipt", code="candidate_receipt_invalid")
+            receipt.update(
+                {
+                    "status": "published",
+                    "publication": ".docops/publication.json",
+                    "published_release_id": publication.get("release_id"),
+                }
+            )
+            write_json_atomic(receipt_path, receipt)
+    return {
+        "schema_version": 1,
+        "ok": True,
+        "status": "published",
+        "code": "candidate_already_published",
+        "candidate_id": candidate_id,
+        "approval_id": publication.get("approval_id"),
+        "release_id": publication.get("release_id"),
+        "parent_release_id": publication.get("parent_release_id"),
+        "candidate_locator": candidate_locator(output, candidate_id),
+        "publication": ".docops/publication.json",
+        "published": True,
+        "recovered": True,
+    }
+
+
+def _history_root(output: Path) -> Path:
+    """Return the editorial history directory kept beside the active package."""
+
+    return output.parent / f".{output.name}.history"
+
+
+def _safe_history_release_id(release_id: Any) -> str:
+    if not isinstance(release_id, str) or not release_id:
+        raise CandidatePublicationError(
+            "history_release_invalid",
+            "history release id must be a non-empty string",
+            phase="history",
+        )
+    if Path(release_id).name != release_id or any(
+        character not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-" for character in release_id
+    ):
+        raise CandidatePublicationError(
+            "history_release_invalid",
+            "history release id contains unsafe path characters",
+            phase="history",
+        )
+    return release_id
+
+
+def _history_entry_path(output: Path, release_id: Any) -> Path:
+    root = _history_root(output)
+    if root.is_symlink() or (root.exists() and not root.is_dir()):
+        raise CandidatePublicationError(
+            "history_unavailable",
+            "editorial history root is not a regular directory",
+            phase="history",
+        )
+    return root / _safe_history_release_id(release_id)
+
+
+def _history_tree_size(root: Path) -> int:
+    total = 0
+    if not root.exists() or root.is_symlink():
+        return total
+    for path in root.rglob("*"):
+        if path.is_symlink():
+            raise CandidatePublicationError(
+                "history_symlink",
+                "editorial history cannot contain symbolic links",
+                phase="history",
+            )
+        if path.is_file():
+            total += path.stat().st_size
+    return total
+
+
+def _history_quota_bytes() -> int | None:
+    for name in ("DOCOPS_HISTORY_QUOTA_BYTES", "DOCOPS_TEST_HISTORY_QUOTA_BYTES"):
+        raw = os.environ.get(name)
+        if raw is None:
+            continue
+        try:
+            value = int(raw)
+        except ValueError as exc:
+            raise CandidatePublicationError(
+                "history_quota_invalid",
+                "history quota must be an integer number of bytes",
+                phase="history",
+            ) from exc
+        if value < 0:
+            raise CandidatePublicationError(
+                "history_quota_invalid",
+                "history quota cannot be negative",
+                phase="history",
+            )
+        return value
+    return None
+
+
+def _history_quota_check(root: Path, staged: Path) -> None:
+    quota = _history_quota_bytes()
+    if quota is None:
+        return
+    required = _history_tree_size(root) + _history_tree_size(staged)
+    if required > quota:
+        raise CandidatePublicationError(
+            "history_quota_exceeded",
+            "editorial history quota would discard required prior generation",
+            phase="history",
+            details={"quota_bytes": quota, "required_bytes": required},
+        )
+
+
+def _history_receipt(entry: Path) -> dict[str, Any]:
+    receipt_path = entry / ".docops" / "history.json"
+    receipt = _read_candidate_json(receipt_path, "history receipt", code="history_invalidated")
+    _candidate_contract_or_raise("history", receipt, code="history_invalidated")
+    return receipt
+
+
+def _prepare_history_snapshot(
+    output: Path,
+    *,
+    active_manifest: Mapping[str, Any],
+    active_revisions: Mapping[str, Any],
+) -> tuple[Path | None, Path, dict[str, Any]]:
+    release_id = _safe_history_release_id(active_revisions.get("release_id"))
+    target = _history_entry_path(output, release_id)
+    if target.is_symlink() or (target.exists() and not target.is_dir()):
+        raise CandidatePublicationError(
+            "history_conflict",
+            "retained release path is not a regular directory",
+            phase="history",
+        )
+    if target.is_dir():
+        existing = _history_receipt(target)
+        if existing.get("release_id") == release_id and existing.get("composition_hash") == active_revisions.get(
+            "composition_hash"
+        ):
+            return None, target, existing
+        raise CandidatePublicationError(
+            "history_conflict",
+            "retained release id already identifies different content",
+            phase="history",
+        )
+    if _contains_symlink(output):
+        raise CandidatePublicationError(
+            "history_capture_failed",
+            "active generation contains a symbolic link",
+            phase="history",
+        )
+    stage = Path(tempfile.mkdtemp(prefix=f".{output.name}.history-", dir=output.parent))
+    try:
+        shutil.copytree(output, stage, dirs_exist_ok=True, symlinks=False)
+        publication = active_manifest.get("publication")
+        source_candidate_id = publication.get("candidate_id") if isinstance(publication, Mapping) else None
+        parent_release_id = publication.get("parent_release_id") if isinstance(publication, Mapping) else None
+        receipt = {
+            "schema_version": 1,
+            "history_id": f"history-{uuid.uuid4().hex}",
+            "release_id": release_id,
+            "composition_hash": str(active_revisions["composition_hash"]),
+            "index_revision": str(active_revisions["index_revision"]),
+            "retained_at": utc_now(),
+            "revoked": False,
+            "index_compatible": True,
+            "parent_release_id": parent_release_id if isinstance(parent_release_id, str) else None,
+            "source_candidate_id": source_candidate_id if isinstance(source_candidate_id, str) else None,
+        }
+        _candidate_contract_or_raise("history", receipt, code="history_contract_invalid")
+        write_json_atomic(stage / ".docops" / "history.json", receipt)
+        validation = validate_package(stage)
+        if not validation.ok:
+            raise CandidatePublicationError(
+                "history_capture_failed",
+                "active generation could not be retained as a valid package",
+                phase="history",
+                details={"errors": validation.errors},
+            )
+        return stage, target, receipt
+    except CandidatePublicationError:
+        _remove_generated_path(stage)
+        raise
+    except (OSError, TypeError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        _remove_generated_path(stage)
+        raise CandidatePublicationError(
+            "history_capture_failed",
+            "active generation could not be retained",
+            phase="history",
+        ) from exc
+
+
+def _commit_history_snapshot(stage: Path | None, target: Path) -> None:
+    if stage is None:
+        return
+    root = target.parent
+    if root.is_symlink() or (root.exists() and not root.is_dir()):
+        raise CandidatePublicationError(
+            "history_unavailable",
+            "editorial history root is not a regular directory",
+            phase="history",
+        )
+    root.mkdir(parents=True, exist_ok=True)
+    if target.exists() or target.is_symlink():
+        raise CandidatePublicationError(
+            "history_conflict",
+            "retained release path appeared during publication",
+            phase="history",
+        )
+    try:
+        os.replace(stage, target)
+    except OSError as exc:
+        raise CandidatePublicationError(
+            "history_retention_failed",
+            "retained generation could not be committed",
+            phase="history",
+        ) from exc
+
+
+def _inspect_history(root: Path) -> list[dict[str, Any]]:
+    history = _history_root(root)
+    if not history.exists() or history.is_symlink() or not history.is_dir():
+        return []
+    entries: list[dict[str, Any]] = []
+    for entry in sorted(history.iterdir()):
+        if entry.is_symlink() or not entry.is_dir():
+            continue
+        try:
+            receipt = _history_receipt(entry)
+            validation = validate_package(entry).to_dict()
+        except (CandidatePublicationError, OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+            entries.append(
+                {
+                    "status": "invalid",
+                    "release_id": entry.name,
+                    "error": redact_text(str(exc)),
+                }
+            )
+            continue
+        entries.append(
+            {
+                "status": "revoked" if receipt.get("revoked") is True else "retained",
+                "release_id": receipt["release_id"],
+                "composition_hash": receipt["composition_hash"],
+                "index_revision": receipt["index_revision"],
+                "retained_at": receipt["retained_at"],
+                "revoked": receipt["revoked"],
+                "index_compatible": receipt["index_compatible"],
+                "validation": validation,
+            }
+        )
+    return entries
+
+
+def approve_candidate(
+    package_root: Path | str,
+    candidate_id: str,
+    *,
+    actor: str,
+    role: str,
+    authority: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Record explicit authority for one candidate without publishing it."""
+
+    if not isinstance(actor, str) or not actor.strip():
+        raise CandidatePublicationError("approval_actor_missing", "approval actor is required")
+    if role not in _APPROVAL_ROLES:
+        raise CandidatePublicationError("approval_role_invalid", "approval role is not supported")
+    output, lease = _candidate_lease(package_root)
+    try:
+        context = _candidate_context(output, candidate_id)
+        if context["candidate_receipt"].get("status") == "published":
+            raise CandidatePublicationError("candidate_already_published", "candidate is already published")
+        if role != context["expected_role"]:
+            raise CandidatePublicationError(
+                "approval_role_mismatch",
+                "approval role does not match the candidate update scope",
+            )
+        authority_record = _approval_authority(actor.strip(), role, authority)
+        approval_id = f"approval-{uuid.uuid4().hex}"
+        approval = {
+            "schema_version": 1,
+            "approval_id": approval_id,
+            "candidate_id": candidate_id,
+            "status": "approved",
+            "approval_kind": context["approval_kind"],
+            "actor": {"id": redact_text(actor.strip()), "role": role},
+            "base_release_id": context["active_revisions"]["release_id"],
+            "base_composition_hash": context["active_revisions"]["composition_hash"],
+            "candidate_revisions": dict(context["candidate_revisions"]),
+            "evaluation_hash": context["evaluation_hash"],
+            "policy_revision": context["candidate_revisions"]["policy_revision"],
+            "approved_at": utc_now(),
+            "authority": authority_record,
+        }
+        _candidate_contract_or_raise("approval", approval, code="approval_contract_invalid")
+        write_json_atomic(context["candidate"] / ".docops" / "approval.json", approval)
+        receipt = dict(context["candidate_receipt"])
+        receipt.update(
+            {
+                "status": "approved",
+                "approval_id": approval_id,
+                "approval": ".docops/approval.json",
+                "approval_kind": context["approval_kind"],
+                "revisions": dict(context["candidate_revisions"]),
+            }
+        )
+        write_json_atomic(context["candidate"] / ".docops" / "candidate.json", receipt)
+        return {
+            "schema_version": 1,
+            "ok": True,
+            "status": "approved",
+            "code": "candidate_approved",
+            "candidate_id": candidate_id,
+            "approval_id": approval_id,
+            "approval_kind": context["approval_kind"],
+            "candidate_locator": candidate_locator(output, candidate_id),
+            "published": False,
+            "revisions": dict(context["candidate_revisions"]),
+        }
+    finally:
+        lease.release()
+
+
+def publish_candidate(package_root: Path | str, candidate_id: str) -> dict[str, Any]:
+    """Promote an approved candidate after revalidating every bound receipt."""
+
+    output, lease = _candidate_lease(package_root)
+    stage: Path | None = None
+    history_stage: Path | None = None
+    history_target: Path | None = None
+    backup: Path | None = None
+    promoted = False
+    try:
+        _recover_candidate_promotion(output)
+        recovered = _recovered_candidate_publication(output, candidate_id)
+        if recovered is not None:
+            return recovered
+        try:
+            early_candidate = candidate_path(output, candidate_id)
+        except CandidateError as exc:
+            raise CandidatePublicationError("candidate_not_found", str(exc)) from exc
+        early_receipt = _read_candidate_json(
+            early_candidate / ".docops" / "candidate.json",
+            "candidate receipt",
+            code="candidate_receipt_invalid",
+        )
+        if early_receipt.get("status") != "approved":
+            raise CandidatePublicationError(
+                "approval_missing",
+                "candidate requires an explicit approval receipt",
+            )
+        early_approval_path = early_candidate / ".docops" / "approval.json"
+        if early_approval_path.is_symlink() or not early_approval_path.is_file():
+            raise CandidatePublicationError(
+                "approval_missing",
+                "candidate requires an explicit approval receipt",
+            )
+        context = _candidate_context(output, candidate_id)
+        candidate_receipt = context["candidate_receipt"]
+        approval_path = context["candidate"] / ".docops" / "approval.json"
+        approval = _read_candidate_json(
+            approval_path,
+            "candidate approval",
+            code="approval_missing",
+        )
+        _candidate_contract_or_raise("approval", approval, code="approval_invalidated")
+        if (
+            approval.get("candidate_id") != candidate_id
+            or approval.get("status") != "approved"
+            or approval.get("approval_id") != candidate_receipt.get("approval_id")
+            or approval.get("approval_kind") != context["approval_kind"]
+            or approval.get("actor", {}).get("role") != context["expected_role"]
+        ):
+            raise CandidatePublicationError(
+                "approval_invalidated",
+                "approval receipt does not match the candidate scope",
+            )
+        if (
+            approval.get("base_release_id") != context["active_revisions"]["release_id"]
+            or approval.get("base_composition_hash") != context["active_revisions"]["composition_hash"]
+        ):
+            raise CandidatePublicationError(
+                "stale_base",
+                "approval targets an active generation that is no longer current",
+            )
+        if (
+            approval.get("candidate_revisions") != context["candidate_revisions"]
+            or approval.get("evaluation_hash") != context["evaluation_hash"]
+            or approval.get("policy_revision") != context["candidate_revisions"]["policy_revision"]
+        ):
+            raise CandidatePublicationError(
+                "approval_invalidated",
+                "approval evidence no longer matches the candidate",
+            )
+
+        publication = {
+            "schema_version": 1,
+            "release_id": context["candidate_revisions"]["release_id"],
+            "candidate_id": candidate_id,
+            "approval_id": approval["approval_id"],
+            "composition_hash": context["candidate_revisions"]["composition_hash"],
+            "parent_release_id": context["active_revisions"]["release_id"],
+            "published_at": utc_now(),
+        }
+        _candidate_contract_or_raise("publication", publication, code="publication_contract_invalid")
+
+        if _contains_symlink(context["candidate"]):
+            raise CandidatePublicationError("unsafe_candidate_path", "candidate contains a symbolic link")
+        stage = Path(tempfile.mkdtemp(prefix=f".{output.name}.staging-", dir=output.parent))
+        shutil.copytree(context["candidate"], stage, dirs_exist_ok=True, symlinks=False)
+        write_json_atomic(stage / ".docops" / "publication.json", publication)
+        staged_receipt = _read_candidate_json(
+            stage / ".docops" / "candidate.json",
+            "staged candidate receipt",
+            code="candidate_receipt_invalid",
+        )
+        staged_receipt.update(
+            {
+                "status": "published",
+                "publication": ".docops/publication.json",
+                "published_release_id": publication["release_id"],
+            }
+        )
+        write_json_atomic(stage / ".docops" / "candidate.json", staged_receipt)
+        staged_validation = validate_package(stage)
+        if not staged_validation.ok:
+            raise CandidatePublicationError(
+                "candidate_validation_failed",
+                "publication staging failed validation",
+                phase="prepare",
+                details={"errors": staged_validation.errors},
+            )
+
+        history_stage, history_target, _history = _prepare_history_snapshot(
+            output,
+            active_manifest=context["active_manifest"],
+            active_revisions=context["active_revisions"],
+        )
+        if history_stage is not None:
+            _history_quota_check(_history_root(output), history_stage)
+
+        backup = _promote(
+            stage,
+            output,
+            f".{output.name}.backup-publish-{uuid.uuid4().hex}",
+            plan_hash=str(approval["approval_id"]),
+        )
+        promoted = True
+        post_validation = validate_package(output)
+        if not post_validation.ok:
+            raise CandidatePublicationError(
+                "promotion_validation_failed",
+                "published package failed post-promotion validation",
+                phase="promote",
+                details={"errors": post_validation.errors},
+            )
+        manifest = read_manifest(output / "manifest.json")
+        manifest["publication"] = dict(publication)
+        manifest["outcome"] = _outcome(
+            "succeeded",
+            "candidate_published",
+            "promote",
+            "candidate published",
+            exit_code=0,
+        )
+        manifest["validation"] = post_validation.to_dict()
+        write_manifest(output / "manifest.json", manifest)
+        final_validation = validate_package(output)
+        if not final_validation.ok:
+            raise CandidatePublicationError(
+                "promotion_validation_failed",
+                "published manifest failed final validation",
+                phase="promote",
+                details={"errors": final_validation.errors},
+            )
+        if history_target is not None:
+            _commit_history_snapshot(history_stage, history_target)
+            history_stage = None
+        _clear_promotion_journal(output)
+        if backup is not None and backup.exists():
+            _remove_generated_path(backup)
+            backup = None
+
+        write_json_atomic(context["candidate"] / ".docops" / "publication.json", publication)
+        candidate_receipt.update(
+            {
+                "status": "published",
+                "publication": ".docops/publication.json",
+                "published_release_id": publication["release_id"],
+            }
+        )
+        write_json_atomic(context["candidate"] / ".docops" / "candidate.json", candidate_receipt)
+        return {
+            "schema_version": 1,
+            "ok": True,
+            "status": "published",
+            "code": "candidate_published",
+            "candidate_id": candidate_id,
+            "approval_id": approval["approval_id"],
+            "release_id": publication["release_id"],
+            "parent_release_id": publication["parent_release_id"],
+            "candidate_locator": candidate_locator(output, candidate_id),
+            "publication": ".docops/publication.json",
+            "history_release_id": context["active_revisions"]["release_id"],
+            "history_locator": (
+                f".{output.name}.history/{context['active_revisions']['release_id']}"
+                if history_target is not None
+                else None
+            ),
+            "published": True,
+            "revisions": dict(context["candidate_revisions"]),
+        }
+    except CandidatePublicationError:
+        _restore_after_failed_promotion(output, backup, promoted=promoted)
+        raise
+    except OperationFailure as exc:
+        _restore_after_failed_promotion(output, backup, promoted=promoted)
+        raise CandidatePublicationError(exc.code, str(exc), phase=exc.phase, details=exc.details) from exc
+    except (OSError, TypeError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        _restore_after_failed_promotion(output, backup, promoted=promoted)
+        raise CandidatePublicationError(
+            "publication_failed",
+            "candidate publication failed safely",
+            phase="promote" if promoted else "prepare",
+        ) from exc
+    finally:
+        if stage is not None and stage.exists() and not _promotion_journal_path(output).exists():
+            try:
+                _remove_generated_path(stage)
+            except OSError:
+                pass
+        if history_stage is not None and history_stage.exists():
+            try:
+                _remove_generated_path(history_stage)
+            except OSError:
+                pass
+        lease.release()
+
+
+def rollback_candidate(package_root: Path | str, release_id: str) -> dict[str, Any]:
+    """Restore one retained generation using the same recoverable promotion seam."""
+
+    output, lease = _candidate_lease(package_root)
+    stage: Path | None = None
+    backup: Path | None = None
+    promoted = False
+    try:
+        _recover_candidate_promotion(output)
+        entry = _history_entry_path(output, release_id)
+        if entry.is_symlink() or not entry.is_dir():
+            raise CandidatePublicationError(
+                "history_not_found",
+                "requested release is not retained in editorial history",
+                phase="rollback",
+            )
+        receipt = _history_receipt(entry)
+        if receipt.get("revoked") is True:
+            raise CandidatePublicationError(
+                "source_revoked",
+                "revoked source or derived generation cannot be restored",
+                phase="rollback",
+            )
+        learning_conflict = rollback_learning_guard(output, entry)
+        if learning_conflict:
+            raise CandidatePublicationError(
+                "revoked_learning_derivative",
+                "rollback would resurrect a revoked learning derivative",
+                phase="rollback",
+                details=learning_conflict,
+            )
+        if receipt.get("index_compatible") is not True:
+            raise CandidatePublicationError(
+                "index_incompatible",
+                "retained generation requires an index rebuild before restoration",
+                phase="rollback",
+            )
+        if _contains_symlink(entry):
+            raise CandidatePublicationError(
+                "history_invalidated",
+                "retained generation contains a symbolic link",
+                phase="rollback",
+            )
+        historical_validation = validate_package(entry)
+        if not historical_validation.ok:
+            raise CandidatePublicationError(
+                "history_invalidated",
+                "retained generation no longer validates",
+                phase="rollback",
+                details={"errors": historical_validation.errors},
+            )
+        try:
+            historical_manifest = read_manifest(entry / "manifest.json")
+        except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+            raise CandidatePublicationError(
+                "history_invalidated",
+                "retained generation manifest is invalid",
+                phase="rollback",
+            ) from exc
+        revocation = _candidate_revocation_conflict(output, historical_manifest, entry)
+        if revocation is not None:
+            raise CandidatePublicationError(
+                "source_revoked",
+                "rollback would restore withdrawn or revoked source content",
+                phase="rollback",
+                details=revocation,
+            )
+        historical_revisions = historical_manifest.get("revisions")
+        if not isinstance(historical_revisions, Mapping) or any(
+            historical_revisions.get(key) != receipt.get(key)
+            for key in ("release_id", "composition_hash", "index_revision")
+        ):
+            raise CandidatePublicationError(
+                "history_invalidated",
+                "retained generation evidence does not match its manifest",
+                phase="rollback",
+            )
+
+        active_manifest_path = output / "manifest.json"
+        if output.is_symlink() or not output.is_dir() or not active_manifest_path.is_file():
+            raise CandidatePublicationError(
+                "active_generation_missing",
+                "rollback requires an existing active generation",
+                phase="rollback",
+            )
+        active_validation = validate_package(output)
+        if not active_validation.ok:
+            raise CandidatePublicationError(
+                "active_generation_invalid",
+                "active generation must validate before rollback",
+                phase="rollback",
+                details={"errors": active_validation.errors},
+            )
+        active_manifest = read_manifest(active_manifest_path)
+        active_revisions = active_manifest.get("revisions")
+        if not isinstance(active_revisions, Mapping) or not isinstance(active_revisions.get("release_id"), str):
+            raise CandidatePublicationError(
+                "active_revision_evidence_missing",
+                "active generation has no release identity",
+                phase="rollback",
+            )
+        if active_revisions.get("release_id") == receipt["release_id"]:
+            return {
+                "schema_version": 1,
+                "ok": True,
+                "status": "already_active",
+                "code": "candidate_already_active",
+                "release_id": receipt["release_id"],
+                "previous_release_id": active_revisions["release_id"],
+                "rollback": None,
+                "published": True,
+            }
+
+        rollback = {
+            "schema_version": 1,
+            "rollback_id": f"rollback-{uuid.uuid4().hex}",
+            "target_release_id": receipt["release_id"],
+            "previous_release_id": active_revisions["release_id"],
+            "rolled_back_at": utc_now(),
+        }
+        _candidate_contract_or_raise("rollback", rollback, code="rollback_contract_invalid")
+        stage = Path(tempfile.mkdtemp(prefix=f".{output.name}.staging-", dir=output.parent))
+        shutil.copytree(entry, stage, dirs_exist_ok=True, symlinks=False)
+        write_json_atomic(stage / ".docops" / "rollback.json", rollback)
+        staged_manifest = read_manifest(stage / "manifest.json")
+        staged_manifest["rollback"] = dict(rollback)
+        staged_manifest["outcome"] = _outcome(
+            "succeeded",
+            "candidate_rolled_back",
+            "promote",
+            "retained candidate generation restored",
+            exit_code=0,
+        )
+        staged_validation = validate_package(stage)
+        staged_manifest["validation"] = staged_validation.to_dict()
+        write_manifest(stage / "manifest.json", staged_manifest)
+        staged_validation = validate_package(stage)
+        if not staged_validation.ok:
+            raise CandidatePublicationError(
+                "rollback_validation_failed",
+                "rollback staging failed validation",
+                phase="prepare",
+                details={"errors": staged_validation.errors},
+            )
+
+        backup = _promote(
+            stage,
+            output,
+            f".{output.name}.backup-rollback-{uuid.uuid4().hex}",
+            plan_hash=rollback["rollback_id"],
+        )
+        promoted = True
+        post_validation = validate_package(output)
+        if not post_validation.ok:
+            raise CandidatePublicationError(
+                "rollback_validation_failed",
+                "rolled-back package failed post-promotion validation",
+                phase="promote",
+                details={"errors": post_validation.errors},
+            )
+        manifest = read_manifest(output / "manifest.json")
+        manifest["rollback"] = dict(rollback)
+        manifest["outcome"] = _outcome(
+            "succeeded",
+            "candidate_rolled_back",
+            "promote",
+            "retained candidate generation restored",
+            exit_code=0,
+        )
+        manifest["validation"] = post_validation.to_dict()
+        write_manifest(output / "manifest.json", manifest)
+        final_validation = validate_package(output)
+        if not final_validation.ok:
+            raise CandidatePublicationError(
+                "rollback_validation_failed",
+                "rolled-back manifest failed final validation",
+                phase="promote",
+                details={"errors": final_validation.errors},
+            )
+        _clear_promotion_journal(output)
+        if backup is not None and backup.exists():
+            _remove_generated_path(backup)
+            backup = None
+        return {
+            "schema_version": 1,
+            "ok": True,
+            "status": "rolled_back",
+            "code": "candidate_rolled_back",
+            "release_id": receipt["release_id"],
+            "previous_release_id": rollback["previous_release_id"],
+            "rollback_id": rollback["rollback_id"],
+            "rollback": ".docops/rollback.json",
+            "published": True,
+        }
+    except CandidatePublicationError:
+        _restore_after_failed_promotion(output, backup, promoted=promoted)
+        raise
+    except OperationFailure as exc:
+        _restore_after_failed_promotion(output, backup, promoted=promoted)
+        raise CandidatePublicationError(exc.code, str(exc), phase=exc.phase, details=exc.details) from exc
+    except (OSError, TypeError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+        _restore_after_failed_promotion(output, backup, promoted=promoted)
+        raise CandidatePublicationError(
+            "rollback_failed",
+            "candidate rollback failed safely",
+            phase="promote" if promoted else "prepare",
+        ) from exc
+    finally:
+        if stage is not None and stage.exists() and not _promotion_journal_path(output).exists():
+            try:
+                _remove_generated_path(stage)
+            except OSError:
+                pass
+        lease.release()
+
+
 def _recover_before_apply(plan_value: OperationPlan) -> dict[str, Any] | None:
     output = plan_value.request.options.output_dir
     try:
@@ -2108,6 +3590,56 @@ def apply(plan_value: OperationPlan) -> PipelineResult:
     try:
         phase = "prepare"
         _build_stage(plan_value, stage)
+        if plan_value.request.options.publication_policy == "candidate":
+            phase = "candidate"
+            _candidate_failpoint("after-stage")
+            try:
+                base_manifest = read_manifest(output / "manifest.json") if managed else {}
+                candidate_manifest = read_manifest(stage / "manifest.json")
+                candidate_id, _candidate_path, _receipt = finalize_candidate(
+                    output,
+                    stage,
+                    base_manifest=base_manifest,
+                    plan_hash=plan_value.plan_hash,
+                    manifest=candidate_manifest,
+                )
+            except CandidateError as exc:
+                raise OperationFailure("unsafe_candidate_path", str(exc), phase="candidate") from exc
+            validation = validate_package(_candidate_path)
+            if not validation.ok:
+                raise OperationFailure(
+                    "candidate_validation_failed",
+                    "prepared candidate failed validation",
+                    phase="candidate",
+                    details={"errors": validation.errors},
+                )
+            outcome = _timed_outcome(
+                _outcome(
+                    "succeeded",
+                    "candidate_prepared",
+                    "candidate",
+                    "candidate package prepared without changing the active generation",
+                    exit_code=0,
+                ),
+                operation_started,
+            )
+            outcome["candidate_id"] = candidate_id
+            outcome["candidate_locator"] = candidate_locator(output, candidate_id)
+            after = _tree_snapshot(output)
+            written = sum(1 for path in set(before) | set(after) if before.get(path) != after.get(path))
+            _record_attempt(output, plan_value, outcome, phase="candidate")
+            return PipelineResult(
+                True,
+                output,
+                candidate_manifest,
+                validation,
+                dict(plan_value.state_diff),
+                written,
+                [],
+                list(plan_value.warnings),
+                outcome,
+                0,
+            )
         phase = "promote"
         backup = _promote(stage, output, f".{output.name}.backup-{plan_value.plan_id}", plan_hash=plan_value.plan_hash)
         promoted = True
@@ -2316,7 +3848,7 @@ def _inspect_once(package_root: Path | str) -> dict[str, Any]:
                     "age_seconds": age_seconds,
                 }
             )
-    readiness = manifest.get("readiness", {}) if isinstance(manifest, dict) else {}
+    readiness = assess_readiness(inspection_root) if managed else {}
     if lease_active and recovery.get("status") == "recoverable":
         recovery = {**recovery, "status": "writer_busy"}
     return {
@@ -2328,8 +3860,13 @@ def _inspect_once(package_root: Path | str) -> dict[str, Any]:
             "status": manifest.get("status") if manifest else None,
             "outcome": manifest.get("outcome") if manifest else None,
             "readiness": readiness,
+            "layers": manifest.get("layers") if manifest else None,
+            "conceptual_lag": manifest.get("conceptual_lag") if manifest else None,
+            "revisions": manifest.get("revisions") if manifest else None,
             "validation": validation,
         },
+        "history": _inspect_history(root),
+        "candidates": _inspect_candidates(root),
         "lease": lease,
         "staging": stages,
         "backups": backups,
@@ -2337,6 +3874,27 @@ def _inspect_once(package_root: Path | str) -> dict[str, Any]:
         "recovery": recovery,
         "residues": {"staging": stages, "backups": backups, "attempts": attempts},
     }
+
+
+def _inspect_candidates(root: Path) -> list[dict[str, Any]]:
+    reports = list_candidates(root)
+    for report in reports:
+        candidate_id = report.get("candidate_id")
+        if report.get("status") != "review_required" or not isinstance(candidate_id, str):
+            continue
+        try:
+            candidate_path = root.parent / f".{root.name}.candidates" / candidate_id
+            validation = validate_package(candidate_path)
+        except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as exc:
+            report["status"] = "rejected"
+            report["code"] = "candidate_validation_failed"
+            report["message"] = redact_text(str(exc))
+        else:
+            report["validation"] = validation.to_dict()
+            if not validation.ok:
+                report["status"] = "rejected"
+                report["code"] = "candidate_validation_failed"
+    return reports
 
 
 _INSPECTION_SETTLE_SECONDS = 5.0

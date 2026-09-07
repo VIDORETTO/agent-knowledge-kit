@@ -187,6 +187,19 @@ def _get_nested(section: str, subsection: str, key: str, default):
     return val
 
 
+def _read_only_setting() -> bool:
+    """Resolve the process safety mode from the environment or YAML config.
+
+    The environment wins so a reader session can force the boundary without
+    mutating a shared configuration file.  Only explicit truthy values enable
+    the mode; all other values preserve the configured/default writer mode.
+    """
+    raw = os.environ.get("KNOWLEDGE_RAG_READ_ONLY")
+    if raw is not None:
+        return raw.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(_get("server", "read_only", False))
+
+
 def _get_top(key: str, default):
     """Get a top-level value from YAML, falling back to default if missing or None."""
     val = _yaml.get(key)
@@ -756,6 +769,7 @@ class Config:
     transport: str = field(default_factory=lambda: _get("server", "transport", "stdio"))
     server_host: str = field(default_factory=lambda: _get("server", "host", "127.0.0.1"))
     server_port: int = field(default_factory=lambda: _get("server", "port", 8179))
+    read_only: bool = field(default_factory=_read_only_setting)
     auth_bearer_token: str = field(
         default_factory=lambda: (
             _get("server", "auth", {}).get("bearer_token", "") if isinstance(_get("server", "auth", {}), dict) else ""
@@ -1060,6 +1074,8 @@ class Config:
 
     def _ensure_directories(self) -> None:
         """Create data/chroma/documents/models directories if missing."""
+        if self.read_only:
+            return
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.chroma_dir.mkdir(parents=True, exist_ok=True)
         self.documents_dir.mkdir(parents=True, exist_ok=True)

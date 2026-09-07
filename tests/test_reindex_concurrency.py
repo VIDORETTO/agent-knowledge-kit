@@ -70,6 +70,20 @@ def test_stress_gate_rejects_insufficient_load_and_inconsistent_final_state() ->
     ]
 
 
+def test_stress_gate_accepts_a_clean_generation_without_recovery_activity() -> None:
+    findings = stress_gate_findings(
+        errors=[],
+        warnings=[],
+        searches=40,
+        min_searches=40,
+        reindex={"active": False, "status": "succeeded", "error_count": 0},
+        final_state={"managed": True, "recovery": {"status": "none"}, "residue_counts": {}},
+        final_index={"backend_total_documents": 1, "backend_total_chunks": 1},
+    )
+
+    assert findings == []
+
+
 def test_reindex_status_summary_distinguishes_running_success_and_failure_without_details() -> None:
     running = safe_reindex_status({"active": True, "operation": "smart_reindex"})
     succeeded = safe_reindex_status({"active": False, "last_result": {"errors": 0, "indexed": 2}})

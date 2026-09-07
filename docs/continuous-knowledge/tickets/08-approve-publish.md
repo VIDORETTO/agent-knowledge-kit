@@ -2,7 +2,7 @@
 
 [Índice dos tickets](../TICKETS.md) · [Especificação](../SPEC.md) · [TDD](../TDD.md)
 
-Status: **proposto; não implementado**.
+Status: **concluído localmente em 2026-09-05**.
 
 ## Objetivo e entrega
 
@@ -48,27 +48,41 @@ comportamental, não por erro acidental da fixture.
 
 ## Critérios de aceite
 
-- [ ] Alteração em artefato, Golden ou evidência invalida aprovação.
-- [ ] Base avançada resulta stale_base.
-- [ ] Campo approved no conteúdo não concede autoridade.
-- [ ] Publicação usa journal e validação pós-promoção.
-- [ ] Política delegada factual é distinta de aprovação conceitual.
+- [x] Alteração em artefato, Golden ou evidência invalida aprovação.
+- [x] Base avançada resulta stale_base.
+- [x] Campo approved no conteúdo não concede autoridade.
+- [x] Publicação usa journal e validação pós-promoção.
+- [x] Política delegada factual é distinta de aprovação conceitual.
 
 Rastreabilidade: A06, A07, A08, A09, A16 em [VALIDATION](../VALIDATION.md).
 
 ## Definição de pronto
 
-- [ ] Entrega demonstrável pelo seam declarado.
-- [ ] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
-- [ ] Critérios acima e checks pertinentes passam.
-- [ ] Compatibilidade e exemplos JSON atualizados quando afetados.
-- [ ] Evidência de teste distingue fixture, MCP real e harness externo.
-- [ ] Nenhuma alteração fora do escopo ou publicação externa implícita.
-- [ ] Risco e procedimento de rollback documentados no resultado.
+- [x] Entrega demonstrável pelo seam declarado.
+- [x] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
+- [x] Critérios acima e checks pertinentes passam.
+- [x] Compatibilidade e exemplos JSON atualizados quando afetados.
+- [x] Evidência de teste distingue fixture, MCP real e harness externo.
+- [x] Nenhuma alteração fora do escopo ou publicação externa implícita.
+- [x] Risco e procedimento de rollback documentados no resultado.
 
 ## Riscos
 
 Há corrida entre revisão e escrita; arquivo local de aprovação não autentica sozinho uma pessoa.
+
+### Resultado da execução local
+
+- RED: uma candidata com `approved=true` no recibo, mas sem recibo de
+  autoridade, falhou no seam `candidate-publish` com `approval_missing` e
+  preservou a ativa.
+- GREEN: `candidate-approve` grava aprovação por base, composição, política,
+  avaliação e revisões; `candidate-publish` revalida tudo sob lease e promove
+  com journal.
+- REFACTOR: aprovação e promoção ficaram separadas; `human_approver` só vale
+  para escopo conceitual e `delegated_policy` só para candidata factual.
+- Verificação: `tests/test_candidate_publication.py` — 5 passed; contrato,
+  formatação/lint do slice e `git diff --check` foram executados. Não houve
+  harness externo, publicação, deploy ou alteração de corpus ativo.
 
 ## Estratégia de rollback
 

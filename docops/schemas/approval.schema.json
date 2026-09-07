@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consulta-documentacao.invalid/schemas/approval.schema.json",
+  "title": "docops candidate approval receipt",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "approval_id",
+    "candidate_id",
+    "status",
+    "approval_kind",
+    "actor",
+    "base_release_id",
+    "base_composition_hash",
+    "candidate_revisions",
+    "evaluation_hash",
+    "policy_revision",
+    "approved_at",
+    "authority"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "approval_id": {"type": "string", "minLength": 1},
+    "candidate_id": {"type": "string", "minLength": 1},
+    "status": {"const": "approved"},
+    "approval_kind": {"enum": ["conceptual_manual", "delegated_factual"]},
+    "actor": {
+      "type": "object",
+      "required": ["id", "role"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "role": {"enum": ["human_approver", "delegated_policy"]}
+      }
+    },
+    "base_release_id": {"type": "string", "minLength": 1},
+    "base_composition_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "candidate_revisions": {
+      "type": "object",
+      "required": ["composition_hash", "release_id", "golden_revision", "policy_revision"],
+      "properties": {
+        "composition_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "release_id": {"type": "string", "minLength": 1},
+        "golden_revision": {"type": "string", "minLength": 1},
+        "policy_revision": {"type": "string", "minLength": 1}
+      }
+    },
+    "evaluation_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "policy_revision": {"type": "string", "minLength": 1},
+    "approved_at": {"type": "string", "minLength": 1},
+    "authority": {
+      "type": "object",
+      "required": ["authenticated", "source", "subject", "role", "proof_hash"],
+      "properties": {
+        "authenticated": {"const": true},
+        "source": {"type": "string", "minLength": 1},
+        "subject": {"type": "string", "minLength": 1},
+        "role": {"enum": ["human_approver", "delegated_policy"]},
+        "proof_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

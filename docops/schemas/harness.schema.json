@@ -3,10 +3,32 @@
   "$id": "https://consulta-documentacao.invalid/schemas/harness.schema.json",
   "title": "docops external harness hand-off",
   "type": "object",
-  "required": ["schema_version", "package_root", "skills", "mcp"],
+  "required": ["schema_version", "package_root", "generation", "operator_skill", "skills", "mcp"],
   "properties": {
     "schema_version": {"const": 1},
     "package_root": {"const": "."},
+    "generation": {
+      "type": "object",
+      "required": ["schema_version", "release_id", "composition_hash", "corpus_revision", "index_revision", "skill_revision", "router_revision", "policy_revision"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "release_id": {"type": "string", "minLength": 1},
+        "composition_hash": {"type": "string", "minLength": 1},
+        "corpus_revision": {"type": "string", "minLength": 1},
+        "index_revision": {"type": "string", "minLength": 1},
+        "skill_revision": {"type": "string", "minLength": 1},
+        "router_revision": {"type": "string", "minLength": 1},
+        "policy_revision": {"type": "string", "minLength": 1}
+      }
+    },
+    "operator_skill": {
+      "type": "object",
+      "required": ["name", "discovery"],
+      "properties": {
+        "name": {"const": "docops-agent"},
+        "discovery": {"const": "docops skill path"}
+      }
+    },
     "skills": {"type": "array", "minItems": 2, "items": {"type": "string"}},
     "mcp": {
       "type": "object",
@@ -18,7 +40,11 @@
         "args": {"type": "array", "items": {"type": "string"}},
         "cwd": {"const": "."},
         "env": {"type": "object"},
-        "config": {"const": "config.yaml"}
+        "config": {"const": "config.yaml"},
+        "mode": {"enum": ["read_only", "maintenance"]},
+        "capabilities": {"type": "array", "items": {"type": "string"}},
+        "write_capabilities": {"type": "array", "items": {"type": "string"}},
+        "concurrent_publication_allowed": {"type": "boolean"}
       }
     }
   }

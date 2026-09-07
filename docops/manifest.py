@@ -165,11 +165,14 @@ def build_manifest(
     normalized_entries = [_safe_entry(entry) for entry in entries]
     accepted = sum(1 for entry in normalized_entries if entry.get("status") == "accepted")
     ignored = sum(1 for entry in normalized_entries if entry.get("status") == "ignored")
+    quarantined = sum(1 for entry in normalized_entries if entry.get("status") == "quarantined")
     entry_errors = sum(1 for entry in normalized_entries if entry.get("status") in {"error", "failed"})
     explicit_errors = [redact_report(redact_metadata(dict(error))) for error in errors]
     all_errors = explicit_errors + [entry for entry in normalized_entries if entry.get("status") in {"error", "failed"}]
     default_status = (
-        "blocked" if resolution.requires_decision and not selected else ("partial" if all_errors else "succeeded")
+        "blocked"
+        if resolution.requires_decision and not selected
+        else ("partial" if all_errors or quarantined else "succeeded")
     )
     terminal_outcome = dict(outcome or {})
     status = str(terminal_outcome.get("status") or default_status)
@@ -189,7 +192,12 @@ def build_manifest(
         },
         "provenance": redact_report(redact_metadata(dict(provenance))),
         "entries": normalized_entries,
-        "counts": {"accepted": accepted, "ignored": ignored, "errors": entry_errors + len(explicit_errors)},
+        "counts": {
+            "accepted": accepted,
+            "ignored": ignored,
+            "quarantined": quarantined,
+            "errors": entry_errors + len(explicit_errors),
+        },
         "artifacts": dict(artifacts),
         "checkpoints": redact_report(redact_metadata(dict(checkpoints or {}))),
         "metrics": redact_report(redact_metadata(dict(metrics or {}))),

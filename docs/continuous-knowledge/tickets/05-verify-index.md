@@ -2,7 +2,7 @@
 
 [Índice dos tickets](../TICKETS.md) · [Especificação](../SPEC.md) · [TDD](../TDD.md)
 
-Status: **proposto; não implementado**.
+Status: **concluído localmente; sem publicação externa**.
 
 ## Objetivo e entrega
 
@@ -48,23 +48,23 @@ comportamental, não por erro acidental da fixture.
 
 ## Critérios de aceite
 
-- [ ] Erro parcial, payload inválido e timeout falham de forma explícita.
-- [ ] already_running não confirma o job errado.
-- [ ] Smoke vazio não comprova corpus não vazio.
-- [ ] Mudança de embedding exige full rebuild e invalida evidência.
-- [ ] Executar integração com MCP real para comprovar busca após indexação.
+- [x] Erro parcial, payload inválido e timeout falham de forma explícita.
+- [x] already_running não confirma o job errado.
+- [x] Smoke vazio não comprova corpus não vazio.
+- [x] Mudança de embedding exige full rebuild e invalida evidência.
+- [x] Executar integração com MCP real para comprovar busca após indexação.
 
 Rastreabilidade: A05, A06, A16 em [VALIDATION](../VALIDATION.md).
 
 ## Definição de pronto
 
-- [ ] Entrega demonstrável pelo seam declarado.
-- [ ] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
-- [ ] Critérios acima e checks pertinentes passam.
-- [ ] Compatibilidade e exemplos JSON atualizados quando afetados.
-- [ ] Evidência de teste distingue fixture, MCP real e harness externo.
-- [ ] Nenhuma alteração fora do escopo ou publicação externa implícita.
-- [ ] Risco e procedimento de rollback documentados no resultado.
+- [x] Entrega demonstrável pelo seam declarado.
+- [x] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
+- [x] Critérios acima e checks pertinentes passam.
+- [x] Compatibilidade e exemplos JSON atualizados quando afetados.
+- [x] Evidência de teste distingue fixture, MCP real e harness externo.
+- [x] Nenhuma alteração fora do escopo ou publicação externa implícita.
+- [x] Risco e procedimento de rollback documentados no resultado.
 
 ## Riscos
 
@@ -73,3 +73,26 @@ Backend instalado e vendor podem ter respostas distintas. Negociar capacidade/ve
 ## Estratégia de rollback
 
 Manter índice ativo e descartar candidata inválida; rebuild explícito continua disponível.
+
+## Resultado da execução
+
+- RED observado primeiro em `tests/test_rag_sync.py`: um fixture com
+  `last_error` terminal ainda retornava `ok=true`.
+- GREEN/refactor: `docops/rag_sync.py` agora normaliza payloads MCP, exige
+  estado terminal verificável, contagens de documentos/chunks e resultado de
+  busca não vazio; erros recebem códigos explícitos. O relatório registra
+  `requested_operation`, `full_rebuild`, fingerprint da configuração,
+  perfil/configuração efetiva, modelo/dimensões observados no backend e
+  proveniência/versionamento.
+- `docops/operations.py` compara o fingerprint de embedding da geração ativa e
+  solicita `full_rebuild=true` quando o embedding muda ou a evidência anterior
+  não existe. Falha de indexação durante política `candidate` ocorre antes de
+  preparar a candidata, preservando a ativa.
+- Fixtures públicas: `46 passed` em
+  `tests/test_rag_sync.py`, `tests/test_continuous_knowledge.py` e
+  `tests/test_post_lifecycle.py`; Ruff lint/formato do slice: **PASS**.
+- MCP real isolado: pacote temporário com um `guide.md`, vendor
+  `knowledge-rag==4.8.5`, perfil `compact`, modelo efetivo
+  `BAAI/bge-small-en-v1.5`, 384 dimensões, 1 documento/1 chunk e busca com
+  1 resultado: **PASS**. Nenhum corpus/índice do checkout foi usado.
+- Harness externo: não executado neste ticket.

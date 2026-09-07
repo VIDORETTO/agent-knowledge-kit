@@ -43,10 +43,13 @@ def test_rag_synchronizer_runs_reindex_status_stats_and_smoke(monkeypatch, tmp_p
         def call(self, _method: str, *, name: str, arguments: dict, **_kwargs: object) -> dict:
             calls.append(name)
             payload = {
-                "reindex_documents": {"status": "started"},
-                "get_reindex_status": {"active": False, "progress": 1},
+                "reindex_documents": {"status": "started", "operation": "smart_reindex"},
+                "get_reindex_status": {
+                    "active": False,
+                    "last_result": {"errors": 0, "total_files": 1},
+                },
                 "get_index_stats": {"stats": {"total_documents": 1, "total_chunks": 1}},
-                "search_knowledge": {"results": []},
+                "search_knowledge": {"results": [{"source": "guide.md"}]},
             }[name]
             return {"result": {"content": [{"text": json.dumps(payload)}]}}
 
@@ -58,7 +61,9 @@ def test_rag_synchronizer_runs_reindex_status_stats_and_smoke(monkeypatch, tmp_p
     result = RagSynchronizer(python=executable, runtime_root=_runtime_root(tmp_path)).sync(package)
 
     assert result.ok, result.error
-    assert result.smoke == {"ok": True, "result_count": 0}
+    assert result.smoke == {"ok": True, "query": "documentation", "result_count": 1}
+    assert result.configuration["profile"] == "compact"
+    assert result.configuration["effective"]["dimensions"] is None
     assert calls == ["reindex_documents", "get_reindex_status", "get_index_stats", "search_knowledge", "close"]
 
 
@@ -99,7 +104,7 @@ def test_rag_synchronizer_fails_when_mcp_returns_no_json_payload(monkeypatch, tm
     result = RagSynchronizer(python=executable, runtime_root=_runtime_root(tmp_path)).sync(package)
 
     assert not result.ok
-    assert result.error["code"] == "rag_integration_failed"
+    assert result.error["code"] == "rag_invalid_payload"
 
 
 def test_rag_synchronizer_rejects_missing_server_version_before_indexing(monkeypatch, tmp_path: Path) -> None:
@@ -125,3 +130,221 @@ def test_rag_synchronizer_rejects_missing_server_version_before_indexing(monkeyp
     assert not result.ok
     assert result.error["code"] == "rag_version_mismatch"
     assert calls == []
+
+
+def test_rag_synchronizer_rejects_terminal_reindex_error(monkeypatch, tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    (package / "rag" / "documents").mkdir(parents=True)
+    (package / "rag" / "documents" / "guide.md").write_text("# Guide", encoding="utf-8")
+    executable = tmp_path / "python"
+    executable.touch()
+
+    class FailedReindexClient:
+        server_info = {"version": "4.8.5"}
+
+        def call(self, _method: str, *, name: str, **_kwargs: object) -> dict:
+            payload = {
+                "reindex_documents": {"status": "started", "operation": "smart_reindex"},
+                "get_reindex_status": {
+                    "reindex": {
+                        "active": False,
+                        "last_error": {"code": "partial_failure", "message": "guide.md failed"},
+                    }
+                },
+                "get_index_stats": {"stats": {"total_documents": 1, "total_chunks": 1}},
+                "search_knowledge": {"results": [{"source": "guide.md"}]},
+            }[name]
+            return {"result": {"content": [{"text": json.dumps(payload)}]}}
+
+        def close(self) -> None:
+            return
+
+    monkeypatch.setattr(rag_sync, "start_mcp_server", lambda *_args, **_kwargs: FailedReindexClient())
+
+    result = RagSynchronizer(python=executable, runtime_root=_runtime_root(tmp_path)).sync(package)
+
+    assert not result.ok
+    assert result.error["code"] == "rag_reindex_terminal_error"
+
+
+def test_rag_synchronizer_rejects_partial_reindex_result(monkeypatch, tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    (package / "rag" / "documents").mkdir(parents=True)
+    (package / "rag" / "documents" / "guide.md").write_text("# Guide", encoding="utf-8")
+    executable = tmp_path / "python"
+    executable.touch()
+
+    class PartialReindexClient:
+        server_info = {"version": "4.8.5"}
+
+        def call(self, _method: str, *, name: str, **_kwargs: object) -> dict:
+            payload = {
+                "reindex_documents": {"status": "started", "operation": "smart_reindex"},
+                "get_reindex_status": {"active": False, "last_result": {"errors": 1}},
+            }[name]
+            return {"result": {"content": [{"text": json.dumps(payload)}]}}
+
+        def close(self) -> None:
+            return
+
+    monkeypatch.setattr(rag_sync, "start_mcp_server", lambda *_args, **_kwargs: PartialReindexClient())
+
+    result = RagSynchronizer(python=executable, runtime_root=_runtime_root(tmp_path)).sync(package)
+
+    assert not result.ok
+    assert result.error["code"] == "rag_reindex_partial_failure"
+
+
+def test_rag_synchronizer_rejects_empty_smoke(monkeypatch, tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    (package / "rag" / "documents").mkdir(parents=True)
+    (package / "rag" / "documents" / "guide.md").write_text("# Guide", encoding="utf-8")
+    executable = tmp_path / "python"
+    executable.touch()
+
+    class EmptySmokeClient:
+        server_info = {"version": "4.8.5"}
+
+        def call(self, _method: str, *, name: str, **_kwargs: object) -> dict:
+            payload = {
+                "reindex_documents": {"status": "started", "operation": "smart_reindex"},
+                "get_reindex_status": {"active": False, "last_result": {"errors": 0}},
+                "get_index_stats": {"stats": {"total_documents": 1, "total_chunks": 1}},
+                "search_knowledge": {"results": []},
+            }[name]
+            return {"result": {"content": [{"text": json.dumps(payload)}]}}
+
+        def close(self) -> None:
+            return
+
+    monkeypatch.setattr(rag_sync, "start_mcp_server", lambda *_args, **_kwargs: EmptySmokeClient())
+
+    result = RagSynchronizer(python=executable, runtime_root=_runtime_root(tmp_path)).sync(package)
+
+    assert not result.ok
+    assert result.error["code"] == "rag_smoke_empty"
+
+
+def test_rag_synchronizer_rejects_invalid_stats_payload(monkeypatch, tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    (package / "rag" / "documents").mkdir(parents=True)
+    (package / "rag" / "documents" / "guide.md").write_text("# Guide", encoding="utf-8")
+    executable = tmp_path / "python"
+    executable.touch()
+
+    class InvalidStatsClient:
+        server_info = {"version": "4.8.5"}
+
+        def call(self, _method: str, *, name: str, **_kwargs: object) -> dict:
+            payload = {
+                "reindex_documents": {"status": "started", "operation": "smart_reindex"},
+                "get_reindex_status": {"active": False, "last_result": {"errors": 0}},
+                "get_index_stats": {"stats": {"total_documents": "1", "total_chunks": 1}},
+                "search_knowledge": {"results": [{"source": "guide.md"}]},
+            }[name]
+            return {"result": {"content": [{"text": json.dumps(payload)}]}}
+
+        def close(self) -> None:
+            return
+
+    monkeypatch.setattr(rag_sync, "start_mcp_server", lambda *_args, **_kwargs: InvalidStatsClient())
+
+    result = RagSynchronizer(python=executable, runtime_root=_runtime_root(tmp_path)).sync(package)
+
+    assert not result.ok
+    assert result.error["code"] == "rag_stats_invalid_payload"
+
+
+def test_rag_synchronizer_does_not_confirm_a_wrong_already_running_operation(monkeypatch, tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    (package / "rag" / "documents").mkdir(parents=True)
+    (package / "rag" / "documents" / "guide.md").write_text("# Guide", encoding="utf-8")
+    executable = tmp_path / "python"
+    executable.touch()
+    calls: list[str] = []
+
+    class WrongOperationClient:
+        server_info = {"version": "4.8.5"}
+
+        def call(self, _method: str, *, name: str, **_kwargs: object) -> dict:
+            calls.append(name)
+            payload = {"status": "already_running", "operation": "nuclear_rebuild"}
+            return {"result": {"content": [{"text": json.dumps(payload)}]}}
+
+        def close(self) -> None:
+            return
+
+    monkeypatch.setattr(rag_sync, "start_mcp_server", lambda *_args, **_kwargs: WrongOperationClient())
+
+    result = RagSynchronizer(python=executable, runtime_root=_runtime_root(tmp_path)).sync(package)
+
+    assert not result.ok
+    assert result.error["code"] == "rag_reindex_already_running_wrong_operation"
+    assert calls == ["reindex_documents"]
+
+
+def test_rag_synchronizer_reports_timeout_explicitly(monkeypatch, tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    (package / "rag" / "documents").mkdir(parents=True)
+    (package / "rag" / "documents" / "guide.md").write_text("# Guide", encoding="utf-8")
+    executable = tmp_path / "python"
+    executable.touch()
+
+    class StartedClient:
+        server_info = {"version": "4.8.5"}
+
+        def call(self, _method: str, *, name: str, **_kwargs: object) -> dict:
+            payload = {"status": "started", "operation": "smart_reindex"}
+            return {"result": {"content": [{"text": json.dumps(payload)}]}}
+
+        def close(self) -> None:
+            return
+
+    monkeypatch.setattr(rag_sync, "start_mcp_server", lambda *_args, **_kwargs: StartedClient())
+
+    result = RagSynchronizer(
+        python=executable,
+        runtime_root=_runtime_root(tmp_path),
+        timeout_seconds=0,
+    ).sync(package)
+
+    assert not result.ok
+    assert result.error["code"] == "rag_timeout"
+
+
+def test_rag_synchronizer_rejects_a_result_with_unbacked_citations(monkeypatch, tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    (package / "rag" / "documents").mkdir(parents=True)
+    (package / "rag" / "documents" / "guide.md").write_text("# Guide", encoding="utf-8")
+    executable = tmp_path / "python"
+    executable.touch()
+
+    class InvalidCitationClient:
+        server_info = {"version": "4.8.5"}
+
+        def call(self, _method: str, *, name: str, **_kwargs: object) -> dict:
+            payload = {
+                "reindex_documents": {"status": "started", "operation": "smart_reindex"},
+                "get_reindex_status": {"active": False, "last_result": {"errors": 0}},
+                "get_index_stats": {"stats": {"total_documents": 1, "total_chunks": 1}},
+                "search_knowledge": {
+                    "results": [
+                        {
+                            "source": "guide.md",
+                            "locators": [{"kind": "section", "label": "Guide"}],
+                            "citations": [],
+                        }
+                    ]
+                },
+            }[name]
+            return {"result": {"content": [{"text": json.dumps(payload)}]}}
+
+        def close(self) -> None:
+            return
+
+    monkeypatch.setattr(rag_sync, "start_mcp_server", lambda *_args, **_kwargs: InvalidCitationClient())
+
+    result = RagSynchronizer(python=executable, runtime_root=_runtime_root(tmp_path)).sync(package)
+
+    assert not result.ok
+    assert result.error["code"] == "rag_smoke_citation_invalid"

@@ -172,7 +172,7 @@ def main() -> int:
     rag_python = discover_rag_python(PROJECT_ROOT)
     if not rag_python.exists:
         sys.exit(f"Python do knowledge-rag não encontrado: {rag_python.path} — rode bootstrap com --rag")
-    env = runtime_environment(PROJECT_ROOT)
+    env = runtime_environment(PROJECT_ROOT, read_only=True)
     proc = None
     try:
         proc = subprocess.Popen(

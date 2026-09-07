@@ -2,7 +2,7 @@
 
 [Índice dos tickets](../TICKETS.md) · [Especificação](../SPEC.md) · [TDD](../TDD.md)
 
-Status: **proposto; não implementado**.
+Status: **concluído localmente em 2026-09-04**.
 
 ## Objetivo e entrega
 
@@ -48,22 +48,39 @@ comportamental, não por erro acidental da fixture.
 
 ## Critérios de aceite
 
-- [ ] Scaffold inalterado continua atualizável.
-- [ ] Skill modificada, capítulo extra e artefato removido não são sobrescritos silenciosamente.
-- [ ] Ausência de baseline em pacote legado produz migração explícita; não adotar automaticamente.
-- [ ] Plano obsoleto ou edição durante a operação continua rejeitado.
+- [x] Scaffold inalterado continua atualizável.
+- [x] Skill modificada, capítulo extra e artefato removido não são sobrescritos silenciosamente.
+- [x] Ausência de baseline em pacote legado produz migração explícita; não adotar automaticamente.
+- [x] Plano obsoleto ou edição durante a operação continua rejeitado.
 
 Rastreabilidade: A01, A16 em [VALIDATION](../VALIDATION.md).
 
 ## Definição de pronto
 
-- [ ] Entrega demonstrável pelo seam declarado.
-- [ ] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
-- [ ] Critérios acima e checks pertinentes passam.
-- [ ] Compatibilidade e exemplos JSON atualizados quando afetados.
-- [ ] Evidência de teste distingue fixture, MCP real e harness externo.
-- [ ] Nenhuma alteração fora do escopo ou publicação externa implícita.
-- [ ] Risco e procedimento de rollback documentados no resultado.
+- [x] Entrega demonstrável pelo seam declarado.
+- [x] Primeiro RED observado, GREEN mínimo implementado e refactor protegido.
+- [x] Critérios acima e checks pertinentes passam.
+- [x] Compatibilidade e exemplos JSON atualizados quando afetados.
+- [x] Evidência de teste distingue fixture, MCP real e harness externo.
+- [x] Nenhuma alteração fora do escopo ou publicação externa implícita.
+- [x] Risco e procedimento de rollback documentados no resultado.
+
+## Implementação verificada
+
+`docops/generation.py` grava `.docops/generated-artifacts.json` com o owner e
+hash SHA-256 de todos os arquivos em `skill/` e `router/`. Antes de uma
+atualização, a operação compara esse inventário com o checkout ativo e bloqueia
+qualquer divergência com `skill_update_requires_review`; pacotes gerados antes
+do inventário retornam `artifact_baseline_required` para migração explícita.
+O inventário é escrito no staging após a geração e participa do recibo da fase
+de artefatos.
+
+RED observado: o teste obrigatório passou a falhar porque a atualização
+retornava sucesso (`result.ok is True`) após editar a skill. GREEN: o mesmo
+teste e os cenários de scaffold, capítulo extra, artefato removido, baseline
+legado e plano obsoleto passaram pelo seam público. O comportamento foi
+verificado apenas com fixtures sintéticas; nenhuma fonte, índice ou pacote de
+produção foi alterado.
 
 ## Riscos
 

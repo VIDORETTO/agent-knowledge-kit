@@ -39,6 +39,7 @@ SUPPORTED_SUFFIXES = {
     ".xlsx",
     ".pptx",
 }
+TRANSCRIPTION_SUFFIXES = {".ass", ".srt", ".ssa", ".vtt"}
 MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
 
 _INJECTION_PATTERNS = (
@@ -60,6 +61,9 @@ class NormalizationResult:
     error_code: str | None = None
     error: str | None = None
     untrusted: bool = False
+    locators: list[dict[str, Any]] = field(default_factory=list)
+    quality_status: str = "accepted"
+    quality_reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -72,6 +76,9 @@ class NormalizationResult:
             "error_code": self.error_code,
             "error": self.error,
             "untrusted": self.untrusted,
+            "locators": self.locators,
+            "quality_status": self.quality_status,
+            "quality_reason": self.quality_reason,
         }
 
 
@@ -87,6 +94,123 @@ def _untrusted_warnings(content: str) -> tuple[bool, list[str]]:
     if any(pattern.search(content) for pattern in _INJECTION_PATTERNS):
         return True, ["possible prompt injection detected; content is untrusted and was not executed"]
     return False, []
+
+
+_TIME_TOKEN = r"\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,3})?"
+_TIMESTAMP_RANGE = re.compile(rf"^\s*(?P<start>{_TIME_TOKEN})\s*-->\s*(?P<end>{_TIME_TOKEN})(?:\s+.*)?$")
+_BRACKET_TIMESTAMP = re.compile(rf"\[(?P<start>{_TIME_TOKEN})(?:\s*[-–—]\s*(?P<end>{_TIME_TOKEN}))?\]")
+_CODE_IDENTIFIER = re.compile(
+    r"^\s*(?:(?:async)\s+)?(?:def|class)\s+(?P<definition>[A-Za-z_]\w*)"
+    r"|^\s*(?:(?:export)\s+)?(?:(?:async)\s+)?function\s+(?P<function>[A-Za-z_$][\w$]*)"
+    r"|^\s*(?:const|let|var)\s+(?P<variable>[A-Za-z_$][\w$]*)\s*="
+)
+_CODE_FORMATS = {"py", "c", "h", "cpp", "js", "jsx", "ts", "tsx"}
+
+
+def _locator_line_end(lines: list[str], start: int) -> int:
+    for index in range(start, len(lines)):
+        if re.match(r"^\s*#{1,6}\s+\S", lines[index]):
+            return index
+    return len(lines)
+
+
+def _extract_locators(content: str, fmt: str) -> list[dict[str, Any]]:
+    """Extract stable, human-readable evidence locators from normalized text."""
+
+    lines = content.splitlines()
+    locators: list[dict[str, Any]] = []
+    heading_pattern = re.compile(r"^\s*(?P<marks>#{1,6})\s+(?P<label>.+?)\s*#*\s*$")
+    for line_number, line in enumerate(lines, 1):
+        heading = heading_pattern.match(line)
+        if heading:
+            level = len(heading.group("marks"))
+            label = heading.group("label").strip()
+            if level < 2 or not label:
+                continue
+            special = re.match(r"^(Page|Slide|Sheet|Cell)\s+(\d+)$", label, re.I)
+            if special:
+                kind = special.group(1).casefold()
+                locator: dict[str, Any] = {
+                    "kind": kind,
+                    "label": label,
+                    "number": int(special.group(2)),
+                    "line_start": line_number,
+                    "line_end": _locator_line_end(lines, line_number),
+                    "available": True,
+                }
+            else:
+                locator = {
+                    "kind": "section",
+                    "label": label,
+                    "level": level,
+                    "line_start": line_number,
+                    "line_end": _locator_line_end(lines, line_number),
+                    "available": True,
+                }
+            locators.append(locator)
+
+        timestamp = _TIMESTAMP_RANGE.match(line) or _BRACKET_TIMESTAMP.search(line)
+        if timestamp:
+            start = timestamp.group("start")
+            end = timestamp.groupdict().get("end")
+            label = f"{start} - {end}" if end else start
+            locators.append(
+                {
+                    "kind": "timestamp",
+                    "label": label,
+                    "start": start,
+                    "end": end,
+                    "line_start": line_number,
+                    "line_end": line_number,
+                    "available": True,
+                }
+            )
+
+        if fmt.casefold() in _CODE_FORMATS:
+            identifier_match = _CODE_IDENTIFIER.match(line)
+            if identifier_match:
+                identifier = next(
+                    (value for value in identifier_match.groupdict().values() if value),
+                    None,
+                )
+                if identifier:
+                    locators.append(
+                        {
+                            "kind": "identifier",
+                            "label": identifier,
+                            "identifier": identifier,
+                            "line_start": line_number,
+                            "line_end": line_number,
+                            "available": True,
+                        }
+                    )
+
+    if locators:
+        return locators
+    return [
+        {
+            "kind": "normalized_section",
+            "label": "normalized-content",
+            "line_start": 1,
+            "line_end": max(len(lines), 1),
+            "available": False,
+            "limitation": "source did not expose a stable structural locator",
+        }
+    ]
+
+
+def _quality_assessment(content: str, untrusted: bool) -> tuple[str, str | None]:
+    if untrusted:
+        return "quarantine", "untrusted_content"
+    replacement_ratio = content.count("\ufffd") / max(len(content), 1)
+    if replacement_ratio > 0.01:
+        return "quarantine", "excessive_replacement_characters"
+    control_count = sum(1 for char in content if ord(char) < 32 and char not in "\n\r\t")
+    if control_count / max(len(content), 1) > 0.02:
+        return "quarantine", "excessive_control_characters"
+    if not re.search(r"\w", content, re.UNICODE):
+        return "quarantine", "no_word_characters"
+    return "accepted", None
 
 
 def _openapi_markdown(document: dict[str, Any]) -> str:
@@ -147,14 +271,20 @@ def _extract_pdf(path: Path) -> str:
         from pypdf import PdfReader  # type: ignore[import-not-found]
 
         reader = PdfReader(str(path))
-        for page in reader.pages:
-            text_parts.append(page.extract_text() or "")
+        for index, page in enumerate(reader.pages, 1):
+            text = (page.extract_text() or "").strip()
+            if text:
+                text_parts.append(f"## Page {index}\n\n{text}")
     except ImportError:
         try:
             import fitz  # type: ignore[import-not-found]
 
             document = fitz.open(str(path))
-            text_parts = [page.get_text() or "" for page in document]
+            text_parts = [
+                f"## Page {index}\n\n{text.strip()}"
+                for index, page in enumerate(document, 1)
+                if (text := (page.get_text() or "").strip())
+            ]
         except ImportError as exc:
             raise RuntimeError("pypdf or PyMuPDF is required to normalize PDFs") from exc
         except Exception:
@@ -182,6 +312,7 @@ def _notebook_markdown(document: Any, fallback: str) -> str:
         if not content:
             continue
         cell_type = str(cell.get("cell_type") or "raw").casefold()
+        lines.append(f"## Cell {index}")
         if cell_type == "markdown":
             lines.append(content)
         elif cell_type == "code":
@@ -193,7 +324,7 @@ def _notebook_markdown(document: Any, fallback: str) -> str:
                     language = str(language_info["name"])
             lines.extend([f"{chr(96) * 3}{language}", content, chr(96) * 3])
         else:
-            lines.extend([f"## Cell {index}", content])
+            lines.append(content)
     return "\n\n".join(lines) + "\n"
 
 
@@ -256,7 +387,8 @@ def _xlsx_markdown(archive: zipfile.ZipFile, members: list[str], fallback: str) 
                 formula = next((child for child in cell if _xml_local_name(child.tag) == "f"), None)
                 if not value and formula is not None:
                     value = f"={_xml_text(formula)}"
-                values.append(value)
+                coordinate = str(cell.attrib.get("r") or "").strip()
+                values.append(f"{coordinate}={value}" if coordinate else value)
             if values:
                 rows.append("\t".join(values))
         if rows:
@@ -308,6 +440,15 @@ def normalize_file(
     if not file_path.is_file():
         return NormalizationResult(
             "error", "", origin, suffix.lstrip("."), error_code="not_found", error="file does not exist"
+        )
+    if suffix in TRANSCRIPTION_SUFFIXES:
+        return NormalizationResult(
+            "ignored",
+            "",
+            origin,
+            suffix.lstrip("."),
+            error_code="external_transcription_required",
+            error="transcriptions must be supplied as external Markdown; native ASR/VTT ingestion is not supported",
         )
     if suffix not in SUPPORTED_SUFFIXES:
         return NormalizationResult(
@@ -428,4 +569,16 @@ def normalize_file(
         )
     untrusted, injection_warnings = _untrusted_warnings(content)
     warnings.extend(injection_warnings)
-    return NormalizationResult("accepted", content, origin, fmt, title=title, warnings=warnings, untrusted=untrusted)
+    quality_status, quality_reason = _quality_assessment(content, untrusted)
+    return NormalizationResult(
+        "accepted",
+        content,
+        origin,
+        fmt,
+        title=title,
+        warnings=warnings,
+        untrusted=untrusted,
+        locators=_extract_locators(content, fmt),
+        quality_status=quality_status,
+        quality_reason=quality_reason,
+    )
