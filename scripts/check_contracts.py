@@ -19,6 +19,7 @@ from docops.harness import build_harness_manifest  # noqa: E402
 from docops.manifest import build_manifest  # noqa: E402
 from docops.operations import plan as build_plan  # noqa: E402
 from docops.package_validator import ValidationResult  # noqa: E402
+from docops.revisions import content_hash  # noqa: E402
 from docops.source_resolver import SourceResolver  # noqa: E402
 from scripts.sync_schemas import check_schema_distribution  # noqa: E402
 
@@ -631,6 +632,309 @@ def _examples() -> dict[str, object]:
     }
 
 
+def _master_doc(kind: str, identifier: str, payload: dict[str, object]) -> dict[str, object]:
+    value: dict[str, object] = {
+        "schema_version": 1,
+        "kind": kind,
+        "id": identifier,
+        "created_at": "2026-09-08T00:00:00Z",
+        **payload,
+    }
+    value["content_hash"] = content_hash(value)
+    return value
+
+
+def _master_examples() -> dict[str, object]:
+    project_id = "project-contract-fixture"
+    revision_id = "project-revision-contract-fixture"
+    return {
+        "project": _master_doc(
+            "project",
+            project_id,
+            {
+                "project_id": project_id,
+                "name": "Fixture",
+                "active_project_revision_id": None,
+                "working_project_revision_id": None,
+                "package_locator": None,
+                "write_revision": 1,
+                "visibility": "private",
+            },
+        ),
+        "init-session": _master_doc(
+            "init_session",
+            "session-contract-fixture",
+            {
+                "session_id": "session-contract-fixture",
+                "project_id": project_id,
+                "session_revision": 1,
+                "status": "collecting",
+                "preset": None,
+                "requested_deliverables": ["knowledge"],
+                "answers": [],
+                "decisions": [],
+                "pending_questions": [],
+                "finalized_revision_id": None,
+            },
+        ),
+        "project-revision": _master_doc(
+            "project_revision",
+            revision_id,
+            {
+                "project_revision_id": revision_id,
+                "project_id": project_id,
+                "parent_project_revision_id": None,
+                "package_ref": None,
+                "artifacts": [],
+                "pending_decision_ids": [],
+                "change_id": None,
+                "status": "private_draft",
+            },
+        ),
+        "brief": _master_doc(
+            "brief",
+            "brief-contract-fixture",
+            {
+                "revision_id": revision_id,
+                "project_id": project_id,
+                "goal": "Fixture goal",
+                "audience": None,
+                "region": None,
+                "language": None,
+                "deliverables": ["knowledge"],
+                "constraints": [],
+                "open_decision_ids": [],
+            },
+        ),
+        "course": _master_doc(
+            "course",
+            "course-contract-fixture",
+            {
+                "revision_id": revision_id,
+                "project_id": project_id,
+                "course_id": "course-contract-fixture",
+                "intent": None,
+                "level": None,
+                "transformation": None,
+                "format": None,
+                "modules": [],
+                "status": "pending",
+                "pending_reasons": ["fixture"],
+            },
+        ),
+        "page": _master_doc(
+            "page",
+            "page-contract-fixture",
+            {
+                "revision_id": revision_id,
+                "project_id": project_id,
+                "page_id": "page-contract-fixture",
+                "goal": None,
+                "tone": None,
+                "audience": None,
+                "sections": [],
+                "offer": {},
+                "restrictions": [],
+                "status": "pending",
+                "pending_reasons": ["fixture"],
+            },
+        ),
+        "decisions": _master_doc(
+            "decisions",
+            "decisions-contract-fixture",
+            {
+                "revision_id": revision_id,
+                "project_id": project_id,
+                "items": [],
+            },
+        ),
+        "policy": _master_doc(
+            "policy",
+            "policy-contract-fixture",
+            {
+                "revision_id": revision_id,
+                "project_id": project_id,
+                "publication_mode": "manual",
+                "delegation_ref": None,
+                "private_draft_only": True,
+                "rights_policy_revision": "unknown",
+                "privacy_policy_revision": "unknown",
+            },
+        ),
+        "dependencies": _master_doc(
+            "dependencies",
+            "dependencies-contract-fixture",
+            {
+                "revision_id": revision_id,
+                "project_id": project_id,
+                "nodes": [],
+                "edges": [],
+            },
+        ),
+        "source-governance": _master_doc(
+            "source_governance_registry",
+            "governance-contract-fixture",
+            {
+                "sources": [],
+                "policy_revision": "unknown",
+                "updated_at": "2026-09-08T00:00:00Z",
+            },
+        ),
+        "claim": _master_doc(
+            "claim",
+            "claim-contract-fixture",
+            {
+                "claim_id": "claim-contract-fixture",
+                "project_id": project_id,
+                "text": "Fixture claim",
+                "classification": "factual_observation",
+                "region": None,
+                "validity": {"from": None, "until": None, "checked_at": None, "review_after": None},
+                "evidence_refs": [],
+                "conflict_ids": [],
+                "review_status": "proposed",
+                "reviewer_ref": None,
+            },
+        ),
+        "conflict": _master_doc(
+            "conflict",
+            "conflict-contract-fixture",
+            {
+                "conflict_id": "conflict-contract-fixture",
+                "project_id": project_id,
+                "claim_ids": ["a", "b"],
+                "relation": "contradicts",
+                "status": "open",
+                "resolution": None,
+                "reviewer_ref": None,
+            },
+        ),
+        "change-proposal": _master_doc(
+            "change_proposal",
+            "change-contract-fixture",
+            {
+                "change_id": "change-contract-fixture",
+                "project_id": project_id,
+                "base_project_revision_id": revision_id,
+                "base_package_ref": None,
+                "operations": [
+                    {"type": "source_add", "target_id": "source-fixture", "expected_hash": None, "payload": {}}
+                ],
+                "requested_by": "fixture",
+                "reason": "fixture",
+                "policy_revision": "fixture",
+                "dependency_graph": {},
+                "status": "proposed",
+            },
+        ),
+        "impact-report": _master_doc(
+            "impact_report",
+            "impact-contract-fixture",
+            {
+                "change_id": "change-contract-fixture",
+                "base_project_revision_id": revision_id,
+                "classification": "unknown",
+                "affected_nodes": [],
+                "required_checks": [],
+                "blockers": [],
+                "existing_conceptual_report_ref": None,
+                "unknown_dependencies": True,
+            },
+        ),
+        "dependency-graph": _master_doc(
+            "dependency_graph",
+            "graph-contract-fixture",
+            {
+                "nodes": [],
+                "edges": [],
+                "unknown_dependencies": False,
+            },
+        ),
+        "backup-manifest": _master_doc(
+            "backup_manifest",
+            "backup-contract-fixture",
+            {
+                "backup_id": "backup-contract-fixture",
+                "project_id": project_id,
+                "created_at_source": "2026-09-08T00:00:00Z",
+                "root_locator": "folder",
+                "files": [],
+                "excluded": [],
+                "rpo_observed_at": "2026-09-08T00:00:00Z",
+            },
+        ),
+        "project-enrichment-request": _master_doc(
+            "enrichment_request",
+            "enrichment-contract-fixture",
+            {
+                "request_id": "enrichment-contract-fixture",
+                "project_id": project_id,
+                "base_project_revision_id": revision_id,
+                "policy_revision": "fixture",
+                "allowed_artifacts": ["course"],
+                "budget": {},
+                "state": "dispatched",
+                "attempt": 1,
+                "deadline_at": "2026-09-09T00:00:00Z",
+                "harness": None,
+                "created_at_external": "2026-09-08T00:00:00Z",
+            },
+        ),
+        "delegated-authorization": _master_doc(
+            "delegated_authorization",
+            "authorization-contract-fixture",
+            {
+                "authorization_id": "authorization-contract-fixture",
+                "project_id": project_id,
+                "owner": "fixture",
+                "actions": ["factual_update"],
+                "source_ids": [],
+                "expires_at": "2026-09-09T00:00:00Z",
+                "budget": {},
+                "authority_ref": "fixture-authority",
+                "policy_revision": "policy-fixture",
+                "kill_switch": False,
+                "status": "active",
+            },
+        ),
+        "supervisor-status": _master_doc(
+            "supervisor_status",
+            "supervisor-status",
+            {
+                "status": "stopped",
+                "tick": 0,
+                "last_source_hash": None,
+                "pending_events": [],
+                "last_error": None,
+                "missed_cycles": 0,
+                "max_missed_cycles": 3,
+                "queue_path": None,
+                "last_success_at": None,
+            },
+        ),
+        "project-rag-candidate-receipt": _master_doc(
+            "rag_candidate_receipt",
+            "candidate-rag-contract-fixture",
+            {
+                "candidate_id": "candidate-rag-contract-fixture",
+                "project_id": project_id,
+                "candidate_package_ref": "candidate:fixture",
+                "base_package_ref": None,
+                "snapshot_id": "snapshot-contract-fixture",
+                "corpus_hash": "a" * 64,
+                "profile": "multilingual",
+                "embedding_fingerprint": "b" * 64,
+                "model": {},
+                "rebuild_required": True,
+                "active_preserved": True,
+                "publication_allowed": False,
+                "evaluation_status": "pending",
+                "evaluation_hash": None,
+            },
+        ),
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true")
@@ -648,6 +952,7 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValueError, json.JSONDecodeError) as exc:
             findings.append({"code": "schema_unavailable", "artifact": name, "message": str(exc)})
     examples = _examples()
+    examples.update(_master_examples())
     for name, payload in examples.items():
         if name not in contract_names():
             continue

@@ -19,6 +19,50 @@ from .harness import export_enrichment_request
 from .learning import review_learning_proposal, submit_learning_proposal
 from .lifecycle import LifecycleFacade
 from .manifest import redact_metadata
+from .master import (
+    activate_project_change,
+    adopt_project_package,
+    answer_project_init,
+    apply_project_preset,
+    authorize_factual_change,
+    backup_project,
+    create_delegated_authorization,
+    dispatch_project_enrichment,
+    evaluate_project_candidate,
+    finalize_project_init,
+    ingest_external_transcription,
+    inspect_project,
+    inspect_project_change,
+    inspect_project_enrichment,
+    inspect_project_health,
+    inspect_project_init,
+    inspect_project_recovery,
+    load_project_preset,
+    prepare_project_change,
+    prepare_project_rag_candidate,
+    project_preset_golden_candidates,
+    propose_project_change,
+    query_project_evidence,
+    record_project_claim,
+    record_project_conflict,
+    recover_project_activation,
+    register_source_governance,
+    restore_project,
+    resume_project_supervisor,
+    retry_project_enrichment,
+    revoke_delegated_authorization,
+    revoke_project_source,
+    rollback_project,
+    run_project_supervisor_once,
+    source_use_decision,
+    start_project_init,
+    stop_project_supervisor,
+    submit_project_enrichment,
+    timeout_project_enrichment,
+    validate_dependency_mitigation,
+    validate_project_derivatives,
+    verify_project_backup,
+)
 from .observability import redact_report, redact_text
 from .operations import (
     CandidatePublicationError,
@@ -79,6 +123,47 @@ CLI_COMPATIBILITY_MAP = {
     "feedback_report": "lifecycle feedback report",
     "config-audit": "security config-audit",
     "lifecycle-status": "lifecycle status",
+    "init-start": "init start",
+    "init-status": "init status",
+    "init-answer": "init answer",
+    "init-finalize": "init finalize",
+    "project-inspect": "project inspect",
+    "project-adopt": "project adopt",
+    "project-source-govern": "project source govern",
+    "project-source-ingest": "project source ingest",
+    "project-source-revoke": "project source revoke",
+    "project-source-use": "project source use",
+    "project-evidence-query": "project evidence query",
+    "project-rag-prepare": "project rag prepare",
+    "project-candidate-evaluate": "project candidate evaluate",
+    "project-dependency-mitigation": "project dependency mitigation",
+    "project-delegate-authorize": "project delegate authorize",
+    "project-claim-record": "project evidence claim",
+    "project-conflict-record": "project evidence conflict",
+    "project-change-propose": "project change propose",
+    "project-change-inspect": "project change inspect",
+    "project-change-prepare": "project change prepare",
+    "project-change-activate": "project change activate",
+    "project-rollback": "project rollback",
+    "project-derivatives": "project derivatives validate",
+    "project-enrichment-dispatch": "project enrichment dispatch",
+    "project-enrichment-inspect": "project enrichment inspect",
+    "project-enrichment-submit": "project enrichment submit",
+    "project-enrichment-timeout": "project enrichment timeout",
+    "project-enrichment-retry": "project enrichment retry",
+    "project-delegate": "project delegate create",
+    "project-delegate-revoke": "project delegate revoke",
+    "project-health": "project health",
+    "project-recovery": "project recovery inspect",
+    "project-recovery-run": "project recovery run",
+    "project-backup": "project backup",
+    "project-backup-verify": "project backup verify",
+    "project-restore": "project restore",
+    "project-preset": "project preset",
+    "project-preset-candidates": "project preset candidates",
+    "supervisor-run": "supervisor run",
+    "supervisor-stop": "supervisor stop",
+    "supervisor-resume": "supervisor resume",
 }
 
 _CANONICAL_TO_FLAT = {
@@ -97,12 +182,22 @@ _CANONICAL_HELP = """Canonical domain commands:
   lifecycle rag {snapshot,profile-compare}
   lifecycle learning {submit,review}
   lifecycle feedback {submit,report}
+  init {start,status,answer,finalize}
+  project {inspect,adopt,source,evidence,change,rollback,health,backup,restore,preset}
+  supervisor {run,stop,resume}
 
 Flat commands are temporary compatibility aliases. They emit the same JSON
 contract and exit code as their canonical spelling; deprecation metadata is
 kept out of structured output. Remove an alias only after all callers have
 migrated and the alias-usage gate is zero for one complete release window.
 """
+
+_CANONICAL_GROUP_HELP = {
+    "lifecycle": "lifecycle status source event worker candidate reader rag learning feedback",
+    "init": "init start status answer finalize",
+    "project": "project inspect adopt source evidence change rollback health backup restore preset",
+    "supervisor": "supervisor run stop resume",
+}
 
 
 def _expand_canonical_argv(argv: list[str]) -> list[str]:
@@ -399,6 +494,299 @@ def build_parser() -> argparse.ArgumentParser:
     feedback_report.add_argument("--window-days", type=int, default=7)
     feedback_report.add_argument("--now")
     feedback_report.add_argument("--json", action="store_true")
+    init_start = commands.add_parser("init-start", help="start a private structured project initialization")
+    init_start.add_argument("--project", type=Path, required=True)
+    init_start.add_argument("--input", type=Path)
+    init_start.add_argument("--preset")
+    init_start.add_argument("--idempotency-key")
+    init_start.add_argument("--expected-revision", type=int)
+    init_start.add_argument("--now")
+    init_start.add_argument("--json", action="store_true")
+    init_status = commands.add_parser("init-status", help="inspect a project initialization session")
+    init_status.add_argument("--project", type=Path, required=True)
+    init_status.add_argument("--session-id")
+    init_status.add_argument("--json", action="store_true")
+    init_answer = commands.add_parser("init-answer", help="answer a project initialization question")
+    init_answer.add_argument("--project", type=Path, required=True)
+    init_answer.add_argument("--input", type=Path, required=True)
+    init_answer.add_argument("--idempotency-key")
+    init_answer.add_argument("--expected-revision", type=int)
+    init_answer.add_argument("--now")
+    init_answer.add_argument("--json", action="store_true")
+    init_finalize = commands.add_parser("init-finalize", help="finalize a private project revision")
+    init_finalize.add_argument("--project", type=Path, required=True)
+    init_finalize.add_argument("--input", type=Path)
+    init_finalize.add_argument("--idempotency-key")
+    init_finalize.add_argument("--expected-revision", type=int)
+    init_finalize.add_argument("--now")
+    init_finalize.add_argument("--json", action="store_true")
+    project_inspect = commands.add_parser("project-inspect", help="inspect project state")
+    project_inspect.add_argument("--project", type=Path, required=True)
+    project_inspect.add_argument("--json", action="store_true")
+    project_adopt = commands.add_parser("project-adopt", help="adopt a verified legacy package")
+    project_adopt.add_argument("--project", type=Path, required=True)
+    project_adopt.add_argument("--package", type=Path, required=True)
+    project_adopt.add_argument("--dry-run", action="store_true")
+    project_adopt.add_argument("--no-backup", action="store_true")
+    project_adopt.add_argument("--idempotency-key")
+    project_adopt.add_argument("--expected-revision", type=int)
+    project_adopt.add_argument("--now")
+    project_adopt.add_argument("--json", action="store_true")
+    project_govern = commands.add_parser("project-source-govern", help="register source governance")
+    project_govern.add_argument("--project", type=Path, required=True)
+    project_govern.add_argument("--input", type=Path, required=True)
+    project_govern.add_argument("--readmit", action="store_true")
+    project_govern.add_argument("--idempotency-key")
+    project_govern.add_argument("--expected-revision", type=int)
+    project_govern.add_argument("--now")
+    project_govern.add_argument("--json", action="store_true")
+    project_ingest = commands.add_parser("project-source-ingest", help="ingest timestamped external transcription")
+    project_ingest.add_argument("--project", type=Path, required=True)
+    project_ingest.add_argument("--source-id", required=True)
+    project_ingest.add_argument("--input", type=Path, required=True)
+    project_ingest.add_argument("--video-url")
+    project_ingest.add_argument("--provider")
+    project_ingest.add_argument("--permission-ref")
+    project_ingest.add_argument("--idempotency-key")
+    project_ingest.add_argument("--expected-revision", type=int)
+    project_ingest.add_argument("--now")
+    project_ingest.add_argument("--json", action="store_true")
+    project_revoke = commands.add_parser("project-source-revoke", help="revoke source-derived evidence")
+    project_revoke.add_argument("--project", type=Path, required=True)
+    project_revoke.add_argument("--source-id", required=True)
+    project_revoke.add_argument("--reason", default="operator")
+    project_revoke.add_argument("--idempotency-key")
+    project_revoke.add_argument("--expected-revision", type=int)
+    project_revoke.add_argument("--now")
+    project_revoke.add_argument("--json", action="store_true")
+    project_source_use = commands.add_parser("project-source-use", help="evaluate one source use authorization")
+    project_source_use.add_argument("--project", type=Path, required=True)
+    project_source_use.add_argument("--source-id", required=True)
+    project_source_use.add_argument("--purpose", required=True)
+    project_source_use.add_argument("--region")
+    project_source_use.add_argument("--now")
+    project_source_use.add_argument("--json", action="store_true")
+    project_query = commands.add_parser("project-evidence-query", help="query eligible project evidence")
+    project_query.add_argument("--project", type=Path, required=True)
+    project_query.add_argument("--query", required=True)
+    project_query.add_argument("--filters", type=Path)
+    project_query.add_argument("--session-id")
+    project_query.add_argument("--max-results", type=int, default=5)
+    project_query.add_argument("--now")
+    project_query.add_argument("--json", action="store_true")
+    project_claim = commands.add_parser("project-claim-record", help="record a classified claim")
+    project_claim.add_argument("--project", type=Path, required=True)
+    project_claim.add_argument("--input", type=Path, required=True)
+    project_claim.add_argument("--idempotency-key")
+    project_claim.add_argument("--expected-revision", type=int)
+    project_claim.add_argument("--now")
+    project_claim.add_argument("--json", action="store_true")
+    project_conflict = commands.add_parser("project-conflict-record", help="record an evidence conflict")
+    project_conflict.add_argument("--project", type=Path, required=True)
+    project_conflict.add_argument("--input", type=Path, required=True)
+    project_conflict.add_argument("--idempotency-key")
+    project_conflict.add_argument("--expected-revision", type=int)
+    project_conflict.add_argument("--now")
+    project_conflict.add_argument("--json", action="store_true")
+    project_change_propose = commands.add_parser("project-change-propose", help="propose a project change")
+    project_change_propose.add_argument("--project", type=Path, required=True)
+    project_change_propose.add_argument("--input", type=Path, required=True)
+    project_change_propose.add_argument("--idempotency-key")
+    project_change_propose.add_argument("--expected-revision", type=int)
+    project_change_propose.add_argument("--now")
+    project_change_propose.add_argument("--json", action="store_true")
+    project_change_inspect = commands.add_parser("project-change-inspect", help="inspect a project change")
+    project_change_inspect.add_argument("--project", type=Path, required=True)
+    project_change_inspect.add_argument("--change-id", required=True)
+    project_change_inspect.add_argument("--json", action="store_true")
+    project_change_prepare = commands.add_parser("project-change-prepare", help="prepare a project change")
+    project_change_prepare.add_argument("--project", type=Path, required=True)
+    project_change_prepare.add_argument("--change-id", required=True)
+    project_change_prepare.add_argument("--idempotency-key")
+    project_change_prepare.add_argument("--expected-revision", type=int)
+    project_change_prepare.add_argument("--now")
+    project_change_prepare.add_argument("--json", action="store_true")
+    project_change_activate = commands.add_parser("project-change-activate", help="activate a prepared project change")
+    project_change_activate.add_argument("--project", type=Path, required=True)
+    project_change_activate.add_argument("--change-id", required=True)
+    project_change_activate.add_argument("--authorization-id")
+    project_change_activate.add_argument("--manual-reviewed", action="store_true")
+    project_change_activate.add_argument("--idempotency-key")
+    project_change_activate.add_argument("--expected-revision", type=int)
+    project_change_activate.add_argument("--now")
+    project_change_activate.add_argument("--json", action="store_true")
+    project_rollback = commands.add_parser("project-rollback", help="rollback to a project revision")
+    project_rollback.add_argument("--project", type=Path, required=True)
+    project_rollback.add_argument("--revision-id", required=True)
+    project_rollback.add_argument("--idempotency-key")
+    project_rollback.add_argument("--expected-revision", type=int)
+    project_rollback.add_argument("--now")
+    project_rollback.add_argument("--json", action="store_true")
+    project_derivatives = commands.add_parser("project-derivatives", help="validate project derivatives")
+    project_derivatives.add_argument("--project", type=Path, required=True)
+    project_derivatives.add_argument("--revision-id")
+    project_derivatives.add_argument("--json", action="store_true")
+    project_rag_prepare = commands.add_parser("project-rag-prepare", help="prepare an isolated RAG candidate")
+    project_rag_prepare.add_argument("--project", type=Path, required=True)
+    project_rag_prepare.add_argument("--candidate", type=Path)
+    project_rag_prepare.add_argument("--profiles", nargs="+", default=["compact", "multilingual"])
+    project_rag_prepare.add_argument("--selected-profile")
+    project_rag_prepare.add_argument("--language", default="pt-BR")
+    project_rag_prepare.add_argument("--previous-snapshot", type=Path)
+    project_rag_prepare.add_argument("--verify-query")
+    project_rag_prepare.add_argument("--verify-adapter", default="memory")
+    project_rag_prepare.add_argument("--runtime-root", type=Path)
+    project_rag_prepare.add_argument("--idempotency-key")
+    project_rag_prepare.add_argument("--expected-revision", type=int)
+    project_rag_prepare.add_argument("--now")
+    project_rag_prepare.add_argument("--json", action="store_true")
+    project_candidate_evaluate = commands.add_parser("project-candidate-evaluate", help="evaluate a project candidate")
+    project_candidate_evaluate.add_argument("--project", type=Path, required=True)
+    project_candidate_evaluate.add_argument("--candidate", type=Path, required=True)
+    project_candidate_evaluate.add_argument("--golden", type=Path, required=True)
+    project_candidate_evaluate.add_argument("--candidate-id")
+    project_candidate_evaluate.add_argument("--snapshot", type=Path)
+    project_candidate_evaluate.add_argument("--thresholds", type=Path)
+    project_candidate_evaluate.add_argument("--top-k", type=int, default=5)
+    project_candidate_evaluate.add_argument("--adapter", default=None)
+    project_candidate_evaluate.add_argument("--runtime-root", type=Path)
+    project_candidate_evaluate.add_argument("--response-receipt", type=Path)
+    project_candidate_evaluate.add_argument("--idempotency-key")
+    project_candidate_evaluate.add_argument("--expected-revision", type=int)
+    project_candidate_evaluate.add_argument("--now")
+    project_candidate_evaluate.add_argument("--json", action="store_true")
+    project_dependency = commands.add_parser(
+        "project-dependency-mitigation", help="validate dependency mitigation evidence"
+    )
+    project_dependency.add_argument("--raw-audit", type=Path, required=True)
+    project_dependency.add_argument("--mitigation", type=Path, required=True)
+    project_dependency.add_argument("--now")
+    project_dependency.add_argument("--json", action="store_true")
+    project_enrich_dispatch = commands.add_parser("project-enrichment-dispatch", help="dispatch external enrichment")
+    project_enrich_dispatch.add_argument("--project", type=Path, required=True)
+    project_enrich_dispatch.add_argument("--input", type=Path, required=True)
+    project_enrich_dispatch.add_argument("--idempotency-key")
+    project_enrich_dispatch.add_argument("--expected-revision", type=int)
+    project_enrich_dispatch.add_argument("--now")
+    project_enrich_dispatch.add_argument("--json", action="store_true")
+    project_enrich_inspect = commands.add_parser("project-enrichment-inspect", help="inspect external enrichment")
+    project_enrich_inspect.add_argument("--project", type=Path, required=True)
+    project_enrich_inspect.add_argument("--request-id", required=True)
+    project_enrich_inspect.add_argument("--json", action="store_true")
+    project_enrich_submit = commands.add_parser("project-enrichment-submit", help="submit external enrichment receipt")
+    project_enrich_submit.add_argument("--project", type=Path, required=True)
+    project_enrich_submit.add_argument("--request-id", required=True)
+    project_enrich_submit.add_argument("--input", type=Path, required=True)
+    project_enrich_submit.add_argument("--idempotency-key")
+    project_enrich_submit.add_argument("--expected-revision", type=int)
+    project_enrich_submit.add_argument("--now")
+    project_enrich_submit.add_argument("--json", action="store_true")
+    project_enrich_timeout = commands.add_parser("project-enrichment-timeout", help="timeout external enrichment")
+    project_enrich_timeout.add_argument("--project", type=Path, required=True)
+    project_enrich_timeout.add_argument("--request-id", required=True)
+    project_enrich_timeout.add_argument("--idempotency-key")
+    project_enrich_timeout.add_argument("--expected-revision", type=int)
+    project_enrich_timeout.add_argument("--now")
+    project_enrich_timeout.add_argument("--json", action="store_true")
+    project_enrich_retry = commands.add_parser("project-enrichment-retry", help="retry external enrichment")
+    project_enrich_retry.add_argument("--project", type=Path, required=True)
+    project_enrich_retry.add_argument("--request-id", required=True)
+    project_enrich_retry.add_argument("--idempotency-key")
+    project_enrich_retry.add_argument("--expected-revision", type=int)
+    project_enrich_retry.add_argument("--now")
+    project_enrich_retry.add_argument("--json", action="store_true")
+    project_delegate = commands.add_parser("project-delegate", help="create scoped factual delegation")
+    project_delegate.add_argument("--project", type=Path, required=True)
+    project_delegate.add_argument("--input", type=Path, required=True)
+    project_delegate.add_argument("--idempotency-key")
+    project_delegate.add_argument("--expected-revision", type=int)
+    project_delegate.add_argument("--now")
+    project_delegate.add_argument("--json", action="store_true")
+    project_delegate_revoke = commands.add_parser("project-delegate-revoke", help="revoke factual delegation")
+    project_delegate_revoke.add_argument("--project", type=Path, required=True)
+    project_delegate_revoke.add_argument("--authorization-id", required=True)
+    project_delegate_revoke.add_argument("--reason", default="operator")
+    project_delegate_revoke.add_argument("--idempotency-key")
+    project_delegate_revoke.add_argument("--expected-revision", type=int)
+    project_delegate_revoke.add_argument("--now")
+    project_delegate_revoke.add_argument("--json", action="store_true")
+    project_delegate_authorize = commands.add_parser("project-delegate-authorize", help="authorize one factual change")
+    project_delegate_authorize.add_argument("--project", type=Path, required=True)
+    project_delegate_authorize.add_argument("--change-id", required=True)
+    project_delegate_authorize.add_argument("--authorization-id", required=True)
+    project_delegate_authorize.add_argument("--idempotency-key")
+    project_delegate_authorize.add_argument("--expected-revision", type=int)
+    project_delegate_authorize.add_argument("--now")
+    project_delegate_authorize.add_argument("--json", action="store_true")
+    project_health = commands.add_parser("project-health", help="inspect project health")
+    project_health.add_argument("--project", type=Path, required=True)
+    project_health.add_argument("--queue", type=Path)
+    project_health.add_argument("--max-missed-cycles", type=int, default=None)
+    project_health.add_argument("--now")
+    project_health.add_argument("--json", action="store_true")
+    project_recovery = commands.add_parser("project-recovery", help="inspect project recovery")
+    project_recovery.add_argument("--project", type=Path, required=True)
+    project_recovery.add_argument("--json", action="store_true")
+    project_recovery_run = commands.add_parser("project-recovery-run", help="recover an interrupted project activation")
+    project_recovery_run.add_argument("--project", type=Path, required=True)
+    project_recovery_run.add_argument("--idempotency-key")
+    project_recovery_run.add_argument("--expected-revision", type=int)
+    project_recovery_run.add_argument("--json", action="store_true")
+    project_backup = commands.add_parser("project-backup", help="create a project backup")
+    project_backup.add_argument("--project", type=Path, required=True)
+    project_backup.add_argument("--destination", type=Path, required=True)
+    project_backup.add_argument("--idempotency-key")
+    project_backup.add_argument("--expected-revision", type=int)
+    project_backup.add_argument("--now")
+    project_backup.add_argument("--json", action="store_true")
+    project_backup_verify = commands.add_parser("project-backup-verify", help="verify a project backup")
+    project_backup_verify.add_argument("--backup", type=Path, required=True)
+    project_backup_verify.add_argument("--json", action="store_true")
+    project_restore = commands.add_parser("project-restore", help="restore a project backup in isolation")
+    project_restore.add_argument("--backup", type=Path, required=True)
+    project_restore.add_argument("--target", type=Path, required=True)
+    project_restore.add_argument("--current", type=Path)
+    project_restore.add_argument("--idempotency-key")
+    project_restore.add_argument("--expected-revision", type=int)
+    project_restore.add_argument("--now")
+    project_restore.add_argument("--json", action="store_true")
+    project_preset = commands.add_parser("project-preset", help="load or attach a project preset")
+    project_preset.add_argument("--project", type=Path)
+    project_preset.add_argument("--preset", required=True)
+    project_preset.add_argument("--idempotency-key")
+    project_preset.add_argument("--expected-revision", type=int)
+    project_preset.add_argument("--now")
+    project_preset.add_argument("--json", action="store_true")
+    project_preset_candidates = commands.add_parser(
+        "project-preset-candidates", help="generate preset golden candidates"
+    )
+    project_preset_candidates.add_argument("--preset", required=True)
+    project_preset_candidates.add_argument("--theme")
+    project_preset_candidates.add_argument("--json", action="store_true")
+    supervisor_run = commands.add_parser("supervisor-run", help="poll a project supervisor once")
+    supervisor_run.add_argument("--project", type=Path, required=True)
+    supervisor_run.add_argument("--source", type=Path)
+    supervisor_run.add_argument("--source-id", default="source-fixture")
+    supervisor_run.add_argument("--queue", type=Path)
+    supervisor_run.add_argument("--input", type=Path)
+    supervisor_run.add_argument("--max-missed-cycles", type=int, default=None)
+    supervisor_run.add_argument("--idempotency-key")
+    supervisor_run.add_argument("--expected-revision", type=int)
+    supervisor_run.add_argument("--now")
+    supervisor_run.add_argument("--json", action="store_true")
+    supervisor_stop = commands.add_parser("supervisor-stop", help="stop project supervisor")
+    supervisor_stop.add_argument("--project", type=Path, required=True)
+    supervisor_stop.add_argument("--reason", default="operator")
+    supervisor_stop.add_argument("--idempotency-key")
+    supervisor_stop.add_argument("--expected-revision", type=int)
+    supervisor_stop.add_argument("--now")
+    supervisor_stop.add_argument("--json", action="store_true")
+    supervisor_resume = commands.add_parser("supervisor-resume", help="resume project supervisor")
+    supervisor_resume.add_argument("--project", type=Path, required=True)
+    supervisor_resume.add_argument("--idempotency-key")
+    supervisor_resume.add_argument("--expected-revision", type=int)
+    supervisor_resume.add_argument("--now")
+    supervisor_resume.add_argument("--json", action="store_true")
     lifecycle_status = commands.add_parser("lifecycle-status", help="show the versioned lifecycle status")
     lifecycle_status.add_argument("--package", type=Path, required=True)
     lifecycle_status.add_argument("--runtime-root", type=Path)
@@ -424,6 +812,35 @@ def _layers_from_args(args: argparse.Namespace) -> tuple[str, ...]:
     return tuple(values) if values else ("conceptual", "factual")
 
 
+def _read_input_file(path: Path | None) -> dict[str, object]:
+    if path is None:
+        return {}
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError("--input must contain a JSON object")
+    return value
+
+
+def _new_result_exit(result: dict[str, object]) -> int:
+    if result.get("ok"):
+        return 0
+    outcome = result.get("outcome")
+    if outcome == "needs_input":
+        return 2
+    if outcome == "blocked":
+        return 3
+    return 1
+
+
+def _print_new_result(result: dict[str, object]) -> int:
+    print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+    return _new_result_exit(result)
+
+
+def _recovery_result(project: Path, *, run: bool) -> dict[str, object]:
+    return recover_project_activation(project) if run else inspect_project_recovery(project)
+
+
 def _dispatch(args: argparse.Namespace) -> int:
     if args.command == "skill":
         if args.skill_command != "path":
@@ -439,6 +856,391 @@ def _dispatch(args: argparse.Namespace) -> int:
         result = LifecycleFacade(args.package, runtime_root=args.runtime_root).status()
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True) if args.json else result)
         return 0 if result.get("ok") else 1
+    if args.command == "init-start":
+        preset = load_project_preset(args.preset) if args.preset else None
+        result = start_project_init(
+            args.project,
+            _read_input_file(args.input),
+            preset={"id": preset["id"], "version": preset["version"]} if preset else None,
+            expected_revision=args.expected_revision,
+            idempotency_key=args.idempotency_key,
+            now=args.now,
+        )
+        return _print_new_result(result)
+    if args.command == "init-status":
+        return _print_new_result(inspect_project_init(args.project, session_id=args.session_id))
+    if args.command == "init-answer":
+        body = _read_input_file(args.input)
+        result = answer_project_init(
+            args.project,
+            body,
+            expected_revision=args.expected_revision,
+            idempotency_key=args.idempotency_key,
+            now=args.now,
+        )
+        return _print_new_result(result)
+    if args.command == "init-finalize":
+        result = finalize_project_init(
+            args.project,
+            _read_input_file(args.input),
+            expected_revision=args.expected_revision,
+            idempotency_key=args.idempotency_key,
+            now=args.now,
+        )
+        return _print_new_result(result)
+    if args.command == "project-inspect":
+        return _print_new_result(inspect_project(args.project))
+    if args.command == "project-adopt":
+        return _print_new_result(
+            adopt_project_package(
+                args.project,
+                args.package,
+                dry_run=args.dry_run,
+                backup=not args.no_backup,
+                expected_revision=args.expected_revision,
+                idempotency_key=args.idempotency_key,
+                now=args.now,
+            )
+        )
+    if args.command == "project-source-govern":
+        return _print_new_result(
+            register_source_governance(
+                args.project,
+                _read_input_file(args.input),
+                readmit=args.readmit,
+                expected_revision=args.expected_revision,
+                idempotency_key=args.idempotency_key,
+                now=args.now,
+            )
+        )
+    if args.command == "project-source-ingest":
+        return _print_new_result(
+            ingest_external_transcription(
+                args.project,
+                args.source_id,
+                args.input,
+                video_url=args.video_url,
+                provider=args.provider,
+                permission_ref=args.permission_ref,
+                expected_revision=args.expected_revision,
+                idempotency_key=args.idempotency_key,
+                now=args.now,
+            )
+        )
+    if args.command == "project-source-revoke":
+        return _print_new_result(
+            revoke_project_source(
+                args.project,
+                args.source_id,
+                reason=args.reason,
+                expected_revision=args.expected_revision,
+                idempotency_key=args.idempotency_key,
+                now=args.now,
+            )
+        )
+    if args.command == "project-source-use":
+        return _print_new_result(
+            source_use_decision(args.project, args.source_id, args.purpose, region=args.region, now=args.now)
+        )
+    if args.command == "project-evidence-query":
+        filters = _read_input_file(args.filters) if args.filters else None
+        return _print_new_result(
+            query_project_evidence(
+                args.project,
+                args.query,
+                filters=filters,
+                session_id=args.session_id,
+                max_results=args.max_results,
+                now=args.now,
+            )
+        )
+    if args.command == "project-claim-record":
+        return _print_new_result(
+            record_project_claim(
+                args.project,
+                _read_input_file(args.input),
+                expected_revision=args.expected_revision,
+                idempotency_key=args.idempotency_key,
+                now=args.now,
+            )
+        )
+    if args.command == "project-conflict-record":
+        return _print_new_result(
+            record_project_conflict(
+                args.project,
+                _read_input_file(args.input),
+                expected_revision=args.expected_revision,
+                idempotency_key=args.idempotency_key,
+                now=args.now,
+            )
+        )
+    if args.command == "project-change-propose":
+        return _print_new_result(
+            propose_project_change(
+                args.project,
+                _read_input_file(args.input),
+                expected_revision=args.expected_revision,
+                idempotency_key=args.idempotency_key,
+                now=args.now,
+            )
+        )
+    if args.command == "project-change-inspect":
+        return _print_new_result(inspect_project_change(args.project, args.change_id))
+    if args.command == "project-change-prepare":
+        return _print_new_result(
+            prepare_project_change(
+                args.project,
+                args.change_id,
+                expected_revision=args.expected_revision,
+                idempotency_key=args.idempotency_key,
+                now=args.now,
+            )
+        )
+    if args.command == "project-change-activate":
+        result = activate_project_change(
+            args.project,
+            args.change_id,
+            expected_revision=args.expected_revision,
+            authorization_id=args.authorization_id,
+            manual_reviewed=args.manual_reviewed,
+            idempotency_key=args.idempotency_key,
+            now=args.now,
+        )
+        return _print_new_result(result)
+    if args.command == "project-rollback":
+        return _print_new_result(
+            rollback_project(
+                args.project,
+                args.revision_id,
+                expected_revision=args.expected_revision,
+                idempotency_key=args.idempotency_key,
+                now=args.now,
+            )
+        )
+    if args.command == "project-derivatives":
+        return _print_new_result(validate_project_derivatives(args.project, args.revision_id))
+    if args.command == "project-rag-prepare":
+        return _print_new_result(
+            prepare_project_rag_candidate(
+                args.project,
+                args.candidate,
+                profiles=tuple(args.profiles),
+                selected_profile=args.selected_profile,
+                language=args.language,
+                previous_snapshot=args.previous_snapshot,
+                verify_query=args.verify_query,
+                verify_adapter=args.verify_adapter,
+                runtime_root=args.runtime_root,
+                expected_revision=args.expected_revision,
+                idempotency_key=args.idempotency_key,
+                now=args.now,
+            )
+        )
+    if args.command == "project-candidate-evaluate":
+        thresholds = _read_input_file(args.thresholds) if args.thresholds else None
+        return _print_new_result(
+            evaluate_project_candidate(
+                args.project,
+                args.candidate,
+                args.golden,
+                candidate_id=args.candidate_id,
+                snapshot=args.snapshot,
+                thresholds=thresholds,
+                top_k=args.top_k,
+                adapter=args.adapter,
+                runtime_root=args.runtime_root,
+                response_receipt=args.response_receipt,
+                expected_revision=args.expected_revision,
+                idempotency_key=args.idempotency_key,
+                now=args.now,
+            )
+        )
+    if args.command == "project-dependency-mitigation":
+        return _print_new_result(validate_dependency_mitigation(args.raw_audit, args.mitigation, now=args.now))
+    if args.command == "project-enrichment-dispatch":
+        return _print_new_result(
+            dispatch_project_enrichment(
+                args.project,
+                _read_input_file(args.input),
+                expected_revision=args.expected_revision,
+                idempotency_key=args.idempotency_key,
+                now=args.now,
+            )
+        )
+    if args.command == "project-enrichment-inspect":
+        return _print_new_result(inspect_project_enrichment(args.project, args.request_id))
+    if args.command == "project-enrichment-submit":
+        return _print_new_result(
+            submit_project_enrichment(
+                args.project,
+                args.request_id,
+                _read_input_file(args.input),
+                expected_revision=args.expected_revision,
+                idempotency_key=args.idempotency_key,
+                now=args.now,
+            )
+        )
+    if args.command == "project-enrichment-timeout":
+        return _print_new_result(
+            timeout_project_enrichment(
+                args.project,
+                args.request_id,
+                expected_revision=args.expected_revision,
+                idempotency_key=args.idempotency_key,
+                now=args.now,
+            )
+        )
+    if args.command == "project-enrichment-retry":
+        return _print_new_result(
+            retry_project_enrichment(
+                args.project,
+                args.request_id,
+                expected_revision=args.expected_revision,
+                idempotency_key=args.idempotency_key,
+                now=args.now,
+            )
+        )
+    if args.command == "project-delegate":
+        return _print_new_result(
+            create_delegated_authorization(
+                args.project,
+                _read_input_file(args.input),
+                expected_revision=args.expected_revision,
+                idempotency_key=args.idempotency_key,
+                now=args.now,
+            )
+        )
+    if args.command == "project-delegate-revoke":
+        return _print_new_result(
+            revoke_delegated_authorization(
+                args.project,
+                args.authorization_id,
+                reason=args.reason,
+                expected_revision=args.expected_revision,
+                idempotency_key=args.idempotency_key,
+                now=args.now,
+            )
+        )
+    if args.command == "project-delegate-authorize":
+        return _print_new_result(
+            authorize_factual_change(
+                args.project,
+                args.change_id,
+                args.authorization_id,
+                expected_revision=args.expected_revision,
+                idempotency_key=args.idempotency_key,
+                now=args.now,
+            )
+        )
+    if args.command == "project-health":
+        return _print_new_result(
+            inspect_project_health(
+                args.project, queue_path=args.queue, max_missed_cycles=args.max_missed_cycles, now=args.now
+            )
+        )
+    if args.command == "project-recovery":
+        return _print_new_result(_recovery_result(args.project, run=False))
+    if args.command == "project-recovery-run":
+        return _print_new_result(
+            recover_project_activation(
+                args.project,
+                expected_revision=args.expected_revision,
+                idempotency_key=args.idempotency_key,
+            )
+        )
+    if args.command == "project-backup":
+        return _print_new_result(
+            backup_project(
+                args.project,
+                args.destination,
+                expected_revision=args.expected_revision,
+                idempotency_key=args.idempotency_key,
+                now=args.now,
+            )
+        )
+    if args.command == "project-backup-verify":
+        return _print_new_result(verify_project_backup(args.backup))
+    if args.command == "project-restore":
+        return _print_new_result(
+            restore_project(
+                args.backup,
+                args.target,
+                current_root=args.current,
+                expected_revision=args.expected_revision,
+                idempotency_key=args.idempotency_key,
+                now=args.now,
+            )
+        )
+    if args.command == "project-preset":
+        if args.project:
+            return _print_new_result(
+                apply_project_preset(
+                    args.project,
+                    args.preset,
+                    expected_revision=args.expected_revision,
+                    idempotency_key=args.idempotency_key,
+                    now=args.now,
+                )
+            )
+        return _print_new_result(
+            {
+                "schema_version": 1,
+                "ok": True,
+                "outcome": "unchanged",
+                "data": {"preset": load_project_preset(args.preset)},
+                "errors": [],
+                "next_actions": [],
+            }
+        )
+    if args.command == "project-preset-candidates":
+        print(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "ok": True,
+                    "preset": args.preset,
+                    "reviewed": False,
+                    "cases": project_preset_golden_candidates(args.preset, theme=args.theme),
+                },
+                indent=2,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+        return 0
+    if args.command == "supervisor-run":
+        return _print_new_result(
+            run_project_supervisor_once(
+                args.project,
+                source_path=args.source,
+                source_id=args.source_id,
+                queue_path=args.queue,
+                work=_read_input_file(args.input),
+                max_missed_cycles=args.max_missed_cycles,
+                expected_revision=args.expected_revision,
+                idempotency_key=args.idempotency_key,
+                now=args.now,
+            )
+        )
+    if args.command == "supervisor-stop":
+        return _print_new_result(
+            stop_project_supervisor(
+                args.project,
+                reason=args.reason,
+                expected_revision=args.expected_revision,
+                idempotency_key=args.idempotency_key,
+                now=args.now,
+            )
+        )
+    if args.command == "supervisor-resume":
+        return _print_new_result(
+            resume_project_supervisor(
+                args.project,
+                expected_revision=args.expected_revision,
+                idempotency_key=args.idempotency_key,
+                now=args.now,
+            )
+        )
     if args.command == "doctor":
         report = run_doctor(args.root)
         if args.json:
@@ -802,6 +1604,10 @@ def _dispatch(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     raw_argv = list(sys.argv[1:] if argv is None else argv)
+    if len(raw_argv) == 2 and raw_argv[0] in _CANONICAL_GROUP_HELP and raw_argv[1] in {"-h", "--help"}:
+        print(f"usage: docops {_CANONICAL_GROUP_HELP[raw_argv[0]]}")
+        print("Use a concrete subcommand followed by --help for its options.")
+        return 0
     args = build_parser().parse_args(_expand_canonical_argv(raw_argv))
     try:
         return _dispatch(args)

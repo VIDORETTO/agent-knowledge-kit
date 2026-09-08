@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DOCOPS initialization session",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "id", "created_at", "content_hash", "session_id", "project_id", "session_revision", "status", "preset", "requested_deliverables", "answers", "decisions", "pending_questions", "finalized_revision_id"],
+  "properties": {
+    "schema_version": {"const": 1, "type": "integer"},
+    "kind": {"const": "init_session", "type": "string"},
+    "id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "created_at": {"type": "string", "minLength": 20},
+    "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "session_id": {"type": "string", "minLength": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "session_revision": {"type": "integer", "minimum": 0},
+    "status": {"enum": ["collecting", "draft_ready", "finalized", "cancelled"], "type": "string"},
+    "preset": {"type": ["object", "null"]},
+    "requested_deliverables": {"type": "array", "items": {"enum": ["knowledge", "course", "page"], "type": "string"}, "uniqueItems": true},
+    "answers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["question_key", "value", "origin", "evidence_ref"],
+        "properties": {
+          "question_key": {"type": "string", "minLength": 1},
+          "value": {},
+          "origin": {"enum": ["user_explicit", "imported_confirmed", "agent_proposed", "preset_default"], "type": "string"},
+          "evidence_ref": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["decision_id", "key", "status", "actor", "evidence_ref", "supersedes", "created_at"],
+        "properties": {
+          "decision_id": {"type": "string", "minLength": 1},
+          "key": {"type": "string", "minLength": 1},
+          "value": {},
+          "status": {"enum": ["pending", "proposed", "confirmed", "superseded", "rejected"], "type": "string"},
+          "actor": {"type": ["string", "null"]},
+          "evidence_ref": {"type": ["string", "null"]},
+          "supersedes": {"type": ["string", "null"]},
+          "created_at": {"type": "string", "minLength": 20}
+        }
+      }
+    },
+    "pending_questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "prompt", "reason", "blocks", "required"],
+        "properties": {
+          "key": {"type": "string", "minLength": 1},
+          "prompt": {"type": "string", "minLength": 1},
+          "reason": {"type": "string", "minLength": 1},
+          "blocks": {"type": "array", "items": {"enum": ["draft", "course", "page", "ingestion", "activation", "public_distribution"], "type": "string"}},
+          "required": {"type": "boolean"}
+        }
+      }
+    },
+    "finalized_revision_id": {"type": ["string", "null"]},
+    "preset_suggestions": {"type": "array"},
+    "extensions": {"type": "object"}
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DOCOPS project policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "id", "created_at", "content_hash", "revision_id", "project_id", "publication_mode", "delegation_ref", "private_draft_only", "rights_policy_revision", "privacy_policy_revision"],
+  "properties": {
+    "schema_version": {"const": 1, "type": "integer"},
+    "kind": {"const": "policy", "type": "string"},
+    "id": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "minLength": 20},
+    "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "revision_id": {"type": "string", "minLength": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "publication_mode": {"enum": ["manual", "trusted_factual"], "type": "string"},
+    "delegation_ref": {"type": ["string", "null"]},
+    "private_draft_only": {"type": "boolean"},
+    "rights_policy_revision": {"type": "string", "minLength": 1},
+    "privacy_policy_revision": {"type": "string", "minLength": 1},
+    "extensions": {"type": "object"}
+  }
+}

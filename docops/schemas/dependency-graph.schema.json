@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DOCOPS project dependency graph",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "id", "created_at", "content_hash", "nodes", "edges", "unknown_dependencies"],
+  "properties": {
+    "schema_version": {"const": 1, "type": "integer"},
+    "kind": {"const": "dependency_graph", "type": "string"},
+    "id": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "minLength": 20},
+    "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "nodes": {"type": "array", "items": {"type": "object"}},
+    "edges": {"type": "array", "items": {"type": "object"}},
+    "unknown_dependencies": {"type": "boolean"},
+    "extensions": {"type": "object"}
+  }
+}

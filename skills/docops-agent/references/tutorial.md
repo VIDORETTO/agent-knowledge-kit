@@ -73,5 +73,5 @@ corpus adquirido, credenciais, índices locais ou runtime privado. Se uma fonte
 perder autorização, revogue-a e confirme que readers não retornam seus trechos.
 
 Para execução recorrente, configure o `reconcile` e o `work` conforme
-[scheduler-runbooks.md](scheduler-runbooks.md); `work --loop` sozinho não
+[scheduler-runbooks.md](scheduler-runbooks.md); `work --once` sozinho não
 descobre arquivos novos.

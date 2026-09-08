@@ -48,6 +48,26 @@ _SCHEMA_FILES = {
     "feedback-report": "feedback-report.schema.json",
     "investigation": "investigation.schema.json",
     "lifecycle-status": "lifecycle-status.schema.json",
+    "project": "project.schema.json",
+    "init-session": "init-session.schema.json",
+    "project-revision": "project-revision.schema.json",
+    "brief": "brief.schema.json",
+    "course": "course.schema.json",
+    "page": "page.schema.json",
+    "decisions": "decisions.schema.json",
+    "policy": "policy.schema.json",
+    "dependencies": "dependencies.schema.json",
+    "source-governance": "source-governance.schema.json",
+    "claim": "claim.schema.json",
+    "conflict": "conflict.schema.json",
+    "change-proposal": "change-proposal.schema.json",
+    "impact-report": "impact-report.schema.json",
+    "dependency-graph": "dependency-graph.schema.json",
+    "backup-manifest": "backup-manifest.schema.json",
+    "project-enrichment-request": "project-enrichment-request.schema.json",
+    "delegated-authorization": "delegated-authorization.schema.json",
+    "supervisor-status": "supervisor-status.schema.json",
+    "project-rag-candidate-receipt": "project-rag-candidate-receipt.schema.json",
 }
 
 
@@ -132,6 +152,25 @@ def _resolve_ref(schema: Mapping[str, Any], reference: str) -> Mapping[str, Any]
 def _validate(
     value: Any, rule: Mapping[str, Any], root_schema: Mapping[str, Any], path: str, errors: list[dict[str, str]]
 ) -> None:
+    for combinator in ("oneOf", "anyOf"):
+        choices = rule.get(combinator)
+        if isinstance(choices, list) and choices:
+            valid = 0
+            choice_errors: list[list[dict[str, str]]] = []
+            for choice in choices:
+                if not isinstance(choice, Mapping):
+                    continue
+                local: list[dict[str, str]] = []
+                _validate(value, choice, root_schema, path, local)
+                if not local:
+                    valid += 1
+                choice_errors.append(local)
+            required_valid = 1
+            combinator_ok = valid == required_valid if combinator == "oneOf" else valid >= required_valid
+            if not combinator_ok:
+                _error(errors, "contract_combinator", path, f"value does not satisfy {combinator}")
+            return
+
     reference = rule.get("$ref")
     if isinstance(reference, str):
         target = _resolve_ref(root_schema, reference)
@@ -168,6 +207,16 @@ def _validate(
             for name, child_rule in properties.items():
                 if name in value and isinstance(child_rule, Mapping):
                     _validate(value[name], child_rule, root_schema, f"{path}.{name}" if path else str(name), errors)
+            if rule.get("additionalProperties") is False:
+                allowed = {str(name) for name in properties}
+                for name in value:
+                    if str(name) not in allowed:
+                        _error(
+                            errors,
+                            "contract_additional_property",
+                            f"{path}.{name}" if path else str(name),
+                            "field is not declared by the contract; put namespaced data under extensions",
+                        )
     if isinstance(value, list) and isinstance(rule.get("items"), Mapping):
         for index, item in enumerate(value):
             _validate(item, rule["items"], root_schema, f"{path}[{index}]", errors)
@@ -175,6 +224,27 @@ def _validate(
         _error(errors, "contract_min_length", path, "string is shorter than the minimum length")
     if isinstance(value, list) and isinstance(rule.get("minItems"), int) and len(value) < rule["minItems"]:
         _error(errors, "contract_min_items", path, "array has fewer items than the minimum")
+    if isinstance(value, list) and isinstance(rule.get("maxItems"), int) and len(value) > rule["maxItems"]:
+        _error(errors, "contract_max_items", path, "array has more items than the maximum")
+    if isinstance(value, list) and rule.get("uniqueItems") is True:
+        canonical = [json.dumps(item, ensure_ascii=False, sort_keys=True, separators=(",", ":")) for item in value]
+        if len(canonical) != len(set(canonical)):
+            _error(errors, "contract_unique_items", path, "array items must be unique")
+    if isinstance(value, str) and isinstance(rule.get("maxLength"), int) and len(value) > rule["maxLength"]:
+        _error(errors, "contract_max_length", path, "string is longer than the maximum length")
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        minimum = rule.get("minimum")
+        if isinstance(minimum, (int, float)) and value < minimum:
+            _error(errors, "contract_minimum", path, "number is below the minimum")
+        maximum = rule.get("maximum")
+        if isinstance(maximum, (int, float)) and value > maximum:
+            _error(errors, "contract_maximum", path, "number is above the maximum")
+    pattern = rule.get("pattern")
+    if isinstance(value, str) and isinstance(pattern, str):
+        import re
+
+        if re.search(pattern, value) is None:
+            _error(errors, "contract_pattern", path, "string does not match the required pattern")
 
 
 def validate_artifact(artifact: str, payload: Any) -> ContractResult:

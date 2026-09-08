@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DOCOPS project",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "id", "created_at", "content_hash", "project_id", "name", "active_project_revision_id", "working_project_revision_id", "package_locator", "write_revision", "visibility"],
+  "properties": {
+    "schema_version": {"const": 1, "type": "integer"},
+    "kind": {"const": "project", "type": "string"},
+    "id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "created_at": {"type": "string", "minLength": 20},
+    "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "project_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "name": {"type": ["string", "null"]},
+    "active_project_revision_id": {"type": ["string", "null"]},
+    "working_project_revision_id": {"type": ["string", "null"]},
+    "package_locator": {"type": ["string", "null"]},
+    "write_revision": {"type": "integer", "minimum": 0},
+    "visibility": {"const": "private", "type": "string"},
+    "extensions": {"type": "object"}
+  }
+}

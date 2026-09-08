@@ -1,3 +1,39 @@
+# Planejamento master de evolução — 2026-09-07
+
+Escopo: estudar `docs/MASTER-PLANNING-BRIEF.md` e o checkout atual; entregar
+diagnóstico, especificações, fases, tickets locais e plano TDD. Somente documentos.
+Preservar alterações anteriores deste arquivo e o briefing ainda não versionado.
+
+- [x] Ler briefing, instruções, lessons e skills to-spec/to-tickets/tdd.
+- [x] Confirmar branch, SHA, remoto e estado inicial.
+- [x] Confrontar as 12 hipóteses com código, contratos e testes.
+- [x] Especificar arquitetura, init, estado, governança, RAG e preset Mercado Livre.
+- [x] Criar roadmap, tickets verticais com dependências e guia TDD.
+- [x] Verificar cobertura, referências e consistência; registrar limites da evidência.
+
+Plano conferido contra o pedido: reutilizar o lifecycle existente; não implementar,
+publicar, instalar scheduler nem alterar corpus, índice ou versão ativa. Tickets
+locais são a entrega solicitada, sem publicação em tracker externo.
+
+## Revisão desta entrega
+
+Entrega: docs/MASTER-PLAN.md, docs/MASTER-IMPROVEMENT-PLAN.md e
+docs/master-evolution/ com SPEC, contratos, evidências, qualidade, preset,
+roadmap, guia TDD e 24 tickets individuais distribuídos em seis fases (P0–P5).
+Diagnóstico cobre 12 hipóteses; roadmap mapeia as 14 perguntas do brief.
+
+Verificação: dois runs focados com 50 passed (233,58s) e 42 passed (59,90s),
+com sobreposição explicitada em TDD-EXECUTION.md. Checker documental passou;
+o defeito preexistente de flags no guia foi confirmado por help da CLI e
+registrado para T01, sem correção de runtime nesta etapa. Revisão cruzada
+alinhou permissões por finalidade, precisão de datas, enum de claims/conflitos,
+recuperação de composição e dependência de P5 nos gates de distribuição.
+
+Nenhuma implementação, commit, push, publicação, scheduler, captura de fontes
+reais ou alteração de corpus/índice ativo foi realizada. Métricas históricas,
+CVEs atuais, direitos comerciais e benchmark multilíngue não foram apresentados
+como evidência nova. O briefing e alterações anteriores em todo.md foram preservados.
+
 # Análise comparativa para consolidação da main — 2026-09-05
 
 Objetivo: comparar o baseline `main`, o working tree local e
@@ -5,6 +41,61 @@ Objetivo: comparar o baseline `main`, o working tree local e
 contínuo e uso agente-first das skills; produzir somente documentação de
 especificação, tickets e TDD. Nenhuma implementação, merge, rebase, commit,
 push, publicação, reindexação ou alteração de estado ativo faz parte do escopo.
+
+## Auditoria do produto agent-first — 2026-09-07
+
+Objetivo: avaliar o estado atual do projeto como sistema autônomo de geração de
+skill, atualização contínua e consulta RAG para agentes de IA; separar o que é
+comprovado no código/gates do que ainda depende de harness, política ou ação
+humana.
+
+### Plano executável
+
+- [x] Confirmar checkout, branch, remoto, instruções e lessons relevantes.
+- [x] Mapear o fluxo completo: fonte → skill/router → candidata → publicação → reader/RAG.
+- [x] Auditar autonomia, atualização incremental, remoção, citações, segurança,
+  observabilidade e pontos de falha.
+- [x] Rodar verificações proporcionais: suíte, lint/contratos e gates de integração
+  disponíveis no snapshot atual.
+- [x] Comparar a evidência atual com os objetivos do produto e atribuir nota por eixo.
+- [x] Registrar revisão, limitações, riscos prioritários e veredito final.
+
+### Revisão e evidências
+
+- Checkout auditado: branch `codex/main-consolidation`, commit `c438c82`; a
+  alteração deste arquivo é somente o registro desta auditoria.
+- Suíte no ambiente do projeto (`.venv\Scripts\python.exe`): **373 passed,
+  3 skipped**, sem falhas. O primeiro comando usou o Python global e produziu
+  três falsos negativos por ambiente; os três testes foram repetidos no `.venv`
+  e passaram.
+- Ruff, contratos, matriz de suporte, seams públicos, documentação como módulo,
+  auditoria de release e configuração passaram. O gate registrado para o mesmo
+  commit tem 22/22 estágios verdes, incluindo wheel, clean clone, MCP real,
+  crash/recovery, revogação e concorrência RAG.
+- O produto é forte como pipeline local/single-writer operado por agente: gera
+  skill/router, corpus normalizado, RAG híbrido com citação, snapshots pinned,
+  leases, checkpoints, candidatos, rollback e fila idempotente.
+- O produto ainda não é um serviço autônomo “zero usuário”: o arquivo sozinho
+  não dispara o ciclo; reconcile e worker dependem de scheduler externo, o CLI
+  expõe `work --once`, o fold-in conceitual depende de `book-to-skill` externo e
+  publicação exige candidate/approval/publish explícitos.
+- Limitações/riscos: perfil padrão de embedding é focado em inglês e PT-BR exige
+  perfil multilíngue + rebuild completo; o Golden RAG observado é pequeno e
+  sintético; o suporte declarado é Python 3.11–3.13; há quatro CVEs residuais
+  documentados do Chroma para o uso local permitido; `operations.py` é um
+  hotspot de manutenção.
+- Veredito: **8,2/10 técnico**, **8,8/10 para o escopo documentado agent-first**
+  e **6,4/10 para a promessa adicional de autoatualização totalmente autônoma
+  sem ação do usuário**. Estado: candidato técnico sólido/estável em execução
+  local preparada, ainda não produto autônomo de produção.
+
+## Briefing master para evolução do sistema — 2026-09-07
+
+- [x] Consolidar as mensagens iniciais e a correção de escopo do caso Mercado Livre.
+- [x] Separar requisitos do núcleo genérico, do `init`, do curso, da página e do domínio.
+- [x] Criar briefing Markdown para estudo externo e planejamento master, sem implementação.
+- [x] Revisar requisitos de fontes, transcrições, RAG, atualização, versionamento e governança.
+- [x] Incluir no briefing os problemas atuais, lacunas e o pedido de um documento de melhorias verificável.
 
 ## Plano
 
@@ -1217,3 +1308,161 @@ real.
   revisado seguem a allowlist documentada.
 - [x] Próximo passo externo: revisão humana de um commit limpo e CI vinculada
   ao digest antes de qualquer promoção.
+
+## Execução do planejamento master — T01–T24
+
+Escopo desta execução: implementar os contratos de `docs/MASTER-PLAN.md`,
+`docs/MASTER-IMPROVEMENT-PLAN.md` e `docs/master-evolution/` em ordem de
+dependências, preservando a API/lifecycle existentes. A validação usa somente
+fixtures sintéticas e diretórios temporários; não altera corpus/índice ativo,
+não publica, não instala scheduler e não inventa licença, credencial ou
+autorização comercial. Cada ticket exige uma fatia observável em seam pública,
+RED funcional registrado, GREEN mínimo, regressões, segurança/recuperação e
+evidência segura antes de ser marcado concluído.
+
+### Estado inicial e regras de execução
+
+- [x] Ler RTK, `AGENTS.md`, `tasks/lessons.md`, skill TDD, contratos, planos,
+  especificação, roadmap, TDD-EXECUTION e os 24 tickets.
+- [x] Confirmar checkout, branch, remoto, dirty state e ambiente Python antes
+  de alterar o runtime.
+- [ ] Registrar resultado do baseline executável sem confundir documentação
+  histórica com comportamento novo.
+- [ ] Executar uma fatia por vez na ordem topológica; atualizar este registro
+  após cada ticket, com comando, exit code, contagens e limitações.
+- [ ] Executar gates de fase e suíte completa; manter `schemas/` canônico e usar
+  `scripts/sync_schemas.py --write` para a cópia distribuída.
+- [ ] Revisar simplicidade, diff, segurança, rollback e recursos empacotados;
+  deixar pendências externas explicitamente bloqueadas.
+
+### P0 — baseline e contrato operacional
+
+- [ ] T01 — RED do checker para flag inválida; GREEN para flags válidas,
+  placeholders e propostas futuras; corrigir runbooks/aliases sem daemon;
+  validar documentação, wheel e regressões.
+
+### P1 — projeto privado e estado retomável
+
+- [ ] T02 — RED de init/retomada entre processos; GREEN para sessão persistida,
+  revisão esperada, idempotência e pergunta de intenção ambígua; validar
+  recusa sem sobrescrita e instruções distribuídas.
+- [ ] T03 — RED de finalização sem composição separada; GREEN para brief,
+  curso/página opcionais, projeções revisáveis, pendências e origem por ID;
+  validar ausência de preço/promessa inventada e edição divergente.
+- [ ] T04 — RED de adoção v1 sem seam de migração; GREEN para dry-run,
+  importação idempotente, backup/rollback e preservação de release/source IDs;
+  validar falha parcial, versão desconhecida e ausência de direitos inferidos.
+- [ ] Gate P1 — init completo em subprocessos distintos, contratos sincronizados,
+  API anterior verde, lint e `git diff --check`.
+
+### P2 — fontes, recuperação e qualidade governada
+
+- [ ] T05 — RED de direitos/vigência granulares; GREEN para política por uso,
+  região/datas/autor, unknown fail-closed e metadados persistidos; validar
+  aquisição incompleta sem retirada e invalidação de autorização.
+- [ ] T06 — RED de locator temporal da transcrição; GREEN para Markdown externo,
+  segmentos válidos, proveniência e derivado ligado; validar limites, prompt
+  injection tratado como dado e proibição de redistribuição indevida.
+- [ ] T07 — RED de filtro/isolamento no reader público; GREEN para elegibilidade,
+  refill limitado, locators e cache governado; validar projetos A/B, revogação
+  pós-cache e filtros inválidos.
+- [ ] T08 — RED de troca de perfil sem rebuild seguro; GREEN para comparação,
+  snapshot pinado, full rebuild e reader antigo durante falha; validar MCP real
+  com PT-BR e não alteração do default global.
+- [ ] T09 — RED de classificação/abstenção ausente; GREEN para norma, fato,
+  opinião, conflito, vigência/região e insufficient_evidence; validar prioridade
+  oficial, conflito explícito e citações próximas.
+- [ ] T10 — RED de avaliação sem Golden do domínio/casos críticos; GREEN para
+  Golden revisado, métricas com denominadores e bloqueio de regressão crítica;
+  validar candidata com Recall maior mas vazamento/revogação.
+- [ ] T11 — RED de preset acoplado/inexistente; GREEN para preset Mercado Livre
+  e neutro sobre protocolo comum, taxonomia e candidatos sintéticos; validar
+  ausência de claims comerciais reais e distinção da intenção do curso.
+- [ ] Gate P2 — fontes governadas, query citada/isolada, rebuild/revogação,
+  Golden revisado, contratos/documentação e regressões do RAG fixture.
+
+### P3 — mudanças, enriquecimento e derivados
+
+- [ ] T12 — RED de proposta sem impacto transitivo; GREEN para change/diff,
+  revisão base, dry-run e dependências por artefato; validar divergência sem
+  efeito e recomputação somente dos dependentes.
+- [ ] T13 — RED de revogação não transitiva; GREEN para tombstones e bloqueio
+  de source/claim/aula/página/cache/rollback; validar histórico preservado sem
+  ressuscitar conteúdo.
+- [ ] T14 — RED de dispatch externo não retomável; GREEN para request/ack,
+  timeout, retry, stale-base, correlação e idempotência; validar ausência de
+  harness/credencial, resultado duplicado e candidata ativa intacta.
+- [ ] T15 — RED de curso/página não avaliáveis; GREEN para derivados separados,
+  claims/provas, exercícios e pendências comerciais; validar edição localizada
+  e bloqueio de CTA/preço/garantia desconhecidos.
+- [ ] T16 — RED de promoção híbrida; GREEN para composição atômica, journal,
+  hash/manifest e recuperação velha ou nova inteira; validar falha antes/depois
+  do commit, dependências e revogações.
+- [ ] Gate P3 — change/impacto, enrichment, derivados e composição publicados
+  somente por gates existentes; rollback e leitura segura demonstrados.
+
+### P4 — operação confiável e distribuição local
+
+- [ ] T17 — RED de crash na última tentativa/lease longa; GREEN para estado
+  terminal recuperável, renewal/fencing/ownership e nenhum efeito duplicado;
+  validar subprocesso real e worker antigo sem confirmação.
+- [ ] T18 — RED de ausência de supervisor; GREEN para reconcile/worker polling,
+  agenda persistida, parada retomável, debounce e restart; validar origem
+  indisponível sem revogação e sem instalar scheduler.
+- [ ] T19 — RED de status sem incidente acionável; GREEN para health/lag,
+  incidentes deduplicados/fechados e redação; validar que diagnóstico não
+  muta, não expõe query/token/documento e respeita limiares.
+- [ ] T20 — RED de backup sem tombstones/recibos; GREEN para manifest/checksum,
+  backup consistente e restore isolado; validar checksum inválido, job em curso,
+  revogação preservada e não repetição de efeitos.
+- [ ] T21 — RED de mitigação expirada aceita; GREEN para auditoria bruta separada,
+  owner/prazo/threat-model/versão/advisory verificáveis e relógio injetável;
+  validar Python tolerado sem virar suportado.
+- [ ] T22 — RED de clean clone/wheel incompletos; GREEN para gates sequenciais,
+  recursos novos empacotados, matriz por perfil e cenário sintético core/MCP;
+  validar bundle sem corpus/cache/segredos e falha externa mantendo ativa.
+- [ ] Gate P4 — release gates completos e sequenciais, evidência vinculada ao
+  mesmo candidate, clean clone/wheel, recovery, backup e segurança.
+
+### P5 — autonomia factual restrita e piloto reproduzível
+
+- [ ] T23 — RED de delegação ampla/flag genérica; GREEN para receipt escopado,
+  prazo/orçamento/owner, revalidação e kill switch; validar factual elegível e
+  bloqueio de conflito, conceito, preço, licença, expiração e revogação.
+- [ ] T24 — RED do roteiro integrado; GREEN para piloto ML/neutro sintético,
+  init→consulta→mudança→crash→restore→delegação revogada; validar matriz de
+  evidências e separar prontidão técnica de autorização pública.
+- [ ] Gate P5/final — todas as fases e 24 tickets comprovados, limitações
+  externas registradas, relatório final e working tree revisado sem publicação.
+
+### Progresso verificado nesta execução
+
+Os requisitos abaixo são o status autoritativo desta execução; os itens
+descritivos acima permanecem como a especificação original dos critérios.
+
+- [x] Baseline, contratos, skill TDD, estado inicial e limitações foram registrados.
+- [x] P0: T01 e gate de contrato/documentação verificados.
+- [x] P1: T02, T03 e T04 verificados com persistência, adoção, backup e rollback.
+- [x] P2: T05, T06, T07, T08, T09, T10 e T11 verificados em fixtures; MCP real permanece externo.
+- [x] P3: T12, T13, T14, T15 e T16 verificados com diff, revogação, enrichment, derivados e recovery.
+- [x] P4: T17, T18, T19, T20, T21 e T22 verificados localmente; scheduler, CI multiplataforma e advisories upstream permanecem externos.
+- [x] P5: T23 e T24 verificados com delegação factual restrita e fixture provider-free.
+- [x] Schemas canônicos/distribuídos, documentação, seams, lint, compilação, segurança e regressões foram reexecutados; o gate core final terminou com 21/21 estágios, 6.440 passados, 70 skips explícitos, zero falhas e zero não executados.
+
+O status não concede autorização comercial, credencial, publicação ou uso do
+MCP/índice real. Resultados históricos anteriores permanecem separados e os
+detalhes RED/GREEN estão em
+`docs/master-evolution/IMPLEMENTATION-EVIDENCE.md`.
+
+### Revisão desta execução
+
+- Resultado: todas as fases P0–P5 e os 24 tickets têm implementação e evidência
+  local; o fixture provider-free e o runner core estão verdes.
+- Segurança/recuperação: governança fail-closed, revogação, journal de ativação,
+  fencing/leases, backup com checksum e snapshot isolado da fila foram exercitados.
+- Auditoria TDD final: propostas e defaults não confirmam decisões de produto;
+  segmentos estruturados de transcrição fora de ordem são rejeitados.
+- Limitações: o perfil full/MCP, rebuild do índice/corpus real, scheduler externo,
+  CI de outras plataformas, advisories upstream e autorização/credenciais
+  comerciais permanecem bloqueios explícitos; não são aceites técnicos
+  inferidos.

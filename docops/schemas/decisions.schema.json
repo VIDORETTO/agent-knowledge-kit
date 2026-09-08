@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DOCOPS project decisions",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "id", "created_at", "content_hash", "revision_id", "project_id", "items"],
+  "properties": {
+    "schema_version": {"const": 1, "type": "integer"},
+    "kind": {"const": "decisions", "type": "string"},
+    "id": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "minLength": 20},
+    "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "revision_id": {"type": "string", "minLength": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "items": {"type": "array", "items": {"type": "object"}},
+    "extensions": {"type": "object"}
+  }
+}

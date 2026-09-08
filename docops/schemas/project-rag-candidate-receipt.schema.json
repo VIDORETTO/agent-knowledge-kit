@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DOCOPS project RAG candidate receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "id", "created_at", "content_hash", "candidate_id", "project_id", "candidate_package_ref", "base_package_ref", "snapshot_id", "corpus_hash", "profile", "embedding_fingerprint", "model", "rebuild_required", "active_preserved", "publication_allowed", "evaluation_status"],
+  "properties": {
+    "schema_version": {"const": 1, "type": "integer"},
+    "kind": {"const": "rag_candidate_receipt", "type": "string"},
+    "id": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "minLength": 20},
+    "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "candidate_id": {"type": "string", "minLength": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "candidate_package_ref": {"type": "string", "minLength": 1},
+    "base_package_ref": {"type": ["object", "null"]},
+    "snapshot_id": {"type": "string", "minLength": 1},
+    "corpus_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "profile": {"type": "string", "minLength": 1},
+    "embedding_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "model": {"type": "object"},
+    "rebuild_required": {"type": "boolean"},
+    "active_preserved": {"const": true, "type": "boolean"},
+    "publication_allowed": {"const": false, "type": "boolean"},
+    "evaluation_status": {"enum": ["pending", "passed", "blocked"], "type": "string"},
+    "evaluation_hash": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "extensions": {"type": "object"}
+  }
+}

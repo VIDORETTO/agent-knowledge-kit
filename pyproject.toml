@@ -27,10 +27,10 @@ dev = ["pytest==9.1.1", "ruff==0.12.7", "pip-audit==2.10.1", "setuptools==84.0.0
 docops = "docops.__main__:main"
 
 [tool.setuptools]
-packages = ["docops", "docops.templates", "docops.schemas"]
+packages = ["docops", "docops.templates", "docops.schemas", "docops.presets"]
 
 [tool.setuptools.package-data]
-docops = ["templates/*.md", "schemas/*.json"]
+docops = ["templates/*.md", "schemas/*.json", "presets/*.json"]
 
 [tool.setuptools.data-files]
 "share/docops/skills/docops-agent" = ["skills/docops-agent/SKILL.md"]

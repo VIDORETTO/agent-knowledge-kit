@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DOCOPS project enrichment request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "id", "created_at", "content_hash", "request_id", "project_id", "base_project_revision_id", "policy_revision", "allowed_artifacts", "budget", "state", "attempt", "deadline_at", "harness", "created_at_external"],
+  "properties": {
+    "schema_version": {"const": 1, "type": "integer"},
+    "kind": {"const": "enrichment_request", "type": "string"},
+    "id": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "minLength": 20},
+    "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "request_id": {"type": "string", "minLength": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "base_project_revision_id": {"type": "string", "minLength": 1},
+    "policy_revision": {"type": "string", "minLength": 1},
+    "allowed_artifacts": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "budget": {"type": "object"},
+    "state": {"enum": ["dispatched", "acknowledged", "timed_out", "failed", "cancelled"], "type": "string"},
+    "attempt": {"type": "integer", "minimum": 1},
+    "deadline_at": {"type": "string", "minLength": 20},
+    "harness": {"type": ["object", "null"]},
+    "created_at_external": {"type": "string", "minLength": 20},
+    "receipt": {"type": "object"},
+    "acknowledged_at": {"type": "string", "minLength": 20},
+    "timed_out_at": {"type": "string", "minLength": 20},
+    "retried_at": {"type": "string", "minLength": 20},
+    "extensions": {"type": "object"}
+  }
+}

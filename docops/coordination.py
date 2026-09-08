@@ -100,6 +100,8 @@ def _connect(path: Path | str) -> sqlite3.Connection:
                 completed_files_json TEXT NOT NULL DEFAULT '[]',
                 deferred_files_json TEXT NOT NULL DEFAULT '[]',
                 lease_until TEXT,
+                lease_token TEXT,
+                lease_heartbeat TEXT,
                 result_ref TEXT,
                 error_code TEXT,
                 payload_json TEXT NOT NULL DEFAULT '{}',
@@ -115,6 +117,8 @@ def _connect(path: Path | str) -> sqlite3.Connection:
             ("deferred_files_json", "TEXT NOT NULL DEFAULT '[]'"),
             ("payload_json", "TEXT NOT NULL DEFAULT '{}'"),
             ("worker_id", "TEXT"),
+            ("lease_token", "TEXT"),
+            ("lease_heartbeat", "TEXT"),
         ):
             try:
                 connection.execute(f"SELECT {column} FROM jobs LIMIT 1")
@@ -187,6 +191,8 @@ def _job_from_row(row: sqlite3.Row, *, now: datetime | None = None) -> dict[str,
         "completed_files": completed_files,
         "deferred_files": deferred_files,
         "lease_until": row["lease_until"],
+        "lease_token": row["lease_token"],
+        "lease_heartbeat": row["lease_heartbeat"],
         "result_ref": row["result_ref"],
         "error_code": row["error_code"],
         "policy_revision": row["policy_revision"],
@@ -451,6 +457,22 @@ def _claim_job(
     connection = _connect(queue_path)
     try:
         connection.execute("BEGIN IMMEDIATE")
+        connection.execute(
+            """
+            UPDATE jobs
+               SET state = 'blocked',
+                   lease_until = NULL,
+                   worker_id = NULL,
+                   lease_token = NULL,
+                   error_code = COALESCE(error_code, 'lease_expired_after_attempt_limit'),
+                   updated_at = ?
+             WHERE state = 'running'
+               AND lease_until IS NOT NULL
+               AND lease_until <= ?
+               AND attempt >= ?
+            """,
+            (_iso(now), _iso(now), MAX_ATTEMPTS),
+        )
         candidates = connection.execute(
             """
             SELECT * FROM jobs
@@ -484,6 +506,7 @@ def _claim_job(
             connection.commit()
             return None
         lease_until = now + timedelta(seconds=lease_seconds)
+        lease_token = uuid.uuid4().hex
         connection.execute(
             """
             UPDATE jobs
@@ -491,10 +514,12 @@ def _claim_job(
                    attempt = attempt + 1,
                    lease_until = ?,
                    worker_id = ?,
+                   lease_token = ?,
+                   lease_heartbeat = ?,
                    updated_at = ?
              WHERE job_id = ?
             """,
-            (_iso(lease_until), worker_id, _iso(now), row["job_id"]),
+            (_iso(lease_until), worker_id, lease_token, _iso(now), _iso(now), row["job_id"]),
         )
         claimed = connection.execute("SELECT * FROM jobs WHERE job_id = ?", (row["job_id"],)).fetchone()
         connection.commit()
@@ -521,6 +546,7 @@ def _update_job(
     result_ref: str | None = None,
     error_code: str | None = None,
     due_at: datetime | None = None,
+    lease_token: str | None = None,
 ) -> dict[str, Any]:
     connection = _connect(queue_path)
     try:
@@ -533,15 +559,18 @@ def _update_job(
             _iso(now),
             job_id,
             worker_id,
+            lease_token,
         )
         updated = connection.execute(
             """
             UPDATE jobs
                SET state = ?, due_at = ?, lease_until = NULL, worker_id = NULL,
+                   lease_token = NULL, lease_heartbeat = NULL,
                    result_ref = ?, error_code = ?, updated_at = ?
              WHERE job_id = ? AND state = 'running' AND worker_id = ?
+               AND (lease_token = ? OR (? IS NULL AND lease_token IS NULL))
             """,
-            values,
+            (*values, lease_token),
         ).rowcount
         if updated != 1:
             raise CoordinationError("job_lease_lost", "job lease was lost before recognition")
@@ -759,6 +788,7 @@ def work_once(
             state=state,
             now=current,
             result_ref=str(result_ref) if result_ref is not None else None,
+            lease_token=str(job.get("lease_token")) if job.get("lease_token") else None,
         )
         return {
             "schema_version": SCHEMA_VERSION,
@@ -780,6 +810,7 @@ def work_once(
             now=current,
             error_code=code,
             due_at=next_due,
+            lease_token=str(job.get("lease_token")) if job.get("lease_token") else None,
         )
         return {
             "schema_version": SCHEMA_VERSION,
@@ -795,6 +826,7 @@ def work_once(
         state="blocked",
         now=current,
         error_code=code,
+        lease_token=str(job.get("lease_token")) if job.get("lease_token") else None,
     )
     return {
         "schema_version": SCHEMA_VERSION,
@@ -803,6 +835,54 @@ def work_once(
         "job": job_result,
         "effect": effect,
     }
+
+
+def renew_job_lease(
+    queue_path: Path | str,
+    job_id: str,
+    *,
+    worker_id: str,
+    lease_token: str,
+    lease_seconds: int = DEFAULT_LEASE_SECONDS,
+    now: str | datetime | None = None,
+) -> dict[str, Any]:
+    """Renew ownership only when the current worker still holds the fencing token."""
+
+    current = _parse_time(now)
+    if isinstance(lease_seconds, bool) or lease_seconds <= 0:
+        raise CoordinationError("lease_invalid", "lease_seconds must be positive")
+    connection = _connect(queue_path)
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        lease_until = current + timedelta(seconds=lease_seconds)
+        changed = connection.execute(
+            """
+            UPDATE jobs
+               SET lease_until = ?, lease_heartbeat = ?, updated_at = ?
+             WHERE job_id = ? AND state = 'running' AND worker_id = ? AND lease_token = ?
+            """,
+            (_iso(lease_until), _iso(current), _iso(current), job_id, worker_id, lease_token),
+        ).rowcount
+        if changed != 1:
+            connection.rollback()
+            raise CoordinationError("job_lease_lost", "job lease cannot be renewed by this owner")
+        row = connection.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+        connection.commit()
+        if row is None:
+            raise CoordinationError("queue_corrupt", "renewed job disappeared from durable queue")
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "ok": True,
+            "code": "lease_renewed",
+            "job": _job_from_row(row, now=current),
+        }
+    except CoordinationError:
+        raise
+    except sqlite3.Error as exc:
+        connection.rollback()
+        raise CoordinationError("queue_update_failed", f"could not renew durable job lease: {exc}") from exc
+    finally:
+        connection.close()
 
 
 __all__ = [
@@ -814,4 +894,5 @@ __all__ = [
     "list_jobs",
     "submit_event",
     "work_once",
+    "renew_job_lease",
 ]

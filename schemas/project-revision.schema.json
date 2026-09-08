@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DOCOPS project revision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "id", "created_at", "content_hash", "project_revision_id", "project_id", "parent_project_revision_id", "package_ref", "artifacts", "pending_decision_ids", "change_id", "status"],
+  "properties": {
+    "schema_version": {"const": 1, "type": "integer"},
+    "kind": {"const": "project_revision", "type": "string"},
+    "id": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "minLength": 20},
+    "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "project_revision_id": {"type": "string", "minLength": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "parent_project_revision_id": {"type": ["string", "null"]},
+    "package_ref": {"type": ["object", "null"]},
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "artifact_id", "revision_id", "path", "hash"],
+        "properties": {
+          "kind": {"enum": ["brief", "course", "page", "decisions", "source-governance", "policy", "dependencies"], "type": "string"},
+          "artifact_id": {"type": "string", "minLength": 1},
+          "revision_id": {"type": "string", "minLength": 1},
+          "path": {"type": "string", "minLength": 1, "pattern": "^[^/].*$"},
+          "hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      },
+      "uniqueItems": true
+    },
+    "pending_decision_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "change_id": {"type": ["string", "null"]},
+    "status": {"enum": ["private_draft", "prepared", "active", "historical", "revoked"], "type": "string"},
+    "extensions": {"type": "object"}
+  }
+}

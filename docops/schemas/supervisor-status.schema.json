@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DOCOPS supervisor status",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "id", "created_at", "content_hash", "status", "tick", "last_source_hash", "pending_events", "last_error", "missed_cycles", "max_missed_cycles"],
+  "properties": {
+    "schema_version": {"const": 1, "type": "integer"},
+    "kind": {"const": "supervisor_status", "type": "string"},
+    "id": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "minLength": 20},
+    "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "status": {"enum": ["running", "stopped"], "type": "string"},
+    "tick": {"type": "integer", "minimum": 0},
+    "last_source_hash": {"type": ["string", "null"]},
+    "pending_events": {"type": "array", "items": {"type": "string"}},
+    "last_error": {"type": ["string", "null"]},
+    "missed_cycles": {"type": "integer", "minimum": 0},
+    "max_missed_cycles": {"type": "integer", "minimum": 1},
+    "queue_path": {"type": ["string", "null"]},
+    "last_success_at": {"type": ["string", "null"], "minLength": 20},
+    "stop_reason": {"type": "string"},
+    "stopped_at": {"type": "string", "minLength": 20},
+    "resumed_at": {"type": "string", "minLength": 20},
+    "last_polled_at": {"type": "string", "minLength": 20},
+    "extensions": {"type": "object"}
+  }
+}

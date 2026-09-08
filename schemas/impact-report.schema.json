@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DOCOPS project impact report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "id", "created_at", "content_hash", "change_id", "base_project_revision_id", "classification", "affected_nodes", "required_checks", "blockers", "existing_conceptual_report_ref", "unknown_dependencies"],
+  "properties": {
+    "schema_version": {"const": 1, "type": "integer"},
+    "kind": {"const": "impact_report", "type": "string"},
+    "id": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "minLength": 20},
+    "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "change_id": {"type": "string", "minLength": 1},
+    "base_project_revision_id": {"type": "string", "minLength": 1},
+    "classification": {"enum": ["factual", "conceptual", "editorial", "mixed", "unknown"], "type": "string"},
+    "affected_nodes": {"type": "array", "items": {"type": "string"}},
+    "required_checks": {"type": "array", "items": {"type": "string"}},
+    "blockers": {"type": "array", "items": {"type": "object"}},
+    "existing_conceptual_report_ref": {"type": ["string", "null"]},
+    "unknown_dependencies": {"type": "boolean"},
+    "extensions": {"type": "object"}
+  }
+}

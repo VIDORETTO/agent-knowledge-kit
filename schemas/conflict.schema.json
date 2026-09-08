@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DOCOPS evidence conflict",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "id", "created_at", "content_hash", "conflict_id", "project_id", "claim_ids", "relation", "status", "resolution", "reviewer_ref"],
+  "properties": {
+    "schema_version": {"const": 1, "type": "integer"},
+    "kind": {"const": "conflict", "type": "string"},
+    "id": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "minLength": 20},
+    "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "conflict_id": {"type": "string", "minLength": 1},
+    "project_id": {"type": ["string", "null"]},
+    "claim_ids": {"type": "array", "minItems": 2, "items": {"type": "string"}, "uniqueItems": true},
+    "relation": {"enum": ["contradicts", "supersedes", "scope_difference"], "type": "string"},
+    "status": {"enum": ["open", "resolved"], "type": "string"},
+    "resolution": {"type": ["string", "null"]},
+    "reviewer_ref": {"type": ["string", "null"]},
+    "extensions": {"type": "object"}
+  }
+}

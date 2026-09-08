@@ -44,5 +44,5 @@ privada com bearer token, rate limit, métricas e auditoria.
 
 Para o mapa completo de efeitos, códigos de erro, recuperação e encerramento,
 use [command-cards.md](command-cards.md). Para execução recorrente, use
-[scheduler-runbooks.md](scheduler-runbooks.md); `work --loop` não substitui
+[scheduler-runbooks.md](scheduler-runbooks.md); agendar `work --once` não substitui
 `source reconcile`.

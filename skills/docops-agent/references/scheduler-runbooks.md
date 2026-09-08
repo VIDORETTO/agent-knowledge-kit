@@ -23,8 +23,10 @@ confirme tamanho/hash estáveis quando a origem não fornece um recibo de upload
 17 */6 * * * cd /srv/docops && .venv/bin/python -m docops lifecycle source reconcile --package artifacts/api --runtime-root /var/lib/docops/api --source /srv/docs/api --source-root /srv/docs --index-rag --json >> /var/log/docops-reconcile.jsonl 2>&1
 ```
 
-Para um serviço contínuo, use `work --loop --interval-seconds 60` com um
-gerenciador que reinicie o processo e alerte em exit code não zero.
+Para uma execução supervisionada, agende `work --once --queue <fila>` a cada
+60 segundos com um gerenciador que reinicie o processo e alerte em exit code
+não zero. A CLI não oferece `work --loop`; a recorrência pertence ao
+agendador externo.
 
 ## Windows
 

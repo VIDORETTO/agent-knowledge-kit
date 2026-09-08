@@ -1,0 +1,12 @@
+{
+  "id": "neutral",
+  "version": "1",
+  "domain": "generic_knowledge",
+  "region": null,
+  "language": "pt-BR",
+  "intent_alternatives": [{"id": "knowledge_only", "label": "projeto de conhecimento sem oferta comercial"}],
+  "questions": ["objective", "audience", "region", "deliverables"],
+  "themes": [{"id": "N01", "title": "Fundamentos"}],
+  "commercial_claims": "unknown",
+  "notes": ["no domain-specific commercial rules are embedded"]
+}

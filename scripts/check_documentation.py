@@ -5,12 +5,13 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shlex
 import sys
 import unicodedata
 from pathlib import Path
 from typing import Iterable
 
-from docops.__main__ import CLI_COMPATIBILITY_MAP
+from docops.__main__ import CLI_COMPATIBILITY_MAP, _expand_canonical_argv, build_parser
 
 _LINK_RE = re.compile(r"\[[^]]*\]\(([^)]+)\)")
 _COMMAND_RE = re.compile(
@@ -23,6 +24,14 @@ _MOJIBAKE_RE = re.compile(r"(?:Ã[\u0080-\u00bf]|Â[\u0080-\u00bf]|â.{0,2}[\u00
 _HEADING_RE = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$", re.MULTILINE)
 _STATUS_RE = re.compile(r"^\|\s*(T\d{2})\s*\|\s*([^|]+?)\s*\|", re.MULTILINE)
 _DONE_STATUS = {"done", "concluido", "concluído", "completed", "concluído"}
+_DOCOPS_START_RE = re.compile(
+    r"^\s*(?:(?:python(?:\.exe)?|py)\s+-m\s+docops|docops)(?:\s+(?P<args>.*))?$",
+    re.IGNORECASE,
+)
+_PROPOSAL_CONTEXT_RE = re.compile(
+    r"\b(?:future|proposal|proposed|planned|not available|not yet|futuro|proposta|proposto|planejado|não disponível)\b",
+    re.IGNORECASE,
+)
 
 
 def _finding(code: str, path: Path, message: str) -> dict[str, str]:
@@ -122,25 +131,107 @@ def _code_fragments(content: str) -> Iterable[str]:
     yield from (match.group(1) for match in re.finditer(r"`([^`\n]+)`", content))
 
 
-def _check_documented_commands(path: Path, content: str, root: Path) -> list[dict[str, str]]:
+def _code_fragments_with_context(content: str) -> Iterable[tuple[str, str]]:
+    """Yield code fragments together with nearby prose used for proposal markers."""
+
+    for match in re.finditer(r"```[^\n]*\n(.*?)```", content, flags=re.DOTALL):
+        yield match.group(1), content[max(0, match.start() - 240) : match.start()]
+    for match in re.finditer(r"`([^`\n]+)`", content):
+        yield match.group(1), content[max(0, match.start() - 240) : match.start()]
+
+
+def _command_option_names(argv: list[str]) -> set[str]:
+    """Read the public option surface from the real CLI parser."""
+
+    parser = build_parser()
+    action = next(action for action in parser._actions if action.dest == "command")
+    selected = action.choices.get(argv[0])
+    if selected is None:
+        return set()
+    options = {option for item in selected._actions for option in item.option_strings if option.startswith("--")}
+    subparser = next((item for item in selected._actions if isinstance(item, argparse._SubParsersAction)), None)
+    for token in argv[1:]:
+        if subparser is None or token.startswith("-"):
+            continue
+        child = subparser.choices.get(token)
+        if child is None:
+            break
+        options.update(option for item in child._actions for option in item.option_strings if option.startswith("--"))
+        subparser = next((item for item in child._actions if isinstance(item, argparse._SubParsersAction)), None)
+    return options
+
+
+def _docops_argv(line: str) -> list[str] | None:
+    match = _DOCOPS_START_RE.match(line)
+    if not match:
+        return None
+    try:
+        return shlex.split(match.group("args"), posix=True)
+    except ValueError:
+        return None
+
+
+def _check_docops_fragment(fragment: str, context: str, path: Path, root: Path) -> list[dict[str, str]]:
+    if _PROPOSAL_CONTEXT_RE.search(context):
+        return []
     flat, canonical = _known_docops_commands()
     findings: list[dict[str, str]] = []
-    for fragment in _code_fragments(content):
-        for match in _COMMAND_RE.finditer(fragment):
-            tokens = tuple(match.group(1).casefold().split())
-            if not tokens:
+    lines = fragment.splitlines()
+    for index, raw_line in enumerate(lines):
+        line = raw_line.rstrip()
+        argv = _docops_argv(line)
+        if argv is None:
+            continue
+        # Markdown command blocks commonly wrap a command with a trailing slash.
+        while argv and argv[-1] in {"\\", "`"} and index + 1 < len(lines):
+            index += 1
+            continuation = _docops_argv(lines[index])
+            if continuation:
+                argv.extend(continuation)
+            else:
+                try:
+                    argv.extend(shlex.split(lines[index].strip(), posix=True))
+                except ValueError:
+                    pass
+        expanded = _expand_canonical_argv(argv)
+        if not expanded:
+            continue
+        command = expanded[0].casefold()
+        if command.startswith((".", "/", "-")) or command in {"...", "<command>"}:
+            continue
+        if command not in flat:
+            tokens = tuple(token.casefold() for token in argv[:4])
+            if "/" in command or any(token in {"...", "<command>", "{command}"} for token in tokens[1:]):
                 continue
-            if tokens[0] in flat:
-                continue
-            if any(candidate[: len(tokens)] == tokens for candidate in canonical):
-                continue
-            findings.append(
-                _finding(
-                    "documented_command_unknown",
-                    path.relative_to(root),
-                    f"documented docops command is not in the CLI compatibility map: {' '.join(tokens)}",
+            if not any(candidate[: len(tokens)] == tokens for candidate in canonical):
+                findings.append(
+                    _finding(
+                        "documented_command_unknown",
+                        path.relative_to(root),
+                        f"documented docops command is not in the CLI compatibility map: {' '.join(tokens)}",
+                    )
                 )
-            )
+            continue
+        valid_options = _command_option_names(expanded)
+        for token in expanded[1:]:
+            if not token.startswith("--"):
+                continue
+            option = token.split("=", 1)[0].casefold()
+            if option not in {value.casefold() for value in valid_options}:
+                findings.append(
+                    _finding(
+                        "documented_option_unknown",
+                        path.relative_to(root),
+                        f"documented option is not supported by docops {command}: {option}",
+                    )
+                )
+    return findings
+
+
+def _check_documented_commands(path: Path, content: str, root: Path) -> list[dict[str, str]]:
+    findings: list[dict[str, str]] = []
+    for fragment, context in _code_fragments_with_context(content):
+        findings.extend(_check_docops_fragment(fragment, context, path, root))
         for match in _SCRIPT_RE.finditer(fragment):
             script = root / match.group(1)
             if not script.is_file():

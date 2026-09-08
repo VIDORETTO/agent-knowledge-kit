@@ -12,6 +12,10 @@ import pytest
 import docops
 
 
+def _require_real_mcp_runtime() -> None:
+    pytest.importorskip("chromadb")
+
+
 def test_lifecycle_facade_reports_one_versioned_public_status_without_private_paths(tmp_path: Path) -> None:
     package = tmp_path / "package"
     runtime = tmp_path / "runtime"
@@ -104,6 +108,7 @@ def test_real_mcp_reader_configuration_does_not_bootstrap_writable_state(tmp_pat
 
 
 def test_real_mcp_reader_rejects_mutation_before_orchestrator_startup(tmp_path: Path) -> None:
+    _require_real_mcp_runtime()
     vendor = Path(__file__).resolve().parents[1] / "skills" / "vendor" / "knowledge-rag"
     environment = dict(os.environ)
     environment.update(
@@ -424,6 +429,7 @@ def test_lifecycle_status_canonical_alias_has_no_deprecation_in_json(tmp_path: P
 
 
 def test_real_mcp_reader_rejects_every_writer_tool(tmp_path: Path) -> None:
+    _require_real_mcp_runtime()
     vendor = Path(__file__).resolve().parents[1] / "skills" / "vendor" / "knowledge-rag"
     environment = dict(os.environ)
     environment.update(
@@ -468,6 +474,7 @@ def test_real_mcp_reader_rejects_every_writer_tool(tmp_path: Path) -> None:
 
 
 def test_real_mcp_reader_process_starts_without_bootstrap_or_watcher(tmp_path: Path) -> None:
+    _require_real_mcp_runtime()
     from docops.mcp_client import first_json_payload, start_mcp_server
     from docops.runtime import runtime_environment
 
@@ -527,6 +534,7 @@ def test_real_mcp_reader_process_starts_without_bootstrap_or_watcher(tmp_path: P
 
 
 def test_real_mcp_reader_hides_revoked_document_before_reading_it(tmp_path: Path) -> None:
+    _require_real_mcp_runtime()
     root = Path(__file__).resolve().parents[1]
     vendor = root / "skills" / "vendor" / "knowledge-rag"
     tombstone = tmp_path / ".docops" / "revocations.json"

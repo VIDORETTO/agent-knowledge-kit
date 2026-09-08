@@ -101,7 +101,16 @@ def _rank(
             "locators": [dict(locator) for locator in locators if isinstance(locator, Mapping)],
         }
         hit["citations"] = _citations_for(path, hit["locators"])
-        for key in ("format", "title", "quality_status", "quality_reason"):
+        for key in (
+            "source_id",
+            "observed_revision",
+            "canonical",
+            "destination",
+            "format",
+            "title",
+            "quality_status",
+            "quality_reason",
+        ):
             if key in source_metadata:
                 hit[key] = source_metadata[key]
         ranked.append(hit)
