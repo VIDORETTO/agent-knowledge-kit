@@ -1,7 +1,7 @@
 
-# Farol
-
 <div align="center">
+
+# Farol
 
 ## Documentação confiável para agentes de IA
 
