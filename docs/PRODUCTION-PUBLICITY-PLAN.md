@@ -6,7 +6,8 @@
 
 ## 1. Escopo real do produto
 
-`consulta-documentacao` é um pacote Python/CLI com MCP local opcional. Não há
+**Farol** é um pacote Python/CLI com MCP local opcional. A distribuição técnica
+`consulta-documentacao` permanece como alias de compatibilidade. Não há
 um servidor web, container, processo PM2 ou banco de produção neste
 repositório. Portanto, “deploy para produção” significa:
 

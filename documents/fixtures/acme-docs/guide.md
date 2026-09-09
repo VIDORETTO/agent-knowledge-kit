@@ -1,6 +1,6 @@
 # Acme API Guide
 
-The Acme client is a synthetic documentation fixture for `consulta-documentacao`.
+The Acme client is a synthetic documentation fixture for `Farol`.
 It demonstrates authentication, retries and source citations without copying a
 real project's documentation.
 

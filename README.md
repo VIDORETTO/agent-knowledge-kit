@@ -1,5 +1,5 @@
 
-# consulta-documentacao
+# Farol
 
 <div align="center">
 
@@ -30,9 +30,11 @@ consultável — com **skill**, **roteador**, RAG opcional e evidências verific
 
 **Aprofundar:** [documentação](#documentacao) · [evolução P0–P5](#evolucao-p0p5) · [contribuição](CONTRIBUTING.md)
 
+**Comunidade:** [governança](community/GOVERNANCE.md) · [suporte](community/SUPPORT.md)
+
 ## O que é
 
-O <code>consulta-documentacao</code> é um operador determinístico para construir
+O <code>Farol</code> é um operador determinístico para construir
 bases de conhecimento para agentes. Ele recebe uma fonte — pasta, arquivo, URL,
 repositório Git ou nome de catálogo — e produz um pacote com:
 
@@ -70,6 +72,10 @@ contexto, consultar o MCP quando necessário e produzir a resposta final.
 ## Instalação
 
 ### Usar uma release
+
+> O produto se chama **Farol**. A wheel da release `v1.1.0` ainda usa o
+> identificador técnico `consulta-documentacao` para preservar compatibilidade
+> com a distribuição já publicada.
 
 A distribuição pública é feita pelo [GitHub Release v1.1.0](https://github.com/VIDORETTO/agent-knowledge-kit/releases/tag/v1.1.0).
 Baixe a wheel e instale-a em um ambiente virtual:
@@ -230,7 +236,10 @@ Para o mapa completo de módulos e fronteiras, consulte
 ## CLI e API
 
 Use <code>python -m docops ...</code> para garantir que a CLI está ligada ao
-mesmo Python do ambiente ativo. O executável <code>docops ...</code> é equivalente.
+mesmo Python do ambiente ativo. No código atual, o launcher de marca é
+<code>farol ...</code>; <code>docops ...</code> continua disponível como alias de
+compatibilidade. A release publicada <code>v1.1.0</code> ainda deve ser operada
+com <code>python -m docops</code>, pois foi empacotada antes do rebrand.
 
 ### Comandos do dia a dia
 

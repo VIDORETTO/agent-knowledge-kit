@@ -6,7 +6,7 @@
 
 ## Mensagem curta
 
-O `consulta-documentacao` 1.1.0 prepara documentação para agentes como uma
+O **Farol** 1.1.0 prepara documentação para agentes como uma
 skill estruturada, um roteador e, opcionalmente, um índice RAG local via MCP.
 O pacote não inclui LLM, provedor, serviço hospedado, corpus adquirido ou
 cache de modelo. O fluxo mínimo é resolver a fonte, executar `run`, validar o

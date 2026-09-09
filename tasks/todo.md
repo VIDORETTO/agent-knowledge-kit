@@ -1490,3 +1490,33 @@ detalhes RED/GREEN estão em
   CI de outras plataformas, advisories upstream e autorização/credenciais
   comerciais permanecem bloqueios explícitos; não são aceites técnicos
   inferidos.
+
+## Renomeação de produto para Farol — 2026-09-09
+
+### Plano
+
+- [x] Mapear ocorrências do nome antigo e separar marca pública, identificadores
+  técnicos, compatibilidade de distribuição e evidências históricas.
+- [x] Atualizar a marca pública para Farol em documentação, metadata, configuração,
+  fixtures e materiais de contribuição.
+- [x] Preservar o namespace/CLI `docops`, contratos e artefatos de release legados
+  quando a troca direta pudesse quebrar consumidores existentes.
+- [x] Validar sincronização de schemas, candidate gates, testes, links e ausência
+  de regressão funcional.
+
+### Revisão
+
+- Resultado: marca pública, metadata, licença, governança, configuração, fixture,
+  guia do agente e materiais de divulgação atuais foram alinhados para **Farol**.
+- Compatibilidade: `farol` foi adicionado como launcher; `docops`, o identificador
+  de distribuição `consulta-documentacao` da v1.1.0, `$id` dos schemas e nomes de
+  assets históricos foram mantidos de forma explícita e documentada.
+- Verificação: `check_documentation.py --json` passou com 112 Markdown e zero
+  findings; `check_contracts.py --json` passou; `sync_schemas.py --check` passou;
+  candidate core passou; suíte focada passou com 13 testes; Ruff check/format e
+  `git diff --check` passaram.
+- Regressões/limitações: a suíte completa antes do ajuste do checker observou 390
+  passes, 3 skips por symlink indisponível no Windows e 3 falhas; a falha do
+  relatório de integração foi corrigida e passou no rerun focado. Permanecem duas
+  limitações externas ao rebrand: MCP EOF e ambiente sem as versões travadas no
+  fallback de supply-chain.

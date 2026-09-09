@@ -32,6 +32,14 @@ def test_documentation_checker_rejects_unknown_docops_command(tmp_path: Path) ->
     assert any(finding["code"] == "documented_command_unknown" for finding in result["findings"])
 
 
+def test_documentation_checker_accepts_farol_launcher(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("```text\nfarol doctor --json\n```\n", encoding="utf-8")
+
+    result = check_documentation(tmp_path)
+
+    assert result["ok"] is True, result["findings"]
+
+
 def test_documentation_checker_requires_evidence_for_done_tickets(tmp_path: Path) -> None:
     ticket_root = tmp_path / "docs" / "main-consolidation" / "tickets"
     ticket_root.mkdir(parents=True)

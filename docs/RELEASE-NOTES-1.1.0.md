@@ -1,11 +1,11 @@
-# consulta-documentacao 1.1.0 — release notes
+# Farol 1.1.0 — release notes
 
 > Esta versão é distribuída exclusivamente pelo GitHub Release. Review these
 > notes against the final tag, wheel, checksums, SBOM and provenance.
 
 ## What this release is for
 
-`consulta-documentacao` turns a documentation source into an agent-usable
+**Farol** turns a documentation source into an agent-usable
 package containing a structured skill, a query router, a local RAG corpus and
 machine-readable provenance. The core operator is usable without an LLM,
 provider, hosted service or API key.
@@ -33,6 +33,9 @@ python -m pip install ./consulta_documentacao-1.1.0-py3-none-any.whl
 python -m docops run <fonte> --output ./artifacts/<slug> --license <id>
 python -m docops validate ./artifacts/<slug> --json
 ```
+
+The wheel filename and the `docops` module name are legacy technical
+identifiers retained for compatibility with this published release.
 
 `doctor` verifica um checkout de projeto (metadata, lock e skill do operador),
 não uma pasta que contenha somente o wheel. Para diagnosticar um checkout

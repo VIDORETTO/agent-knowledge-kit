@@ -2,7 +2,7 @@
 # config.yaml — knowledge-rag (servidor MCP de RAG híbrido)
 # =============================================================================
 # Base: configuração local compatível com knowledge-rag 4.8.x.
-# Ajustes específicos do projeto consulta-documentacao:
+# Ajustes específicos do projeto Farol:
 #   * paths relativos ao clone (portável entre Windows, Linux e macOS)
 #   * embedding.profile: "compact"
 #   * search.max_results: 100 (limite alto para Golden/avaliação)

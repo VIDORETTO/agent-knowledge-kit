@@ -1,4 +1,4 @@
-# AGENTS.md — consulta-documentacao (doc-to-skill + RAG híbrido)
+# AGENTS.md — Farol (doc-to-skill + RAG híbrido)
 
 Este repositório é um **sistema de conhecimento** pronto para ser importado em
 qualquer projeto: agente diz qual documentação processar → o operador

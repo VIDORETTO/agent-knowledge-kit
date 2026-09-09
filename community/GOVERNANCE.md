@@ -1,6 +1,6 @@
 # Governance and maintainers
 
-`consulta-documentacao` is maintained by the repository owners listed in
+`Farol` is maintained by the repository owners listed in
 `.github/CODEOWNERS`. Maintainers are responsible for reviewing changes,
 protecting user data, deciding release compatibility, and recording security
 and support decisions.

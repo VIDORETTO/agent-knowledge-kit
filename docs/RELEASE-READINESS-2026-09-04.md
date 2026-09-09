@@ -1,7 +1,8 @@
 # Registro de prontidão — 2026-09-04
 
 **Estado:** `production-ready-publicity-ready` com observação pós-release aberta
-**Escopo:** release pública `1.1.0` do pacote `consulta-documentacao`
+**Escopo:** release pública `1.1.0` do produto **Farol** (distribuição técnica
+legada `consulta-documentacao`)
 **Canal:** somente GitHub Release; nenhum registry ou anúncio externo
 **Release:** [v1.1.0](https://github.com/VIDORETTO/agent-knowledge-kit/releases/tag/v1.1.0)
 **Publicado em:** `2026-09-04T20:18:45Z`

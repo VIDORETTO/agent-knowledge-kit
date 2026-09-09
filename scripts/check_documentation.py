@@ -11,11 +11,17 @@ import unicodedata
 from pathlib import Path
 from typing import Iterable
 
-from docops.__main__ import CLI_COMPATIBILITY_MAP, _expand_canonical_argv, build_parser
+# Keep the documented direct invocation (`python scripts/check_documentation.py`)
+# equivalent to the module invocation from a checkout root.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from docops.__main__ import CLI_COMPATIBILITY_MAP, _expand_canonical_argv, build_parser  # noqa: E402
 
 _LINK_RE = re.compile(r"\[[^]]*\]\(([^)]+)\)")
 _COMMAND_RE = re.compile(
-    r"^\s*(?:(?:python(?:\.exe)?|py)\s+-m\s+docops|docops)\s+"
+    r"^\s*(?:(?:python(?:\.exe)?|py)\s+-m\s+docops|docops|farol)\s+"
     r"((?:[a-z][a-z0-9_-]*\s+){0,3}[a-z][a-z0-9_-]*)",
     re.IGNORECASE | re.MULTILINE,
 )
@@ -25,7 +31,7 @@ _HEADING_RE = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$", re.MULTILINE)
 _STATUS_RE = re.compile(r"^\|\s*(T\d{2})\s*\|\s*([^|]+?)\s*\|", re.MULTILINE)
 _DONE_STATUS = {"done", "concluido", "concluído", "completed", "concluído"}
 _DOCOPS_START_RE = re.compile(
-    r"^\s*(?:(?:python(?:\.exe)?|py)\s+-m\s+docops|docops)(?:\s+(?P<args>.*))?$",
+    r"^\s*(?:(?:python(?:\.exe)?|py)\s+-m\s+docops|docops|farol)(?:\s+(?P<args>.*))?$",
     re.IGNORECASE,
 )
 _PROPOSAL_CONTEXT_RE = re.compile(

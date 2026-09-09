@@ -5,6 +5,14 @@ Este documento é normativo para os envelopes JSON em `schemas/`. A árvore
 `python scripts/sync_schemas.py --write`; nenhuma alteração manual deve ser
 feita nela.
 
+## Nome público e compatibilidade
+
+O produto se chama **Farol**. O identificador técnico da distribuição publicada
+em `v1.1.0` continua sendo `consulta-documentacao`, e o namespace Python/CLI
+`docops` continua disponível como compatibilidade. Os `$id` dos schemas e os
+nomes dos assets dessa release também permanecem estáveis; uma futura release
+de migração deve alterar esses identificadores somente com uma política explícita.
+
 ## Versionamento
 
 Todo schema exige o campo `schema_version` e declara a versão aceita em

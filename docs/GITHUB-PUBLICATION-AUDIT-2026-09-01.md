@@ -84,9 +84,10 @@ candidato atual.
 **Fatos.** `README.md:3-10` define um operador portátil, explicitamente sem LLM
 ou provedor. `README.md:24-67` oferece quick start e fluxo completo;
 `README.md:69-84` cobre harness e política de dados. O nome do pacote
-`consulta-documentacao` diverge do repositório `agent-knowledge-kit`. Não há
-instalação por registry, badge de CI/release ou aviso frontal de que os recursos
-pós-1.0 estão somente no working tree.
+O produto **Farol** agora tem identidade pública própria, enquanto a distribuição
+técnica `consulta-documentacao` permanece como identificador de compatibilidade.
+Não há instalação por registry, badge de CI/release ou aviso frontal de que os
+recursos pós-1.0 estão somente no working tree.
 
 **Inferência.** Um avaliador entende o propósito, mas pode confundir o estado
 publicado com o candidato local e não encontra um canal de distribuição normal.

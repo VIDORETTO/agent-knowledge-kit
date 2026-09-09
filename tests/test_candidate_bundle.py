@@ -137,7 +137,7 @@ def test_candidate_verifier_rejects_readme_version_drift(tmp_path: Path) -> None
     readme_path = output / "README.md"
     readme = readme_path.read_text(encoding="utf-8")
     readme_path.write_text(
-        readme.replace(f"`consulta-documentacao` {manifest['version']}", "`consulta-documentacao` 9.9.9", 1),
+        readme.replace(f"[v{manifest['version']}]", "[v9.9.9]", 1),
         encoding="utf-8",
     )
 

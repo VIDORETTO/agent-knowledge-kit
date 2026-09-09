@@ -5,11 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "consulta-documentacao"
 version = "1.1.0"
-description = "Portable, deterministic documentation-to-knowledge orchestration with optional local RAG/MCP."
+description = "Farol — portable, deterministic documentation-to-knowledge orchestration with optional local RAG/MCP."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
-authors = [{ name = "consulta-documentacao contributors" }]
+authors = [{ name = "Farol contributors" }]
 dependencies = []
 
 [project.urls]
@@ -24,6 +24,7 @@ formats = ["PyYAML==6.0.3", "pypdf==6.16.2", "python-docx==1.2.0"]
 dev = ["pytest==9.1.1", "ruff==0.12.7", "pip-audit==2.10.1", "setuptools==84.0.0"]
 
 [project.scripts]
+farol = "docops.__main__:main"
 docops = "docops.__main__:main"
 
 [tool.setuptools]

@@ -1,7 +1,10 @@
-# Handoff pós-release — `consulta-documentacao` 1.1.0
+# Handoff pós-release — Farol 1.1.0
 
 Registro operacional preenchido após a publicação controlada. Não contém
 credenciais, corpus adquirido, prompts ou logs privados.
+
+> A release foi publicada antes do rebrand. Por isso, o asset da wheel e o nome
+> instalado abaixo preservam o identificador técnico `consulta-documentacao`.
 
 ## Identidade da release
 
