@@ -3,6 +3,10 @@
 
 # Farol
 
+<p>
+  <img src="assets/farol-logo-horizontal.png" alt="Farol" width="780">
+</p>
+
 ## Documentação confiável para agentes de IA
 
 Transforme uma fonte de documentação em um pacote portátil, versionado e
