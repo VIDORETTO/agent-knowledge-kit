@@ -1454,6 +1454,30 @@ MCP/índice real. Resultados históricos anteriores permanecem separados e os
 detalhes RED/GREEN estão em
 `docs/master-evolution/IMPLEMENTATION-EVIDENCE.md`.
 
+## Revisão de harmonia do README — 2026-09-08
+
+### Plano
+
+- [x] Auditar o README atual contra a CLI, os documentos normativos e o estado
+  implementado de P0–P5.
+- [x] Reorganizar a entrada para onboarding rápido, arquitetura, segurança,
+  desenvolvimento e navegação documental.
+- [x] Remover redundâncias e status obsoletos sem alterar contratos ou comandos.
+- [x] Validar links, exemplos, Markdown, diff e regressões do pacote.
+
+### Revisão
+
+- Resultado: README reorganizado de 619 para 392 linhas, com navegação por
+  intenção, onboarding curto, arquitetura, CLI canônica, segurança, status P0–P5
+  e documentação normativa.
+- Consistência: links locais e âncoras passaram no checker documental; o status
+  antigo que dizia que a evolução contínua não estava implementada foi removido.
+- Verificação: `check_documentation.py --json` — 112 Markdown, zero findings;
+  `tests/test_contract_doc_drift.py` — 4 passed; fixture sintética — resolve,
+  plan, run e validate passaram sequencialmente.
+- Escopo: nenhuma alteração de contrato, código de runtime, corpus real ou
+  índice real; `.scratch/readme-sequential` contém somente a validação local.
+
 ### Revisão desta execução
 
 - Resultado: todas as fases P0–P5 e os 24 tickets têm implementação e evidência

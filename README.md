@@ -1,466 +1,272 @@
-# consulta-documentacao
 
-`consulta-documentacao` 1.1.0
+# consulta-documentacao
 
 <div align="center">
 
-### Documentação organizada para agentes de IA
+## Documentação confiável para agentes de IA
 
-Transforme uma documentação em um pacote portátil com **skill**, **roteador**,
-corpus pesquisável e evidências verificáveis — sem obrigar o projeto a escolher
-um modelo, provedor ou chave de API.
+Transforme uma fonte de documentação em um pacote portátil, versionado e
+consultável — com **skill**, **roteador**, RAG opcional e evidências verificáveis.
 
 <p>
   <a href="https://github.com/VIDORETTO/agent-knowledge-kit/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/VIDORETTO/agent-knowledge-kit/actions/workflows/ci.yml/badge.svg?branch=main"></a>
-  <a href="https://github.com/VIDORETTO/agent-knowledge-kit/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/VIDORETTO/agent-knowledge-kit?display_name=tag&sort=semver"></a>
-  <img alt="Python 3.11+" src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white">
+  <a href="https://github.com/VIDORETTO/agent-knowledge-kit/releases"><img alt="Release mais recente" src="https://img.shields.io/github/v/release/VIDORETTO/agent-knowledge-kit?display_name=tag&sort=semver"></a>
+  <img alt="Python 3.11 ou superior" src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white">
   <a href="https://github.com/VIDORETTO/agent-knowledge-kit/blob/main/LICENSE"><img alt="Licença MIT" src="https://img.shields.io/github/license/VIDORETTO/agent-knowledge-kit"></a>
-  <img alt="Distribuição pelo GitHub Release" src="https://img.shields.io/badge/distribui%C3%A7%C3%A3o-GitHub%20Release-181717?logo=github&logoColor=white">
+  <img alt="RAG local opcional" src="https://img.shields.io/badge/RAG-local%20%7C%20opcional-0f766e?logo=sqlite&logoColor=white">
 </p>
 
-**Versão atual: [`v1.1.0`](https://github.com/VIDORETTO/agent-knowledge-kit/releases/tag/v1.1.0)**
+**Versão do pacote:** [v1.1.0](https://github.com/VIDORETTO/agent-knowledge-kit/releases/tag/v1.1.0)
 
 </div>
 
-> **Resumo em uma frase:** o `consulta-documentacao` recebe uma fonte de
-> documentação e entrega um pacote que um agente consegue consultar de forma
-> organizada, rastreável e opcionalmente com RAG local.
+> **Em uma linha:** <code>fonte → pacote de conhecimento → agente capaz de responder com contexto e evidência</code>.
 
-## Índice
+## Navegação
 
-- [O que é](#o-que-e)
-- [Para que serve](#para-que-serve)
-- [Como instalar](#como-instalar)
-- [Primeiro uso passo a passo](#primeiro-uso-passo-a-passo)
-- [Como desinstalar](#como-desinstalar)
-- [O que é gerado](#o-que-e-gerado)
-- [Parte técnica](#parte-tecnica)
-- [Segurança, licenças e limites](#seguranca-licencas-e-limites)
-- [Documentação e suporte](#documentacao-e-suporte)
+**Começar:** [instalação](#instalacao) · [primeiro pacote](#primeiro-pacote) · [desenvolvimento](#desenvolvimento)
+
+**Entender:** [arquitetura](#arquitetura) · [segurança](#seguranca-e-limites) · [estrutura do repositório](#estrutura-do-repositorio)
+
+**Aprofundar:** [documentação](#documentacao) · [evolução P0–P5](#evolucao-p0p5) · [contribuição](CONTRIBUTING.md)
 
 ## O que é
 
-Este projeto é um **orquestrador de documentação para agentes**. Ele pega uma
-fonte, como:
+O <code>consulta-documentacao</code> é um operador determinístico para construir
+bases de conhecimento para agentes. Ele recebe uma fonte — pasta, arquivo, URL,
+repositório Git ou nome de catálogo — e produz um pacote com:
 
-- uma pasta ou arquivo local;
-- uma página ou site acessível por URL;
-- um repositório Git;
-- um nome conhecido pelo catálogo configurado;
-
-e monta uma estrutura de conhecimento pronta para ser usada por um harness de
-agente, como OpenCode ou Codex.
-
-Pense nele como uma pequena fábrica de biblioteca:
-
-| Peça | Explicação simples |
+| Camada | Papel |
 | --- | --- |
-| Documentação | Os livros originais que precisam ser entendidos. |
-| `skill/` | O resumo organizado: conceitos, padrões, glossário e orientação. |
-| `router/` | O bibliotecário que decide se a pergunta deve usar a skill ou uma busca literal. |
-| `rag/` | O índice local para encontrar trechos, defaults, assinaturas e números. |
-| `manifest.json` | A etiqueta da caixa: origem, versão, licença, hashes e resultado. |
-| `harness.json` | As instruções para conectar o pacote ao agente externo. |
+| <code>skill/</code> | Conceitos, padrões, glossário e orientação de alto nível. |
+| <code>router/</code> | Decide quando usar a skill e quando buscar evidência literal. |
+| <code>rag/</code> | Corpus normalizado e índice local opcional para fatos, defaults e assinaturas. |
+| <code>manifest.json</code> | Identidade, licença, hashes, estado, métricas e checkpoints. |
+| <code>harness.json</code> | Instruções de integração com OpenCode, Codex ou outro harness compatível. |
 
-### O que ele não é
+O projeto não é um chatbot, não executa modelos, não escolhe provedor e não
+exige chave de API. O harness externo continua responsável por carregar o
+contexto, consultar o MCP quando necessário e produzir a resposta final.
 
-- Não é um chatbot.
-- Não é um modelo de IA.
-- Não escolhe OpenAI, Anthropic, Ollama ou qualquer outro provedor.
-- Não cria nem exige uma chave de API.
-- Não substitui o OpenCode, Codex, Claude Code ou outro harness.
-- Não publica documentação de terceiros automaticamente.
+### O que torna o pacote confiável
 
-O agente externo continua responsável por carregar a skill, consultar o MCP
-quando necessário e escrever a resposta final.
+- **Separação clara:** entendimento conceitual na skill; fatos literais no RAG.
+- **Rastreabilidade:** respostas factuais apontam para <code>path#seção</code> ou <code>path:linha</code>.
+- **Fail-closed:** ambiguidade, licença desconhecida, revogação e evidência ausente bloqueiam o avanço.
+- **Recuperação:** staging, leases, checkpoints, journal, backup e rollback preservam a geração ativa.
+- **Portabilidade:** o núcleo funciona localmente, sem modelo, banco ou serviço obrigatório.
 
-## Para que serve
+## Visão rápida
 
-Ele é útil quando você quer que um agente responda sobre uma tecnologia usando
-uma documentação específica, por exemplo:
+| Item | Estado |
+| --- | --- |
+| Entrada | Nome, URL, repositório Git, pasta ou arquivo local |
+| Saída | Pacote autocontido com skill, router, corpus, manifesto e harness |
+| Runtime | Python 3.11+ |
+| RAG | Opcional, local, via <code>knowledge-rag==4.8.5</code> e MCP <code>stdio</code> |
+| Distribuição | GitHub Release; não há publicação automática no PyPI |
+| Exemplos públicos | Fixtures sintéticas em <code>documents/fixtures/</code> |
 
-1. apontar para uma documentação;
-2. gerar uma visão conceitual reutilizável;
-3. manter uma cópia normalizada dos documentos;
-4. buscar fatos exatos com indicação da fonte;
-5. validar se o pacote está completo;
-6. testar a recuperação com perguntas conhecidas;
-7. transportar tudo para outro computador ou harness.
+## Instalação
 
-O fluxo visual é este:
+### Usar uma release
 
-```mermaid
-flowchart LR
-    A["Fonte de documentação<br/>nome · URL · Git · pasta"] --> B["resolve<br/>entende a origem"]
-    B --> C["plan<br/>mostra o plano sem escrever"]
-    C --> D["run<br/>gera em staging e valida"]
-    D --> E["Pacote de conhecimento"]
-    E --> E1["skill/<br/>conceitos"]
-    E --> E2["router/<br/>roteamento"]
-    E --> E3["rag/<br/>documentos e índice"]
-    E --> E4["manifest + harness<br/>contrato e integração"]
-    E2 --> F["Harness do agente<br/>OpenCode · Codex · outro"]
-    E3 -. opcional .-> G["knowledge-rag MCP<br/>local · stdio"]
+A distribuição pública é feita pelo [GitHub Release v1.1.0](https://github.com/VIDORETTO/agent-knowledge-kit/releases/tag/v1.1.0).
+Baixe a wheel e instale-a em um ambiente virtual:
 
-    classDef main fill:#2563eb,color:#fff,stroke:#1d4ed8;
-    classDef output fill:#0f766e,color:#fff,stroke:#115e59;
-    class B,C,D main;
-    class E,E1,E2,E3,E4 output;
-```
-
-## Como instalar
-
-### Opção recomendada: GitHub Release
-
-A versão pública é distribuída pelo GitHub Release. **Ela não está no PyPI.**
-
-1. Abra a [release `v1.1.0`](https://github.com/VIDORETTO/agent-knowledge-kit/releases/tag/v1.1.0).
-2. Baixe `consulta_documentacao-1.1.0-py3-none-any.whl` e `SHA256SUMS`.
-3. Crie um ambiente virtual na pasta em que deseja trabalhar.
-4. Instale a wheel dentro desse ambiente.
-
-No Linux ou macOS:
-
-```bash
+~~~bash
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install ./consulta_documentacao-1.1.0-py3-none-any.whl
 python -m docops --help
-```
+~~~
 
 No Windows PowerShell:
 
-```powershell
+~~~powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install .\consulta_documentacao-1.1.0-py3-none-any.whl
+python -m pip install .\\consulta_documentacao-1.1.0-py3-none-any.whl
 python -m docops --help
-```
+~~~
 
-O pacote principal não tem dependências obrigatórias além do Python `3.11+`.
-O uso básico funciona sem RAG, sem modelo e sem internet depois que a wheel foi
-baixada.
+O núcleo não tem dependências obrigatórias além do Python. Para conferir a
+integridade do download, compare o hash da wheel com <code>SHA256SUMS</code>
+publicado na release.
 
-#### Verificação opcional do download
+### Trabalhar a partir do código-fonte
 
-O SHA-256 publicado da wheel `v1.1.0` é:
-
-```text
-a6656139143df70974619581129a049b06a9e4511fdb2cf00ff4fd54aa2fc5c1
-```
-
-Linux/macOS:
-
-```bash
-sha256sum consulta_documentacao-1.1.0-py3-none-any.whl
-```
-
-Windows PowerShell:
-
-```powershell
-(Get-FileHash .\consulta_documentacao-1.1.0-py3-none-any.whl -Algorithm SHA256).Hash
-```
-
-Compare o resultado com a linha correspondente em `SHA256SUMS`.
-
-### Opção para desenvolvimento: clonar o código-fonte
-
-Use esta opção se você pretende alterar o projeto, executar a suíte de testes
-ou usar os scripts auxiliares:
-
-```bash
+~~~bash
 git clone https://github.com/VIDORETTO/agent-knowledge-kit.git
 cd agent-knowledge-kit
 python scripts/bootstrap.py --dev
 python -m docops doctor --json
-python -m pytest
-```
+~~~
 
-No Windows, o equivalente é:
+O bootstrap cria o ambiente e instala o perfil de desenvolvimento em modo
+editável. Para incluir leitura de YAML, PDF, DOCX e o RAG local:
 
-```powershell
-git clone https://github.com/VIDORETTO/agent-knowledge-kit.git
-Set-Location agent-knowledge-kit
-python scripts\bootstrap.py --dev
-python -m docops doctor --json
-python -m pytest
-```
-
-O bootstrap cria o ambiente local e instala o projeto em modo editável. Para
-habilitar também o RAG local:
-
-```bash
+~~~bash
 python scripts/bootstrap.py --dev --rag
-```
+~~~
 
-Os scripts equivalentes são `scripts/bootstrap.sh` no Linux/macOS e
-`scripts/bootstrap.ps1` no Windows.
+Há wrappers equivalentes em <code>scripts/bootstrap.sh</code> e
+<code>scripts/bootstrap.ps1</code>.
 
-> **Nota:** `doctor` foi feito para diagnosticar um checkout do projeto. Se
-> você instalou somente a wheel em uma pasta vazia, use diretamente `run`,
-> `validate` e `evaluate`; ou aponte `doctor` para um checkout com
-> `python -m docops doctor --root /caminho/do/projeto --json`.
+## Primeiro pacote
 
-## Primeiro uso passo a passo
+O fluxo abaixo usa apenas a fixture sintética pública <code>acme-docs</code>. Ela
+não contém documentação de terceiros e é segura para reproduzir o caminho completo.
 
-O exemplo abaixo usa somente a fixture sintética pública do repositório. Ela
-não contém documentação de terceiros e pode ser usada sem resolver questões de
-copyright.
+### 1. Resolver a fonte
 
-### 1. Descubra a fonte
-
-```bash
+~~~bash
 python -m docops resolve ./documents/fixtures/acme-docs --json
-```
+~~~
 
-Esse comando é somente leitura: ele identifica a origem e mostra o que seria
-usado. Ele não gera o pacote.
+Somente leitura: identifica a fonte sem gerar artefatos.
 
-### 2. Veja o plano antes de aplicar
+### 2. Inspecionar o plano
 
-```bash
-python -m docops plan ./documents/fixtures/acme-docs \
-  --output ./artifacts/acme \
-  --slug acme \
-  --license MIT \
-  --redistribution private-only \
-  --json
-```
+~~~bash
+python -m docops plan ./documents/fixtures/acme-docs --output ./artifacts/acme --slug acme --license MIT --redistribution private-only --json
+~~~
 
-`plan` é uma prévia. Ele calcula mudanças, verifica políticas e aponta
-bloqueios sem substituir o pacote de destino.
+O plano mostra mudanças, políticas e bloqueios antes de qualquer promoção.
 
-### 3. Gere o pacote
+### 3. Gerar e validar
 
-```bash
-python -m docops run ./documents/fixtures/acme-docs \
-  --output ./artifacts/acme \
-  --slug acme \
-  --license MIT \
-  --redistribution private-only
-```
-
-Para uma fonte real, substitua `./documents/fixtures/acme-docs` por um nome,
-URL, repositório ou pasta e informe a licença correta. Não use `MIT` para uma
-documentação que não seja MIT.
-
-### 4. Valide o resultado
-
-```bash
+~~~bash
+python -m docops run ./documents/fixtures/acme-docs --output ./artifacts/acme --slug acme --license MIT --redistribution private-only
 python -m docops validate ./artifacts/acme --json
-```
+~~~
 
-Se a validação passar, o pacote tem os arquivos obrigatórios e respeita o
-contrato público.
+O <code>run</code> escreve em staging, valida o resultado e só então promove a
+composição. Uma falha não substitui a geração ativa por um pacote incompleto.
 
-### 5. Veja perguntas candidatas
+### 4. Preparar avaliação
 
-```bash
+~~~bash
 python -m docops golden-candidates ./artifacts/acme --json
-```
+~~~
 
-As perguntas geradas são candidatas. Antes de usá-las como avaliação oficial,
-uma pessoa deve revisar as perguntas e as fontes esperadas.
+As perguntas geradas são candidatas. Um Golden Set oficial precisa de revisão
+humana antes de virar critério de publicação.
 
-### 6. Conecte ao seu agente
+### 5. Habilitar RAG quando necessário
 
-Abra `./artifacts/acme/harness.json` e siga as instruções relativas que estão
-lá. Em termos simples:
+Com o perfil RAG instalado:
 
-1. carregue `skill/SKILL.md` como uma skill do seu harness;
-2. carregue `router/SKILL.md` para ele saber quando usar cada caminho;
-3. registre o `knowledge-rag` como MCP stdio se quiser busca factual;
-4. faça perguntas ao seu agente.
+~~~bash
+python -m docops run ./documents/fixtures/acme-docs --output ./artifacts/acme --slug acme --license MIT --redistribution private-only --index-rag
+python -m docops evaluate --package ./artifacts/acme --cases ./golden-set/test-cases-fixture.json --adapter mcp --runtime-root . --json
+~~~
 
-A regra prática é:
+O RAG padrão é local e usa <code>stdio</code>; não é necessário abrir uma porta
+na rede.
 
-| Tipo de pergunta | Caminho recomendado |
+### Escolha da rota no agente
+
+| Pergunta | Rota |
 | --- | --- |
-| “Qual é o padrão para fazer X?” | `skill/`, para entendimento e orientação. |
-| “Qual é o default, assinatura ou versão?” | RAG, para buscar o trecho literal. |
-| Pergunta ambígua ou sensível | Skill para raciocinar + RAG para confirmar. |
+| “Qual padrão devo usar para fazer X?” | <code>skill/</code>, para raciocínio e orientação. |
+| “Qual é o default, assinatura ou versão?” | <code>rag/</code>, para o trecho literal com fonte. |
+| “A evidência é ambígua ou sensível?” | Skill para interpretar + RAG para confirmar. |
 
-Respostas factuais devem citar uma origem como `path#secao` ou `path:linha`.
+## O pacote gerado
 
-### 7. Indexe o RAG, se realmente precisar
-
-O RAG é opcional. Primeiro instale o perfil RAG no checkout:
-
-```bash
-python scripts/bootstrap.py --dev --rag
-```
-
-Depois gere o pacote com a indexação real:
-
-```bash
-python -m docops run ./documents/fixtures/acme-docs \
-  --output ./artifacts/acme \
-  --slug acme \
-  --license MIT \
-  --redistribution private-only \
-  --index-rag
-```
-
-O MCP padrão é local e usa `stdio`; não é necessário abrir uma porta na rede.
-Para testar a recuperação com um Golden Set revisado:
-
-```bash
-python -m docops evaluate \
-  --package ./artifacts/acme \
-  --cases ./golden-set/test-cases-fixture.json \
-  --adapter mcp \
-  --runtime-root . \
-  --json
-```
-
-## Como desinstalar
-
-### Remover somente o pacote Python
-
-Ative o mesmo ambiente usado na instalação e rode:
-
-```bash
-python -m pip uninstall consulta-documentacao
-```
-
-No Windows PowerShell, se preferir não ativar o ambiente:
-
-```powershell
-.\.venv\Scripts\python.exe -m pip uninstall consulta-documentacao
-```
-
-Esse comando remove o pacote, mas preserva o código-fonte, os pacotes gerados
-e o ambiente virtual.
-
-### Remover o ambiente virtual local
-
-Faça isso somente se `.venv` for o ambiente criado para este projeto e não for
-usado por outro trabalho.
-
-Linux/macOS:
-
-```bash
-rm -rf ./.venv
-```
-
-Windows PowerShell:
-
-```powershell
-Remove-Item -Recurse -Force .\.venv
-```
-
-Se o bootstrap criou `.venv-posix` ou `.venv-windows`, remova somente o
-diretório correspondente a este checkout.
-
-### Remover o RAG e os resultados gerados
-
-Se o RAG foi instalado no mesmo ambiente:
-
-```bash
-python -m pip uninstall knowledge-rag
-```
-
-Para apagar um resultado que você não precisa mais, remova somente a pasta
-exata que você criou, por exemplo `./artifacts/acme`. Ela pode conter cópias de
-documentos adquiridos e evidências importantes; confira antes de apagar.
-
-O cache de modelos fica fora do pacote, em `~/.cache/docops/models`. Ele é
-opcional e só deve ser removido se você tiver certeza de que nenhum outro
-projeto precisa dele.
-
-## O que é gerado
-
-Um pacote típico se parece com isto:
-
-```text
+~~~text
 artifacts/acme/
-├── manifest.json          # identidade, licença, hashes e resultado
+├── manifest.json          # identidade, licença, hashes e estado terminal
 ├── config.yaml            # configuração relativa do pacote
-├── harness.json           # hand-off para o agente externo
+├── harness.json           # hand-off para o harness externo
 ├── skill/
 │   ├── SKILL.md           # conhecimento conceitual principal
 │   └── ...                # capítulos, glossário e auxiliares
 ├── router/
-│   └── SKILL.md           # regra para skill versus RAG
+│   └── SKILL.md           # regra skill versus RAG
 ├── rag/
 │   ├── documents/         # documentos normalizados
-│   ├── sources.json       # proveniência das fontes
+│   ├── sources.json       # proveniência
 │   ├── index.json         # estado e métricas do índice
 │   └── data/              # dados locais quando indexado
-└── .docops/
-    ├── state.json         # estado resumível
-    ├── checkpoints.json   # fases concluídas
-    └── ...                # planos e evidências operacionais
-```
+└── .docops/               # estado, checkpoints e evidências operacionais
+~~~
 
-O resultado é autocontido e pode ser copiado para outro ambiente, respeitando
-a licença dos documentos e as instruções do harness.
+O diretório <code>.docops/</code> é estado operacional: não deve ser tratado
+como corpus nem compartilhado sem revisão. O pacote só é consultável quando
+<code>python -m docops validate &lt;pacote&gt;</code> passa.
 
-## Parte técnica
+## Arquitetura
 
-Esta seção explica o funcionamento interno sem exigir que você seja especialista
-em Python.
+~~~mermaid
+flowchart LR
+    A["Fonte<br/>nome · URL · Git · pasta"] --> B["resolve"]
+    B --> C["plan<br/>diff + políticas"]
+    C --> D["run<br/>staging + validação"]
+    D --> E["Pacote versionado"]
+    E --> S["skill<br/>conceitos"]
+    E --> R["router<br/>decisão de rota"]
+    E --> G["RAG<br/>fatos literais"]
+    E --> M["manifest<br/>evidências"]
+    S --> H["Harness externo"]
+    R --> H
+    G -. opcional / local .-> H
+~~~
 
-### Arquitetura em camadas
+O núcleo mantém uma única autoridade editorial e expõe operações de lifecycle
+com estado versionado:
 
-```mermaid
-sequenceDiagram
-    actor U as Operador
-    participant O as docops
-    participant S as Fonte
-    participant P as Pacote em staging
-    participant M as knowledge-rag MCP
-    participant H as Harness externo
+1. **Resolver** normaliza a identidade da fonte e aplica limites de aquisição.
+2. **Planejar** calcula um plano imutável sem alterar o destino ativo.
+3. **Gerar** normaliza documentos, produz skill/router/RAG e registra evidências.
+4. **Validar** confere manifesto, schemas, composição, proveniência e políticas.
+5. **Promover** exige os gates corretos; aprovação, publicação e rollback são explícitos.
+6. **Operar** usa eventos idempotentes, worker retomável, readers pinados e snapshots seguros.
 
-    U->>O: resolve / plan / run
-    O->>S: resolve e adquire com limites
-    S-->>O: documentos + metadados
-    O->>P: normaliza, gera skill/router/RAG
-    O->>P: valida contrato e promove atomicamente
-    P-->>U: manifesto + resultado terminal
-    opt --index-rag
-        O->>M: sincroniza o corpus local
-        M-->>P: métricas de backend
-    end
-    U->>H: carrega skill, router e MCP
-    H->>P: lê instruções ou consulta fatos
-```
+Para o mapa completo de módulos e fronteiras, consulte
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-O pipeline tem seis ideias principais:
+## CLI e API
 
-1. **Resolver seguro:** transforma nome, URL, repositório ou caminho em uma
-   identidade canônica. Nomes ambíguos param; a descoberta web silenciosa não é
-   feita pelo núcleo.
-2. **Plano separado da aplicação:** `plan` calcula o que mudaria. `run` aplica
-   o plano em uma área de staging, valida e só então promove o conjunto.
-3. **Normalização:** documentos de formatos aceitos viram entradas estáveis,
-   com origem, versão, seção e hash.
-4. **Separação de responsabilidades:** a skill explica conceitos; o router
-   decide a rota; o RAG encontra fatos literais.
-5. **RAG opcional:** `knowledge-rag` é um MCP local. Sem `--index-rag`, o
-   pacote continua útil e o corpus fica preparado para indexação posterior.
-6. **Evidência:** manifestos, checkpoints e resultados JSON tornam a execução
-   auditável e retomável.
+Use <code>python -m docops ...</code> para garantir que a CLI está ligada ao
+mesmo Python do ambiente ativo. O executável <code>docops ...</code> é equivalente.
 
-### Comandos do CLI
+### Comandos do dia a dia
 
-Use `python -m docops ...` para garantir que o comando está rodando no mesmo
-Python que recebeu a instalação. O executável `docops ...` é equivalente.
-
-| Comando | Faz o quê | Escreve no destino? |
+| Comando | Função | Efeito no pacote ativo |
 | --- | --- | --- |
-| `resolve <fonte>` | Identifica e descreve a origem. | Não. |
-| `plan <fonte> --output <pacote>` | Calcula diff, políticas e blockers. | Não no pacote ativo. |
-| `run <fonte> --output <pacote>` | Executa o pipeline completo. | Sim, com staging e promoção. |
-| `validate <pacote>` | Confere manifesto, skill, router e RAG. | Não. |
-| `golden-candidates <pacote>` | Gera perguntas ainda não revisadas. | Sim, no pacote de evidências. |
-| `evaluate --package ... --cases ...` | Mede recuperação contra Golden Set revisado. | Registra avaliação. |
-| `config-audit <config.yaml>` | Audita segurança do transporte MCP. | Não. |
-| `cleanup <pacote>` | Remove resíduos expirados e não retomáveis. | Sim, somente resíduos seguros. |
+| <code>resolve &lt;fonte&gt;</code> | Identifica a origem. | Nenhum |
+| <code>plan &lt;fonte&gt; --output &lt;pacote&gt;</code> | Calcula diff, políticas e bloqueios. | Nenhum |
+| <code>run &lt;fonte&gt; --output &lt;pacote&gt;</code> | Gera, valida e promove. | Controlado por staging |
+| <code>validate &lt;pacote&gt;</code> | Confere o contrato do pacote. | Nenhum |
+| <code>golden-candidates &lt;pacote&gt;</code> | Gera perguntas não revisadas. | Escreve evidência |
+| <code>evaluate --package ...</code> | Mede recuperação contra Golden revisado. | Registra avaliação |
+| <code>config-audit &lt;config.yaml&gt;</code> | Audita transporte MCP. | Nenhum |
+| <code>cleanup &lt;pacote&gt;</code> | Remove apenas resíduos expirados e não retomáveis. | Limitado e protegido |
 
-O contrato público também pode ser usado por Python:
+### Hierarquia canônica
 
-```python
+Os aliases planos continuam disponíveis durante a migração. Para novos
+integradores, prefira a hierarquia canônica:
+
+~~~text
+docops lifecycle status
+docops lifecycle source {register,reconcile}
+docops lifecycle worker {list,run}
+docops lifecycle candidate {enrichment-request,enrich,approve,publish,rollback}
+docops lifecycle reader {session,query,revoke}
+docops lifecycle rag {snapshot,profile-compare}
+docops lifecycle learning {submit,review}
+docops lifecycle feedback {submit,report}
+docops init {start,status,answer,finalize}
+docops project {inspect,adopt,source,evidence,change,rollback,health,backup,restore,preset}
+docops supervisor {run,stop,resume}
+~~~
+
+A interface Python estável é exportada pela raiz:
+
+~~~python
 import docops
 
 request = docops.OperationRequest(
@@ -472,148 +278,114 @@ request = docops.OperationRequest(
     ),
 )
 
-operation = docops.plan(request)      # sem efeitos no destino
-preview = docops.preview(operation)   # resultado da simulação
-result = docops.apply(operation)      # aplica o mesmo plano
+operation = docops.plan(request)
+preview = docops.preview(operation)  # sem promover a geração
+result = docops.apply(operation)
 inspection = docops.inspect("artifacts/acme")
-```
+~~~
 
-Os tipos suportados são exportados pela raiz `docops`: `OperationOptions`,
-`OperationRequest`, `OperationPlan` e `OperationResult`. `docops.pipeline` é
-apenas um adapter de compatibilidade com a versão 1.0.
+Detalhes de tipos, imutabilidade e compatibilidade 1.0 estão em
+[docs/PYTHON-API.md](docs/PYTHON-API.md).
 
-### Estados de prontidão
+## Segurança e limites
 
-O manifesto distingue o estado do pacote para não confundir “arquivos foram
-gerados” com “o sistema foi validado de ponta a ponta”:
+O projeto trata documentação como dado, não como instrução executável.
 
-| Estado | Significado |
+- Informe a licença real da fonte; a licença MIT do código não licencia o corpus processado.
+- Não versione documentos privados/protegidos, credenciais, <code>data/</code>, <code>models_cache/</code> ou <code>.rag_state.json</code>.
+- Ambiguidade, autenticação ausente, licença desconhecida, revogação e evidência incompleta permanecem bloqueadas.
+- O transporte padrão é MCP local por <code>stdio</code>. HTTP/SSE exige configuração privada, bearer token forte, rate limit, logging redigido e <code>config-audit</code>.
+- O RAG não deve ser exposto na rede sem ler [SECURITY.md](SECURITY.md) e [docs/CHROMA-RESIDUAL-DECISION.md](docs/CHROMA-RESIDUAL-DECISION.md).
+- Aquisição web respeita robots, redirects seguros e limites de host, páginas, profundidade, payload e timeout.
+- O processo de limpeza deve atingir somente o PID exato do projeto; não use <code>Get-Process python | Stop-Process</code>.
+
+Browser rendering, OCR, autenticação de fonte, confirmação de licença e
+autorizações comerciais não são simulados como concluídos. O manifesto preserva
+o bloqueio para que um harness ou operador autorizado decida como prosseguir.
+
+## Evolução P0–P5
+
+O estado atual do repositório inclui a implementação e a evidência local das
+fases P0–P5 e dos 24 tickets do plano master:
+
+| Fase | Foco |
 | --- | --- |
-| `scaffold-ready` | Estrutura inicial foi gerada. |
-| `skill-enriched` | A skill recebeu enriquecimento externo e validação. |
-| `corpus-ready` | Corpus normalizado está pronto para o MCP. |
-| `indexed` | A indexação real do RAG foi executada. |
-| `evaluated` | Há avaliação registrada contra Golden Set revisado. |
-| `release-ready` | Evidências exigidas para publicação estão presentes. |
+| P0 | Baseline, contratos e operação segura |
+| P1 | Projeto privado, estado persistente e adoção |
+| P2 | Fontes, recuperação, qualidade e preset de domínio |
+| P3 | Mudanças, enriquecimento, derivados e promoção |
+| P4 | Worker, supervisor, backup, release gates e distribuição |
+| P5 | Delegação factual restrita e piloto reproduzível |
 
-O `book-to-skill` é uma skill externa executada pelo harness do agente. Ela pode
-enriquecer o scaffold; o `consulta-documentacao` não inicia uma sessão de IA.
+Os testes e fixtures não concedem autorização comercial, credencial, publicação
+externa ou uso do corpus/índice real. A evidência detalhada e as limitações
+estão em:
 
-### Configuração e segurança
+- [docs/MASTER-PLAN.md](docs/MASTER-PLAN.md)
+- [docs/MASTER-IMPROVEMENT-PLAN.md](docs/MASTER-IMPROVEMENT-PLAN.md)
+- [docs/master-evolution/ROADMAP.md](docs/master-evolution/ROADMAP.md)
+- [docs/master-evolution/IMPLEMENTATION-EVIDENCE.md](docs/master-evolution/IMPLEMENTATION-EVIDENCE.md)
+- [docs/master-evolution/TDD-EXECUTION.md](docs/master-evolution/TDD-EXECUTION.md)
 
-- A configuração gerada é relativa ao pacote para facilitar transporte.
-- O transporte padrão é `stdio`, sem porta pública.
-- HTTP/SSE só deve ser usado com uma cópia privada da configuração de rede,
-  bearer token forte, rate limit, métricas, logging JSON e `config-audit`.
-- Loopback, metadata, credenciais em URL, redirects perigosos e payloads acima
-  do limite são bloqueados por padrão durante aquisição web.
-- O operador usa staging, leases e checkpoints; uma falha não deve substituir a
-  geração ativa por uma geração incompleta.
-- Não use `Get-Process python | Stop-Process` para limpar o ambiente. Liste o
-  processo, confirme a linha de comando e encerre somente o PID pertencente a
-  este projeto.
+## Desenvolvimento
 
-O perfil RAG publicado é restrito ao uso local com `PersistentClient` e MCP
-stdio. Há um residual de segurança documentado para a dependência Chroma; não
-exponha o RAG na rede sem ler [`SECURITY.md`](SECURITY.md) e
-[`docs/CHROMA-RESIDUAL-DECISION.md`](docs/CHROMA-RESIDUAL-DECISION.md).
+Depois de executar <code>python scripts/bootstrap.py --dev</code>, valide
+alterações com o conjunto proporcional abaixo:
 
-### Dependências opcionais
+~~~bash
+python -m docops doctor --json
+python -m pytest -q
+python -m ruff check docops tests scripts
+python -m ruff format --check docops tests scripts
+python scripts/check_contracts.py --json
+python scripts/check_documentation.py --json
+python scripts/check_support_matrix.py --json
+python scripts/run_release_gates.py --profile core --json
+~~~
 
-| Extra/perfil | Quando usar |
+Os gates de release executam etapas sequenciais em workspaces isolados e
+registram evidências redigidas. O perfil <code>full</code> inclui as etapas que
+dependem do RAG local instalado.
+
+## Estrutura do repositório
+
+~~~text
+docops/                     núcleo, CLI, lifecycle e contratos
+schemas/                    schemas JSON canônicos
+tests/                      testes unitários, de contrato e integração
+scripts/                    bootstrap, gates, auditorias e utilitários
+skills/docops-agent/        skill operacional distribuível
+documents/fixtures/         exemplos sintéticos
+golden-set/                 casos de avaliação revisáveis
+docs/                       arquitetura, uso, planos e runbooks
+~~~
+
+Schemas em <code>schemas/</code> são a fonte canônica; a cópia em
+<code>docops/schemas/</code> é sincronizada por <code>scripts/sync_schemas.py</code>.
+
+## Documentação
+
+| Quando você quer... | Leia |
 | --- | --- |
-| Core | Operações, geração e validação sem RAG. |
-| `formats` | Leitura de YAML, PDF e DOCX. |
-| `rag` | `knowledge-rag==4.8.5` para MCP e indexação local. |
-| `dev` | Testes, lint, auditoria e ferramentas de desenvolvimento. |
+| Reproduzir o fluxo completo | [docs/TUTORIAL.md](docs/TUTORIAL.md) |
+| Consultar comandos e operação | [docs/USE.md](docs/USE.md) |
+| Entender arquitetura e recuperação | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Integrar via Python | [docs/PYTHON-API.md](docs/PYTHON-API.md) |
+| Conectar um harness | [docs/HARNESSES.md](docs/HARNESSES.md) |
+| Consultar schemas | [docs/SCHEMAS.md](docs/SCHEMAS.md) |
+| Auditar segurança | [SECURITY.md](SECURITY.md) |
+| Preparar uma release | [docs/RELEASE.md](docs/RELEASE.md) |
+| Ver limites de suporte | [docs/SUPPORT-MATRIX.json](docs/SUPPORT-MATRIX.json) |
+| Contribuir | [CONTRIBUTING.md](CONTRIBUTING.md) |
 
-As versões fixadas e a proveniência estão em
-[`requirements.lock`](requirements.lock) e [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md).
+## Licença
 
-## Segurança, licenças e limites
-
-### Licença dos documentos
-
-O código deste projeto é MIT. Isso **não** transforma automaticamente a
-documentação que você processar em MIT. Antes de gerar ou publicar um pacote:
-
-1. confirme a licença da fonte;
-2. informe-a em `--license`;
-3. escolha uma política de redistribuição adequada;
-4. não versiona documentos privados ou protegidos por copyright;
-5. confira o manifesto e o conteúdo do pacote antes de compartilhar.
-
-As fixtures sintéticas são os exemplos públicos distribuíveis. A documentação
-privada usada no piloto FastAPI não faz parte deste repositório nem da release.
-
-### Suporte anunciado
-
-| Item | Suporte |
-| --- | --- |
-| Python | `3.11`, `3.12` e `3.13` |
-| Sistemas testados | Ubuntu, Windows e macOS |
-| Python `3.14` | Tolerado localmente, mas ainda não anunciado como suportado |
-| Harnesses validados | OpenCode e Codex |
-| Outros harnesses | Devem suportar Agent Skills e MCP stdio |
-| RAG | Opcional; integração local |
-| Publicação | GitHub Release; não PyPI |
-
-## Assets da release
-
-A [release `v1.1.0`](https://github.com/VIDORETTO/agent-knowledge-kit/releases/tag/v1.1.0)
-oferece, além da wheel, evidências para quem precisa conferir a distribuição:
-
-| Asset | Para que serve |
-| --- | --- |
-| `consulta_documentacao-1.1.0-py3-none-any.whl` | Instalação do pacote principal. |
-| `SHA256SUMS` | Conferência de integridade dos downloads. |
-| `sbom-1.1.0.spdx.json` | Inventário de componentes. |
-| `requirements-1.1.0.lock` | Dependências travadas do ambiente. |
-| `dependency-locks-1.1.0.json` | Evidência estruturada das dependências. |
-| `supply-chain-1.1.0.json` | Evidências da cadeia de fornecimento. |
-| `candidate-manifest-1.1.0.json` e `candidate-identity-1.1.0.json` | Identidade e digest do candidato publicado. |
-| `candidate-audit-1.1.0.json` | Auditoria dos gates da release. |
-
-## Versão 1.1.0 e verificação
-
-Para conferir localmente um candidato de release a partir de um checkout do
-projeto, use os scripts abaixo. Eles produzem evidências, mas não fazem
-commit, tag, push ou publicação automaticamente:
-
-```bash
-python scripts/prepare_candidate.py --root . --output artifacts/candidate-1.1.0
-python scripts/verify_candidate.py --root artifacts/candidate-1.1.0
-python scripts/verify_candidate.py --root artifacts/candidate-1.1.0 --source-root .
-```
-
-O [runbook de release](docs/RELEASE.md) explica os gates, a auditoria de
-dependências e o procedimento de publicação manual pelo GitHub.
-
-## Documentação e suporte
-
-- [Tutorial reproduzível](docs/TUTORIAL.md) — caminho completo com fixture sintética.
-- [Uso operacional](docs/USE.md) — instalação, protocolo, RAG e avaliação.
-- [Arquitetura](docs/ARCHITECTURE.md) — componentes e contratos do pacote.
-- [Plano de atualização contínua de conhecimento](docs/continuous-knowledge/README.md) — especificação proposta, 18 tickets e plano TDD; ainda não implementado.
-- [Integração com harnesses](docs/HARNESSES.md) — hand-off para OpenCode, Codex e outros.
-- [Interface Python](docs/PYTHON-API.md) — API estável para integrações.
-- [Schemas públicos](docs/SCHEMAS.md) — contratos JSON dos artefatos.
-- [Matriz de suporte](docs/SUPPORT-MATRIX.json) — versões, plataformas e gates.
-- [Política de publicação](docs/PUBLISHING-POLICY.md) — o que pode sair do repositório.
-- [Runbook de release](docs/RELEASE.md) — como preparar e verificar uma release.
-- [Segurança](SECURITY.md) — threat model, configuração e residuals conhecidos.
-- [Contribuição](CONTRIBUTING.md) — como trabalhar no projeto.
-- [Políticas comunitárias](community/) — código de conduta e políticas do projeto.
-- [Issues do GitHub](https://github.com/VIDORETTO/agent-knowledge-kit/issues) — dúvidas e problemas.
-
-Para conhecer as decisões de release, veja também as
-[notas da versão 1.1.0](docs/RELEASE-NOTES-1.1.0.md).
-
----
+O código deste projeto é distribuído sob a [licença MIT](LICENSE). A licença,
+os direitos de redistribuição e a privacidade da documentação processada devem
+ser avaliados separadamente em cada execução.
 
 <div align="center">
 
-Feito para transformar documentação em conhecimento utilizável, verificável e
-transportável.
+<sub>Documentação como código: clara para pessoas, rastreável para agentes e segura para operar.</sub>
 
 </div>
