@@ -5,9 +5,9 @@
 Esta execução implementa localmente os contratos de `docs/MASTER-PLAN.md`,
 `docs/MASTER-IMPROVEMENT-PLAN.md` e `docs/master-evolution/`, em ordem de
 dependências P0→P5. O estado de trabalho permanece na branch
-`codex/main-consolidation`; o checkout `main`, o remoto, o corpus e o índice RAG
-real não foram alterados. Os arquivos de planejamento que já estavam no
-working tree foram preservados.
+`main`; o gate final registrou o commit-base `4350d67` e o working tree da
+execução. O corpus e o índice RAG real não foram alterados. Os arquivos de
+planejamento que já estavam no working tree foram preservados.
 
 O teste integrado usa somente diretórios temporários e dados sintéticos. Não
 houve publicação, criação de tag, instalação de scheduler, chamada a provedor
@@ -34,6 +34,33 @@ permissão comercial ou licença foi inferida.
   `scripts/run_master_evolution_fixture.py` e o runner de release o executa
   como estágio obrigatório.
 
+## Atualização T02 → T04 — migração legada e artefatos opcionais — 2026-09-09/10
+
+Esta continuação preservou o pacote DOCOPS existente como locator independente:
+ele não foi duplicado nem convertido em estado editorial do projeto. A adoção
+usa caminhos relativos no receipt (`source_path`/`source_locator`), hashes de
+origem e destino, e mantém direitos/licença e privacidade como `unknown` quando
+não há autoridade externa. O dry-run não grava `project.json`, metadados,
+package, revisão ou receipt.
+
+### Ledger RED → GREEN da continuação
+
+- **Comercial não confirmado:** o RED mostrou que um preço proposto podia vazar
+  para `page.offer`; o GREEN mantém preço, garantia e CTA nulos e a página
+  pendente até haver resposta explícita confirmada e preço portátil válido.
+- **Adoção legada:** o RED mostrou locator absoluto no receipt e projeto
+  incrementado artificialmente no dry-run; o GREEN usa locator relativo, hashes,
+  plano de substituição/backup e mantém o estado byte a byte no dry-run.
+- **Mudança de audiência:** o RED mostrou derivado dependente inalterado; o
+  GREEN atualiza brief/página e marca apenas curso/página como `draft`, criando
+  revisão imutável localizada sem inserir campo fora do contrato do curso.
+- **Retomada CLI:** o RED mostrou `ok=true` com `needs_input` retornando código
+  0; o GREEN retorna código 2, e dois processos CLI retomam a mesma sessão sem
+  repetir respostas confirmadas.
+- **Preço estruturado:** o RED revelou erro de tipo ao validar um mapa de preço;
+  o GREEN valida a forma `{amount_decimal, currency}` sem exceção e mantém a
+  pendência quando a forma não é contratual.
+
 ## Ledger RED → GREEN por ticket
 
 Na auditoria TDD final, respostas `agent_proposed`/`preset_default` passaram a
@@ -44,8 +71,8 @@ também passou a recusar segmentos temporais fora de ordem.
 |---|---|---|---|
 | T01 | Checker e documentação não distinguiam exemplo futuro de flag executável. | `check_documentation.py`, aliases explícitos e ajuda canônica; `test_documentation_checker...`. | verificado local |
 | T02 | Init não tinha sessão master persistida/retomável. | `start/inspect/answer/finalize_project_init`, CAS, idempotência, stale revision e origem confirmada para decisões; `test_project_init...`, `test_proposed_course_intent...`. | verificado local |
-| T03 | Finalização não tinha composição de brief/derivados sob contrato. | Artefatos v1 separados, hashes, entregáveis opcionais, estados pendentes e confirmação explícita de respostas comerciais; `test_project_revision_artifacts...`. | verificado local |
-| T04 | Adoção/migração pública inexistia; Windows também revelou `WinError 5` na troca de diretório. | Adoção v1, backup, rollback, idempotência e restauração transacional; `test_adoption_is_idempotent...`. | verificado local |
+| T03 | Finalização não tinha composição de brief/derivados sob contrato. | Artefatos v1 separados, hashes, entregáveis opcionais, estados pendentes, confirmação explícita de respostas comerciais e invalidação localizada por mudança de audiência; `test_unconfirmed_commercial_values_never_enter_page_offer`, `test_audience_correction_invalidates_only_dependent_derivatives`. | verificado local |
+| T04 | Adoção/migração pública inexistia; Windows também revelou `WinError 5` na troca de diretório. | Adoção v1, locator relativo, hashes de origem/destino, dry-run não mutante, backup, rollback, idempotência e restauração transacional; `test_adoption_dry_run_is_non_mutating_and_receipt_uses_portable_locators`. | verificado local |
 | T05 | Direitos e validade não eram aplicados por finalidade. | Registro governado, grants fail-closed, região/validade e decisão de uso; `test_governance_is_per_purpose...`. | verificado local |
 | T06 | Transcrição sem locator temporal deveria recusar. | Segmentos temporais em ordem monotônica, proveniência, limites e redistribuição privada; mesma suíte e fixture integrada. | verificado local |
 | T07 | Hits revogados/estrangeiros poderiam ocupar o resultado. | Filtro por projeto/fonte/revisão, refill bounded e `insufficient_evidence`; `test_evidence_query_filters...`. | verificado local |
@@ -63,7 +90,7 @@ também passou a recusar segmentos temporais fora de ordem.
 | T19 | Saúde não expunha limiar, incidente deduplicado ou redação. | `project health` com missed cycles, queue metrics, incident open/close e redaction; `test_supervisor_coalesces...`. | verificado local |
 | T20 | Backup não preservava unidade de projeto, receipts e tombstones. | Manifest/checksum, exclusão de segredos, snapshot SQLite da fila operacional, restore isolado e tombstone posterior; `test_backup_restore...`, RPO/RTO no fixture. | verificado local |
 | T21 | Mitigação expirada/alterada não era validada contra auditoria bruta. | `validate_dependency_mitigation` exige owner, prazo, evidence, lock, versão, advisory e threat model; `test_dependency_mitigation...`. | verificado local; decisão upstream externa |
-| T22 | Runner não incluía o protocolo master nem provava pacote core. | Release gates seriais, core fixture obrigatório, schemas empacotados e wheel core; o gate final core aprovou 21/21 estágios, 6.440 testes passados, 70 skips, zero falhas; MCP/full profile depende do runtime externo. | verificado local; MCP/CI externo |
+| T22 | Runner não incluía o protocolo master nem provava pacote core. | Release gates seriais, core fixture obrigatório, schemas empacotados e wheel core; o gate final core aprovou 21/21 estágios, 6.530 testes passados, 70 skips, zero falhas; MCP/full profile depende do runtime externo. | verificado local; MCP/CI externo |
 | T23 | Delegação ampla poderia alcançar conflito, conceito ou licença. | Receipt escopado por fonte/ação/prazo/orçamento/policy, hash exato, revalidação e kill switch; `test_factual_delegation...`. | verificado local |
 | T24 | Roteiro integrado não tinha fixture provider-free reproduzível. | Init→fonte→transcrição→claims/conflito→revogação→change crash/recovery→backup/restore→delegação revogada→presets; script integrado. | verificado local; fronteiras externas bloqueadas |
 
@@ -89,9 +116,9 @@ valores são métricas do diretório temporário, não uma SLO de produção.
 
 O relatório final foi gravado no diretório temporário do runner, no locator
 portátil `<artifacts>/release-gates.json`:
-`ok=true`, 21 estágios, `failed=0`, `not_run=0`, 6.440 testes passados e 70
-skips explicitamente registrados. O pytest do checkout passou em 393 testes e
-teve 3 skips; no clean-clone core passaram 388 testes e houve 8 skips, sendo
+`ok=true`, 21 estágios, `failed=0`, `not_run=0`, 6.530 testes passados e 70
+skips explicitamente registrados. O pytest do checkout passou em 399 testes e
+teve 3 skips; no clean-clone core passaram 394 testes e houve 8 skips, sendo
 5 devido à ausência deliberada de `chromadb` e 3 por limitações de symlink do
 Windows. O perfil `full`/MCP não foi executado porque exigiria o runtime RAG e
 o índice real fora do escopo autorizado; nenhum estágio foi pulado

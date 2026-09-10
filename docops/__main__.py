@@ -822,14 +822,12 @@ def _read_input_file(path: Path | None) -> dict[str, object]:
 
 
 def _new_result_exit(result: dict[str, object]) -> int:
-    if result.get("ok"):
-        return 0
     outcome = result.get("outcome")
     if outcome == "needs_input":
         return 2
     if outcome == "blocked":
         return 3
-    return 1
+    return 0 if result.get("ok") else 1
 
 
 def _print_new_result(result: dict[str, object]) -> int:

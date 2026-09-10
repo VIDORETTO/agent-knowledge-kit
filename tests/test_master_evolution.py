@@ -223,6 +223,125 @@ def test_proposed_course_intent_stays_pending_until_explicit_confirmation(tmp_pa
     assert finalized["ok"] is True
 
 
+def test_unconfirmed_commercial_values_never_enter_page_offer(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    started = start_project_init(
+        project,
+        {
+            "name": "Private page fixture",
+            "objective": "Explain a synthetic workflow",
+            "deliverables": ["knowledge", "page"],
+        },
+        now="2026-09-08T12:00:00Z",
+    )
+    assert started["ok"] is True
+
+    proposed = answer_project_init(
+        project,
+        {
+            "commercial_authorization": {"value": True, "origin": "agent_proposed"},
+            "price": {
+                "value": {"amount_decimal": "99.00", "currency": "BRL"},
+                "origin": "agent_proposed",
+            },
+            "guarantee": {"value": "30 dias", "origin": "agent_proposed"},
+            "cta": {"value": "Comprar agora", "origin": "agent_proposed"},
+        },
+        expected_revision=started["session_revision"],
+        now="2026-09-08T12:01:00Z",
+    )
+    assert proposed["ok"] is True
+    assert proposed["outcome"] == "needs_input"
+
+    finalized = finalize_project_init(
+        project,
+        session_id=started["data"]["session"]["session_id"],
+        expected_revision=proposed["session_revision"],
+        now="2026-09-08T12:02:00Z",
+    )
+    assert finalized["ok"] is True
+    revision = project / "revisions" / finalized["data"]["project_revision_id"]
+    page = json.loads((revision / "page.json").read_text(encoding="utf-8"))
+    assert page["status"] == "pending"
+    assert page["offer"]["price"] is None
+    assert page["offer"]["guarantee"] is None
+    assert page["offer"]["cta"] is None
+    assert "page" in finalized["data"]["pending_deliverables"]
+
+
+def test_audience_correction_invalidates_only_dependent_derivatives(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    started = start_project_init(
+        project,
+        {
+            "name": "Audience fixture",
+            "objective": "Explain a synthetic workflow",
+            "audience": "new sellers",
+            "deliverables": ["knowledge", "course", "page"],
+        },
+        now="2026-09-08T12:00:00Z",
+    )
+    assert started["ok"] is True
+    answered = answer_project_init(
+        project,
+        {
+            "audience": {"value": "experienced sellers", "origin": "user_explicit"},
+            "course_intent": {"value": "about_marketplace_selling", "origin": "user_explicit"},
+            "commercial_authorization": {"value": True, "origin": "user_explicit"},
+            "price": {
+                "value": {"amount_decimal": "99.00", "currency": "BRL"},
+                "origin": "user_explicit",
+            },
+        },
+        expected_revision=started["session_revision"],
+        now="2026-09-08T12:01:00Z",
+    )
+    assert answered["ok"] is True
+    finalized = finalize_project_init(
+        project,
+        session_id=started["data"]["session"]["session_id"],
+        expected_revision=answered["session_revision"],
+        now="2026-09-08T12:02:00Z",
+    )
+    assert finalized["ok"] is True
+    base_revision = finalized["data"]["project_revision_id"]
+    base_dir = project / "revisions" / base_revision
+    decisions = json.loads((base_dir / "decisions.json").read_text(encoding="utf-8"))
+    audience_decision = next(item for item in decisions["items"] if item["key"] == "audience")
+
+    proposed = propose_project_change(
+        project,
+        {
+            "change_id": "change-audience-correction",
+            "base_project_revision_id": base_revision,
+            "operations": [
+                {
+                    "type": "decision_correct",
+                    "target_id": audience_decision["decision_id"],
+                    "expected_hash": content_hash(audience_decision),
+                    "payload": {"value": "new sellers"},
+                }
+            ],
+            "requested_by": "operator",
+            "reason": "correct the audience used by dependent deliverables",
+            "dependency_graph": {"nodes": [], "edges": [], "unknown_dependencies": False},
+        },
+        now="2026-09-08T12:03:00Z",
+    )
+    assert proposed["ok"] is True
+    prepared = prepare_project_change(project, "change-audience-correction", now="2026-09-08T12:04:00Z")
+    assert prepared["ok"] is True, prepared.get("errors")
+    target_dir = project / "revisions" / prepared["data"]["receipt"]["project_revision_id"]
+    target_brief = json.loads((target_dir / "brief.json").read_text(encoding="utf-8"))
+    target_course = json.loads((target_dir / "course.json").read_text(encoding="utf-8"))
+    target_page = json.loads((target_dir / "page.json").read_text(encoding="utf-8"))
+    assert target_brief["audience"] == "new sellers"
+    assert target_page["audience"] == "new sellers"
+    assert "audience" not in target_course
+    assert target_course["status"] == "draft"
+    assert target_page["status"] == "draft"
+
+
 def test_adoption_is_idempotent_recoverable_and_does_not_infer_rights(tmp_path: Path, monkeypatch) -> None:
     project = tmp_path / "project"
     legacy_a = _legacy_package(tmp_path / "legacy-a", "legacy-a", "source A")
@@ -259,6 +378,44 @@ def test_adoption_is_idempotent_recoverable_and_does_not_infer_rights(tmp_path: 
     rejected = adopt_project_package(project, unsupported, now="2026-09-08T12:00:00Z")
     assert rejected["ok"] is False
     assert rejected["errors"][0]["code"] == "UNSUPPORTED_SCHEMA_VERSION"
+
+
+def test_adoption_dry_run_is_non_mutating_and_receipt_uses_portable_locators(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    legacy_a = _legacy_package(tmp_path / "legacy-a", "legacy-a", "source A")
+    legacy_b = _legacy_package(tmp_path / "legacy-b", "legacy-b", "source B")
+
+    first = adopt_project_package(project, legacy_a, now="2026-09-08T12:00:00Z")
+    assert first["ok"] is True
+    before_project = (project / "project.json").read_bytes()
+    before_manifest = (project / "package" / "manifest.json").read_bytes()
+
+    receipt = json.loads((project / ".docops-project" / "last-adoption.json").read_text(encoding="utf-8"))
+    assert not Path(receipt["source_path"]).is_absolute()
+    assert receipt["source_locator"] == legacy_a.name
+    assert receipt["rights_policy"] == "unknown"
+    assert receipt["privacy_policy"] == "unknown"
+
+    preview = adopt_project_package(project, legacy_b, dry_run=True, now="2026-09-08T12:01:00Z")
+    assert preview["ok"] is True
+    assert preview["outcome"] == "applied"
+    assert preview["data"]["dry_run"] is True
+    assert preview["data"]["would_replace"] is True
+    assert preview["data"]["backup_required"] is True
+    assert preview["data"]["project"]["write_revision"] == first["data"]["project"]["write_revision"]
+    assert (project / "project.json").read_bytes() == before_project
+    assert (project / "package" / "manifest.json").read_bytes() == before_manifest
+
+
+def test_adoption_dry_run_does_not_create_project_metadata(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    legacy = _legacy_package(tmp_path / "legacy", "legacy", "source")
+
+    preview = adopt_project_package(project, legacy, dry_run=True, idempotency_key="preview-1")
+
+    assert preview["ok"] is True
+    assert not (project / "project.json").exists()
+    assert not (project / ".docops-project").exists()
 
 
 def test_governance_is_per_purpose_and_transcription_requires_explicit_intervals(tmp_path: Path):

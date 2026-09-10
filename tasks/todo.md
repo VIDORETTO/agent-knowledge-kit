@@ -1447,7 +1447,7 @@ descritivos acima permanecem como a especificação original dos critérios.
 - [x] P3: T12, T13, T14, T15 e T16 verificados com diff, revogação, enrichment, derivados e recovery.
 - [x] P4: T17, T18, T19, T20, T21 e T22 verificados localmente; scheduler, CI multiplataforma e advisories upstream permanecem externos.
 - [x] P5: T23 e T24 verificados com delegação factual restrita e fixture provider-free.
-- [x] Schemas canônicos/distribuídos, documentação, seams, lint, compilação, segurança e regressões foram reexecutados; o gate core final terminou com 21/21 estágios, 6.440 passados, 70 skips explícitos, zero falhas e zero não executados.
+- [x] Schemas canônicos/distribuídos, documentação, seams, lint, compilação, segurança e regressões foram reexecutados; o gate core final terminou com 21/21 estágios, 6.530 passados, 70 skips explícitos, zero falhas e zero não executados.
 
 O status não concede autorização comercial, credencial, publicação ou uso do
 MCP/índice real. Resultados históricos anteriores permanecem separados e os
@@ -1520,3 +1520,45 @@ detalhes RED/GREEN estão em
   relatório de integração foi corrigida e passou no rerun focado. Permanecem duas
   limitações externas ao rebrand: MCP EOF e ambiente sem as versões travadas no
   fallback de supply-chain.
+
+## Continuação T02 → T04 — migração legada e artefatos opcionais — 2026-09-09
+
+### Plano executável
+
+- [x] Revalidar o checkout, a branch principal, os contratos, os seams públicos,
+  as lições e o teste T02 já verde.
+- [x] Caracterizar T03/T04 pela API raiz, CLI, JSON persistido e pacote DOCOPS,
+  identificando qualquer lacuna além dos testes existentes.
+- [x] Escrever um teste RED por comportamento faltante antes do código: artefatos
+  opcionais revisáveis e adoção idempotente de pacote legado com locator relativo.
+- [x] Implementar somente o mínimo para cada RED, preservando `docops`, os
+  readers/índices/releases legados e ausência de autorização inferida.
+- [x] Validar recuperação, CAS/idempotência, hashes/contratos, wheel/CLI e
+  regressões dos seams públicos; atualizar tickets/evidências com comandos reais.
+- [x] Fechar a revisão do plano somente se todos os critérios demonstrados forem
+  comprovados; registrar limites externos sem convertê-los em sucesso técnico.
+
+### Seams fixados
+
+`import docops`, subprocesso `python -m docops`, JSON em `project.json`,
+`init/session.json`, `revisions/<id>/` e `package/`, além dos schemas normativos.
+O pacote DOCOPS existente continua sendo locator independente; não será duplicado
+nem convertido em estado editorial do projeto.
+
+### Revisão
+
+- RED → GREEN confirmado em `test_unconfirmed_commercial_values_never_enter_page_offer`,
+  `test_adoption_dry_run_is_non_mutating_and_receipt_uses_portable_locators`,
+  `test_audience_correction_invalidates_only_dependent_derivatives` e
+  `test_project_init_resumes_across_cli_processes_without_repeating_answers`;
+  o caso de preço estruturado também foi coberto após o RED de tipo inválido.
+- Suíte completa: `399 passed, 3 skipped`; os três skips são limitações de
+  symlink no Windows. Gate core final: `21/21` estágios, `6530 passed`, `70
+  skipped`, `failed=0`, `not_run=0`; clean clone: `394 passed, 8 skipped`.
+- Gates adicionais verdes: schemas sincronizados (`54`), contratos, documentação
+  (`112` Markdown), seams públicos, Ruff, compilação, diff-check, crash matrix
+  (`17 passed`), revocation (`25 passed`), fixture provider-free e wheel core.
+- Limitações externas preservadas: MCP/índice RAG real, rebuild multilíngue,
+  credenciais/autorização comercial, publicação externa, CI multiplataforma e
+  decisão humana sobre advisories upstream não foram simulados como sucesso;
+  fixtures sintéticas mantêm esses fluxos bloqueados/`unknown`.

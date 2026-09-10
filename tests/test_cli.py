@@ -28,6 +28,88 @@ def test_doctor_command_emits_machine_readable_report(tmp_path: Path) -> None:
     assert report["checks"]["dependency_lock"]["path"] == "requirements.lock"
 
 
+def test_project_init_resumes_across_cli_processes_without_repeating_answers(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    start_input = tmp_path / "start.json"
+    start_input.write_text(
+        json.dumps({"name": "CLI fixture", "deliverables": ["knowledge"]}),
+        encoding="utf-8",
+    )
+
+    started = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "docops",
+            "init-start",
+            "--project",
+            str(project),
+            "--input",
+            str(start_input),
+            "--json",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert started.returncode == 2, started.stderr
+    started_payload = json.loads(started.stdout)
+    session = started_payload["data"]["session"]
+
+    answer_input = tmp_path / "answer.json"
+    answer_input.write_text(
+        json.dumps({"session_id": session["session_id"], "objective": "Retomar uma fixture"}),
+        encoding="utf-8",
+    )
+    answered = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "docops",
+            "init-answer",
+            "--project",
+            str(project),
+            "--input",
+            str(answer_input),
+            "--expected-revision",
+            str(session["session_revision"]),
+            "--json",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert answered.returncode == 0, answered.stderr
+
+    inspected = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "docops",
+            "init-status",
+            "--project",
+            str(project),
+            "--session-id",
+            session["session_id"],
+            "--json",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert inspected.returncode == 0, inspected.stderr
+    inspected_payload = json.loads(inspected.stdout)
+    assert inspected_payload["data"]["session"]["status"] == "draft_ready"
+    assert (
+        next(
+            answer["value"]
+            for answer in inspected_payload["data"]["session"]["answers"]
+            if answer["question_key"] == "objective"
+        )
+        == "Retomar uma fixture"
+    )
+
+
 def test_evaluate_command_never_emits_the_golden_query(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()

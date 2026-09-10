@@ -276,7 +276,9 @@ def _request_hash(operation: str, payload: Mapping[str, Any]) -> str:
 
 
 def _idempotency_path(root: Path) -> Path:
-    return _meta(root) / "idempotency.json"
+    # Reads must not create project metadata: dry-run and inspection are no-op
+    # operations until a mutating receipt is actually persisted.
+    return root / ".docops-project" / "idempotency.json"
 
 
 def _idempotency_records(root: Path) -> dict[str, Any]:
@@ -427,6 +429,20 @@ def _answer_is_confirmed(session: Mapping[str, Any], answers: Mapping[str, Any],
     return False
 
 
+def _confirmed_answer_value(session: Mapping[str, Any], answers: Mapping[str, Any], key: str) -> Any:
+    """Expose an answer to an artifact only after an explicit confirmation."""
+
+    if not _answer_is_confirmed(session, answers, key):
+        return None
+    return copy.deepcopy(answers.get(key))
+
+
+def _is_valid_price(value: Any) -> bool:
+    """Accept only the portable price shape defined by the page contract."""
+
+    return isinstance(value, Mapping) and _is_text(value.get("amount_decimal")) and _is_text(value.get("currency"))
+
+
 def _is_text(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
@@ -495,12 +511,7 @@ def _pending_questions(session: Mapping[str, Any], answers: Mapping[str, Any]) -
                     required=False,
                 )
             )
-        if not _answer_is_confirmed(session, answers, "price") or answers.get("price") in {
-            None,
-            "",
-            "unknown",
-            "unresolved",
-        }:
+        if not _answer_is_confirmed(session, answers, "price") or not _is_valid_price(answers.get("price")):
             result.append(
                 _question(
                     "price",
@@ -1093,7 +1104,10 @@ def finalize_project_init(
                     artifacts["course"] = course
                 page: dict[str, Any] | None = None
                 if "page" in deliverables:
-                    price = values.get("price") if isinstance(values.get("price"), Mapping) else None
+                    confirmed_price = _confirmed_answer_value(session, values, "price")
+                    price = confirmed_price if _is_valid_price(confirmed_price) else None
+                    guarantee = _confirmed_answer_value(session, values, "guarantee")
+                    cta = _confirmed_answer_value(session, values, "cta")
                     page_ready = (
                         _answer_is_confirmed(session, values, "commercial_authorization")
                         and values.get("commercial_authorization") is True
@@ -1115,8 +1129,8 @@ def finalize_project_init(
                                 "benefits": [],
                                 "proof_refs": [],
                                 "price": copy.deepcopy(price),
-                                "guarantee": values.get("guarantee"),
-                                "cta": values.get("cta"),
+                                "guarantee": guarantee,
+                                "cta": cta,
                             },
                             "restrictions": ["no_unverified_claims", "no_invented_price"],
                             "status": "draft" if page_ready else "pending",
@@ -1328,7 +1342,11 @@ def adopt_project_package(
             if replay is not None:
                 return replay
             destination = root / "package"
-            same = destination.is_dir() and tree_hash(destination) == tree_hash(source)
+            source_tree_hash = tree_hash(source)
+            destination_tree_hash = tree_hash(destination) if destination.is_dir() else None
+            same = destination_tree_hash is not None and destination_tree_hash == source_tree_hash
+            would_replace = not same
+            backup_required = destination.exists() and would_replace
             if same:
                 outcome = "unchanged"
                 backup_path = None
@@ -1396,22 +1414,34 @@ def adopt_project_package(
                     f"adoption-{uuid.uuid4().hex}",
                     {
                         "project_id": project_id,
-                        "source_path": str(source),
+                        "source_path": source.name,
+                        "source_locator": source.name,
                         "source_identity": identity,
+                        "source_tree_hash": source_tree_hash,
+                        "destination_tree_hash": destination_tree_hash,
                         "destination": "package",
                         "backup_path": str(backup_path.relative_to(root).as_posix()) if backup_path else None,
                         "dry_run": False,
+                        "migration_version": 1,
                         "rights_policy": "unknown",
+                        "privacy_policy": "unknown",
+                        "would_replace": would_replace,
+                        "backup_required": backup_required,
                         "index_rebuilt": False,
                     },
                     now=_iso(now),
                 )
                 _write_doc(_meta(root) / "last-adoption.json", migration)
             data = {
-                "project": _project_projection(next_project),
+                "project": _project_projection(project if dry_run else next_project),
+                "source_locator": source.name,
                 "source_identity": identity,
+                "source_tree_hash": source_tree_hash,
+                "destination_tree_hash": destination_tree_hash,
                 "package_locator": "package",
                 "backup_path": str(backup_path.relative_to(root).as_posix()) if backup_path else None,
+                "would_replace": would_replace,
+                "backup_required": backup_required,
                 "index_rebuilt": False,
                 "pending_fields": ["rights_policy", "privacy_policy"],
                 "dry_run": bool(dry_run),
@@ -1423,7 +1453,8 @@ def adopt_project_package(
                 data=data,
                 next_actions=["project source govern", "project init status"],
             )
-            _idempotency_store(root, idempotency_key, request_hash, response)
+            if not dry_run:
+                _idempotency_store(root, idempotency_key, request_hash, response)
             return response
     except MasterProjectError as exc:
         return _failure(exc)
@@ -3787,6 +3818,8 @@ def _clone_revision_for_change(
                 items = list(decisions.get("items") or [])
                 target = operation.get("target_id")
                 replaced = False
+                corrected_key: str | None = None
+                corrected_value: Any = None
                 for item in items:
                     if isinstance(item, Mapping) and item.get("decision_id") == target:
                         replaced_item = dict(item)
@@ -3795,11 +3828,32 @@ def _clone_revision_for_change(
                             "confirmed" if payload.get("value") is not None else replaced_item.get("status", "proposed")
                         )
                         items[items.index(item)] = replaced_item
+                        corrected_key = str(item.get("key") or "")
+                        corrected_value = copy.deepcopy(payload.get("value"))
                         replaced = True
                 if not replaced:
                     raise MasterProjectError("INVALID_INPUT", "decision target does not exist")
                 decisions["items"] = items
                 changed_kinds.add("decisions")
+                if corrected_key == "audience":
+                    brief = artifacts.get("brief")
+                    if brief is not None:
+                        brief["audience"] = copy.deepcopy(corrected_value)
+                        changed_kinds.add("brief")
+                    for derivative_kind in ("course", "page"):
+                        derivative = artifacts.get(derivative_kind)
+                        if derivative is None:
+                            continue
+                        if derivative_kind == "page":
+                            derivative["audience"] = copy.deepcopy(corrected_value)
+                        derivative["status"] = "draft"
+                        pending_reasons = [
+                            str(reason) for reason in derivative.get("pending_reasons", []) if isinstance(reason, str)
+                        ]
+                        if "audience_changed" not in pending_reasons:
+                            pending_reasons.append("audience_changed")
+                        derivative["pending_reasons"] = pending_reasons
+                        changed_kinds.add(derivative_kind)
             elif operation_type in {"source_add", "source_update", "source_withdraw", "source_revoke"}:
                 governance = artifacts.get("source-governance")
                 if governance is None:
