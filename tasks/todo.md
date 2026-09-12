@@ -1,4 +1,10 @@
-# Planejamento master de evolução — 2026-09-07
+# Planejamento master histórico — 2026-09-07
+
+> **Não usar como fila atual.** Este arquivo registra execução Farol 1.x. O
+> backlog e o todo normativos do Farol 2.0 estão em
+> [`specs/farol-2/backlog.md`](../specs/farol-2/backlog.md) e
+> [`specs/farol-2/todo.md`](../specs/farol-2/todo.md). Progresso deve ser
+> registrado primeiro em cada ticket canônico.
 
 Escopo: estudar `docs/MASTER-PLANNING-BRIEF.md` e o checkout atual; entregar
 diagnóstico, especificações, fases, tickets locais e plano TDD. Somente documentos.

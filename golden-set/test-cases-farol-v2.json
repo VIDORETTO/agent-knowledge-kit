@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "reviewed": true,
+  "dataset": "synthetic-authorized-farol-v2",
+  "cases": [
+    {
+      "case_id": "v2-auth-default",
+      "query": "What is the exact token behavior?",
+      "expected_filepath": "guide.md",
+      "reviewed": true,
+      "critical": true
+    },
+    {
+      "case_id": "v2-deployment-pattern",
+      "query": "How should deployment be structured?",
+      "expected_filepath": "guide.md",
+      "reviewed": true,
+      "critical": false
+    }
+  ]
+}

@@ -32,7 +32,7 @@ consultável — com **skill**, **roteador**, RAG opcional e evidências verific
 
 **Entender:** [arquitetura](#arquitetura) · [segurança](#seguranca-e-limites) · [estrutura do repositório](#estrutura-do-repositorio)
 
-**Aprofundar:** [documentação](#documentacao) · [evolução P0–P5](#evolucao-p0p5) · [contribuição](CONTRIBUTING.md)
+**Aprofundar:** [documentação](#documentacao) · [evolução Farol 2.0](#evolucao-farol-20) · [contribuição](CONTRIBUTING.md)
 
 **Comunidade:** [governança](community/GOVERNANCE.md) · [suporte](community/SUPPORT.md)
 
@@ -316,7 +316,19 @@ Browser rendering, OCR, autenticação de fonte, confirmação de licença e
 autorizações comerciais não são simulados como concluídos. O manifesto preserva
 o bloqueio para que um harness ou operador autorizado decida como prosseguir.
 
-## Evolução P0–P5
+## Evolução Farol 2.0
+
+O planejamento normativo atual está em
+[specs/farol-2/](specs/farol-2/README.md). Ele evolui o produto para IR
+canônica, taxonomia hierárquica, múltiplas skills e RAGFlow, e planeja remover
+do contrato 2.0 as linhas de Mercado Livre, curso, página e oferta.
+
+Próxima fronteira executável:
+
+- [TK-001 — provar os seams do RAGFlow](specs/farol-2/tickets/TK-001.md);
+- [TK-002 — expandir contratos fundamentais v2](specs/farol-2/tickets/TK-002.md).
+
+### Histórico Farol 1.x
 
 O estado atual do repositório inclui a implementação e a evidência local das
 fases P0–P5 e dos 24 tickets do plano master:
@@ -330,7 +342,8 @@ fases P0–P5 e dos 24 tickets do plano master:
 | P4 | Worker, supervisor, backup, release gates e distribuição |
 | P5 | Delegação factual restrita e piloto reproduzível |
 
-Os testes e fixtures não concedem autorização comercial, credencial, publicação
+Esses artefatos são históricos e não definem o escopo Farol 2.0. Seus testes e
+fixtures não concedem autorização comercial, credencial, publicação
 externa ou uso do corpus/índice real. A evidência detalhada e as limitações
 estão em:
 
@@ -358,7 +371,9 @@ python scripts/run_release_gates.py --profile core --json
 
 Os gates de release executam etapas sequenciais em workspaces isolados e
 registram evidências redigidas. O perfil <code>full</code> inclui as etapas que
-dependem do RAG local instalado.
+dependem do RAG local instalado. Para a jornada Farol 2.0, o perfil
+<code>ragflow</code> repete o core e exige endpoint, token, digest de imagem e
+SDK RAGFlow provisionados; sem esses recursos ele falha fechado.
 
 ## Estrutura do repositório
 

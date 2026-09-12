@@ -73,6 +73,9 @@ def main(argv: list[str] | None = None) -> int:
             data_prefix = wheel.stem.rsplit("-", 3)[0]
             required = {
                 "docops/__init__.py",
+                "docops/backends/ragflow.py",
+                "docops/extractors/registry.py",
+                "docops/ir/core.py",
                 "docops/templates/router.md",
                 "docops/schemas/manifest.schema.json",
                 "docops/schemas/evaluation.schema.json",
@@ -115,7 +118,15 @@ def main(argv: list[str] | None = None) -> int:
         if args.core:
             environment["DOCOPS_SKIP_RAG"] = "1"
         subprocess.run(
-            [sys.executable, "-c", f"import docops; assert docops.__version__ == {__version__!r}; "],
+            [
+                sys.executable,
+                "-c",
+                (
+                    f"import docops; import docops.backends.ragflow; "
+                    f"import docops.extractors.registry; import docops.ir.core; "
+                    f"assert docops.__version__ == {__version__!r};"
+                ),
+            ],
             check=True,
             cwd=workspace,
             env=environment,

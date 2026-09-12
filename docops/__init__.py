@@ -89,8 +89,79 @@ __all__ = [
     "verify_project_backup",
     "restore_project",
     "validate_dependency_mitigation",
+    "KnowledgeProjectV2",
+    "OperationRequestV2",
+    "OperationResultV2",
+    "CapabilityV2",
+    "MigrationPlanV2",
+    "KnowledgeBackend",
+    "KnowledgeRagLegacyAdapter",
+    "QueryRequest",
+    "RagFlowAdapter",
+    "TaxonomyEngine",
+    "TaxonomyError",
+    "TaxonomyNode",
+    "TaxonomyProposal",
+    "TaxonomyRevision",
+    "BookToSkillAdapter",
+    "ClaimLineage",
+    "SkillArtifact",
+    "SynthesisCandidate",
+    "SynthesisEngine",
+    "SynthesisError",
+    "SynthesisReceipt",
+    "SynthesisRequest",
+    "GlobalRouter",
+    "RoutePlan",
+    "RouterError",
+    "route_query_v2",
+    "CompositionCandidate",
+    "CompositionError",
+    "CompositionManager",
+    "CompositionReceipt",
+    "LegacyInspection",
+    "MigrationError",
+    "MigrationReceipt",
+    "apply_migration",
+    "inspect_legacy_package",
+    "plan_migration",
+    "rollback_migration",
+    "ProjectError",
+    "ProjectService",
+    "CutoverDecision",
+    "evaluate_cutover",
+    "SurfaceAudit",
+    "audit_release_surface",
+    "require_cutover_approved",
 ]
 __version__ = "1.1.0"
+
+from .api_types import CapabilityV2, KnowledgeProjectV2, MigrationPlanV2, OperationRequestV2, OperationResultV2
+from .backends import KnowledgeBackend, KnowledgeRagLegacyAdapter, QueryRequest, RagFlowAdapter
+from .composition import CompositionCandidate, CompositionError, CompositionManager, CompositionReceipt
+from .migration import (
+    LegacyInspection,
+    MigrationError,
+    MigrationReceipt,
+    apply_migration,
+    inspect_legacy_package,
+    plan_migration,
+    rollback_migration,
+)
+from .project import ProjectError, ProjectService
+from .release_v2 import CutoverDecision, SurfaceAudit, audit_release_surface, evaluate_cutover, require_cutover_approved
+from .router import GlobalRouter, RoutePlan, RouterError, route_query_v2
+from .synthesis import (
+    BookToSkillAdapter,
+    ClaimLineage,
+    SkillArtifact,
+    SynthesisCandidate,
+    SynthesisEngine,
+    SynthesisError,
+    SynthesisReceipt,
+    SynthesisRequest,
+)
+from .taxonomy import TaxonomyEngine, TaxonomyError, TaxonomyNode, TaxonomyProposal, TaxonomyRevision
 
 
 def plan(*args, **kwargs):

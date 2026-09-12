@@ -20,6 +20,7 @@ Issues = "https://github.com/VIDORETTO/agent-knowledge-kit/issues"
 
 [project.optional-dependencies]
 rag = ["knowledge-rag==4.8.5"]
+ragflow = ["ragflow-sdk==0.27.2; python_version >= '3.13' and python_version < '3.14'"]
 formats = ["PyYAML==6.0.3", "pypdf==6.16.2", "python-docx==1.2.0"]
 dev = ["pytest==9.1.1", "ruff==0.12.7", "pip-audit==2.10.1", "setuptools==84.0.0"]
 
@@ -28,7 +29,15 @@ farol = "docops.__main__:main"
 docops = "docops.__main__:main"
 
 [tool.setuptools]
-packages = ["docops", "docops.templates", "docops.schemas", "docops.presets"]
+packages = [
+    "docops",
+    "docops.backends",
+    "docops.extractors",
+    "docops.ir",
+    "docops.templates",
+    "docops.schemas",
+    "docops.presets",
+]
 
 [tool.setuptools.package-data]
 docops = ["templates/*.md", "schemas/*.json", "presets/*.json"]
@@ -42,6 +51,7 @@ docops = ["templates/*.md", "schemas/*.json", "presets/*.json"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = ["integration: opt-in external service contract/integration test"]
 
 [tool.ruff]
 target-version = "py311"

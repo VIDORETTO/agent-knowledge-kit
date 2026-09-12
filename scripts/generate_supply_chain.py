@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.metadata as importlib_metadata
 import json
 import os
 import re
@@ -135,6 +136,28 @@ def _pip_inspect(
     installed = payload.get("installed") if isinstance(payload, dict) else None
     if not isinstance(installed, list):
         return {"status": "unavailable", "reason": "pip inspect returned an unexpected shape"}
+    # Some isolated runners (notably uv-created environments) expose complete
+    # ``pip list``/importlib metadata while pip 25.x reports an empty
+    # ``inspect --local`` inventory.  Fall back to the same interpreter's
+    # installed metadata instead of turning an observable environment into a
+    # false missing-lock failure.
+    if not installed and completed.returncode == 0:
+        direct_names = {_normalized_name(str(item.get("name", ""))) for item in requirements}
+        installed = []
+        for distribution in importlib_metadata.distributions():
+            name = distribution.metadata.get("Name")
+            version = distribution.version
+            if isinstance(name, str) and isinstance(version, str):
+                installed.append(
+                    {
+                        "metadata": {
+                            "name": name,
+                            "version": version,
+                            "requires_dist": list(distribution.requires or []),
+                        },
+                        "requested": _normalized_name(name) in direct_names,
+                    }
+                )
     components = []
     for item in installed:
         if not isinstance(item, dict) or not isinstance(item.get("metadata"), dict):

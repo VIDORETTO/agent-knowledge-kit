@@ -100,6 +100,22 @@ runtime is recorded as `SKIPPED [rag_optional_unavailable]`, while a requested
 RAG gate fails. The wheel gate sets `DOCOPS_REQUIRE_WHEEL_RAG=1` when RAG is
 part of the candidate and must report the installed-package provenance.
 
+The Farol 2.0 RAGFlow profile is separate from that legacy `full` profile. It
+repeats the provider-free core gates and appends the fail-closed RAGFlow
+contract spike:
+
+```text
+python3.13 -m pip install --editable '.[dev,ragflow]'
+python scripts/run_release_gates.py --root . --profile core --json
+python scripts/run_release_gates.py --root . --profile ragflow --json
+```
+
+The RAGFlow profile requires `DOCOPS_RAGFLOW_ENDPOINT`,
+`DOCOPS_RAGFLOW_TOKEN`, `DOCOPS_RAGFLOW_IMAGE_DIGEST` in
+`repository@sha256:<64 hex>` form, `DOCOPS_RAGFLOW_SDK_VERSION=0.27.2`, and
+an operator-provisioned service. Missing inputs fail the required profile with
+a redacted blocker report; they are never counted as a successful skip.
+
 The FastAPI Golden is an internal pilot artifact and is intentionally outside
 the public `1.1.0` scope because its private documentation corpus is not
 licensed in this checkout. Do not run `scripts/evaluate_golden.py` for this

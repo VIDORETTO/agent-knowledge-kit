@@ -276,10 +276,26 @@ def build_gate_plan(root: Path, python: Path, output: Path, profile: str) -> lis
             environment=common_env,
         ),
         _stage(
+            "farol-v2-provider-free-fixture",
+            root,
+            python,
+            stage_root / "08-farol-v2-fixture",
+            (
+                (
+                    py,
+                    _script(root, "run_farol_v2_fixture.py"),
+                    "--output",
+                    str(stage_root / "08-farol-v2-fixture" / "package"),
+                ),
+            ),
+            artifacts=("fixture.log",),
+            environment=common_env,
+        ),
+        _stage(
             "public-seams",
             root,
             python,
-            stage_root / "08-public-seams",
+            stage_root / "09-public-seams",
             ((py, _script(root, "check_public_seams.py"), "--tests", str(root / "tests"), "--json"),),
             artifacts=("public-seams.json",),
             environment=common_env,
@@ -288,7 +304,7 @@ def build_gate_plan(root: Path, python: Path, output: Path, profile: str) -> lis
             "security",
             root,
             python,
-            stage_root / "09-security",
+            stage_root / "10-security",
             (
                 (
                     py,
@@ -308,7 +324,7 @@ def build_gate_plan(root: Path, python: Path, output: Path, profile: str) -> lis
             "dependency-audit",
             root,
             python,
-            stage_root / "10-dependency-audit",
+            stage_root / "11-dependency-audit",
             (
                 (
                     py,
@@ -318,7 +334,7 @@ def build_gate_plan(root: Path, python: Path, output: Path, profile: str) -> lis
                     "--local",
                     "--strict",
                     "--evidence-dir",
-                    str(stage_root / "10-dependency-audit" / "evidence"),
+                    str(stage_root / "11-dependency-audit" / "evidence"),
                 ),
             ),
             artifacts=("evidence", "evidence/summary.json"),
@@ -328,7 +344,7 @@ def build_gate_plan(root: Path, python: Path, output: Path, profile: str) -> lis
             "pip-check",
             root,
             python,
-            stage_root / "11-pip-check",
+            stage_root / "12-pip-check",
             ((py, "-m", "pip", "check"),),
             artifacts=("pip-check.log",),
             environment=common_env,
@@ -337,7 +353,7 @@ def build_gate_plan(root: Path, python: Path, output: Path, profile: str) -> lis
             "workflow-yaml",
             root,
             python,
-            stage_root / "12-workflow-yaml",
+            stage_root / "13-workflow-yaml",
             (
                 (
                     py,
@@ -354,7 +370,7 @@ def build_gate_plan(root: Path, python: Path, output: Path, profile: str) -> lis
             "pytest",
             root,
             python,
-            stage_root / "13-pytest",
+            stage_root / "14-pytest",
             ((py, "-m", "pytest", "-q"),),
             artifacts=("pytest.log",),
             environment=common_env,
@@ -363,8 +379,8 @@ def build_gate_plan(root: Path, python: Path, output: Path, profile: str) -> lis
             "ruff",
             root,
             python,
-            stage_root / "14-ruff",
-            ((py, "-m", "ruff", "check", "docops", "tests", "scripts"),),
+            stage_root / "15-ruff",
+            (("ruff", "check", "docops", "tests", "scripts"),),
             artifacts=("ruff.log",),
             environment=common_env,
         ),
@@ -372,8 +388,8 @@ def build_gate_plan(root: Path, python: Path, output: Path, profile: str) -> lis
             "format",
             root,
             python,
-            stage_root / "15-format",
-            ((py, "-m", "ruff", "format", "--check", "docops", "tests", "scripts"),),
+            stage_root / "16-format",
+            (("ruff", "format", "--check", "docops", "tests", "scripts"),),
             artifacts=("format.log",),
             environment=common_env,
         ),
@@ -381,7 +397,7 @@ def build_gate_plan(root: Path, python: Path, output: Path, profile: str) -> lis
             "compileall",
             root,
             python,
-            stage_root / "16-compileall",
+            stage_root / "17-compileall",
             ((py, "-m", "compileall", "-q", "docops", "tests", "scripts"),),
             artifacts=("compileall.log",),
             environment=common_env,
@@ -390,7 +406,7 @@ def build_gate_plan(root: Path, python: Path, output: Path, profile: str) -> lis
             "diff-check",
             root,
             python,
-            stage_root / "17-diff-check",
+            stage_root / "18-diff-check",
             (("git", "-C", str(root), "diff", "--check"),),
             artifacts=("diff-check.log",),
             environment=common_env,
@@ -399,7 +415,7 @@ def build_gate_plan(root: Path, python: Path, output: Path, profile: str) -> lis
             "clean-clone",
             root,
             python,
-            stage_root / "18-clean-clone",
+            stage_root / "19-clean-clone",
             (tuple(clean_clone_command),),
             artifacts=("clean-clone.json",),
             environment=common_env,
@@ -408,7 +424,7 @@ def build_gate_plan(root: Path, python: Path, output: Path, profile: str) -> lis
             "wheel-core",
             root,
             python,
-            stage_root / "19-wheel-core",
+            stage_root / "20-wheel-core",
             ((py, _script(root, "verify_wheel.py"), "--core"),),
             artifacts=("wheel-core.json",),
             environment=common_env,
@@ -417,7 +433,7 @@ def build_gate_plan(root: Path, python: Path, output: Path, profile: str) -> lis
             "crash-matrix",
             root,
             python,
-            stage_root / "20-crash-matrix",
+            stage_root / "21-crash-matrix",
             (
                 (
                     py,
@@ -436,7 +452,7 @@ def build_gate_plan(root: Path, python: Path, output: Path, profile: str) -> lis
             "revocation",
             root,
             python,
-            stage_root / "21-revocation",
+            stage_root / "22-revocation",
             (
                 (
                     py,
@@ -464,7 +480,7 @@ def build_gate_plan(root: Path, python: Path, output: Path, profile: str) -> lis
                     "wheel-rag",
                     root,
                     python,
-                    stage_root / "22-wheel-rag",
+                    stage_root / "23-wheel-rag",
                     ((py, _script(root, "verify_wheel.py"), "--require-rag"),),
                     artifacts=("wheel-rag.json",),
                     requires_rag=True,
@@ -474,13 +490,25 @@ def build_gate_plan(root: Path, python: Path, output: Path, profile: str) -> lis
                     "rag-mcp",
                     root,
                     python,
-                    stage_root / "23-rag-mcp",
-                    _rag_commands(root, python, stage_root / "23-rag-mcp"),
+                    stage_root / "24-rag-mcp",
+                    _rag_commands(root, python, stage_root / "24-rag-mcp"),
                     artifacts=("stage-report.json", "package/manifest.json", "package/rag/index.json"),
                     requires_rag=True,
                     environment=rag_environment,
                 ),
             ]
+        )
+    if profile == "ragflow":
+        stages.append(
+            _stage(
+                "ragflow-contract",
+                root,
+                python,
+                stage_root / "23-ragflow-contract",
+                ((py, _script(root, "run_ragflow_profile.py"), "--json"),),
+                artifacts=("ragflow-report.json",),
+                environment=common_env,
+            )
         )
     return stages
 
@@ -880,19 +908,28 @@ def _unique_output(root: Path, requested: Path | None) -> Path:
     return root / "artifacts" / f"release-gates-{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(8)}"
 
 
+def _absolute_path_preserving_symlink(path: Path) -> Path:
+    """Make a path absolute without discarding a virtualenv symlink."""
+
+    return Path(os.path.abspath(os.fspath(path.expanduser())))
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=PROJECT_ROOT)
     parser.add_argument("--python", type=Path, default=Path(sys.executable))
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--profile", choices=("core", "full"), default="full")
+    parser.add_argument("--profile", choices=("core", "full", "ragflow"), default="full")
     parser.add_argument("--allow-rag-skip", action="store_true")
     parser.add_argument("--timeout", type=int, default=1800)
     parser.add_argument("--plan", action="store_true", help="print the ordered plan without executing commands")
     parser.add_argument("--json", action="store_true", help="emit the machine-readable report")
     args = parser.parse_args(argv)
     root = args.root.expanduser().resolve()
-    python = args.python.expanduser().resolve()
+    # Keep a virtual-environment symlink intact.  Resolving it to the base
+    # interpreter drops the isolated site-packages that the gates are meant
+    # to exercise (notably pytest and pip-audit).
+    python = _absolute_path_preserving_symlink(args.python)
     try:
         output = _unique_output(root, args.output)
         stages = build_gate_plan(root, python, output, args.profile)

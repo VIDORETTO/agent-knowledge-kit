@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "effort": "farol-2",
+  "phase": "implementation",
+  "status": "active",
+  "profile": "expanded",
+  "baseline": {
+    "kind": "git_sha",
+    "value": "81d5dcb2e189d00406cdd9b9e671d94e3f23cd58",
+    "branch": "main",
+    "remote_relation": "main_equals_origin_main_at_reconnaissance"
+  },
+  "inputs": {
+    "spec": {"path": "specs/farol-2/spec.md", "revision": 1},
+    "plan": {"path": "specs/farol-2/plan.md", "revision": 1},
+    "context": {"path": "CONTEXT.md", "revision": 1}
+  },
+  "tickets": {
+    "ready": [],
+    "in_progress": ["TK-001", "TK-004", "TK-007", "TK-011", "TK-013", "TK-014", "TK-017", "TK-018", "TK-019", "TK-020"],
+    "verified": ["TK-002", "TK-003", "TK-005", "TK-006", "TK-008", "TK-009", "TK-010", "TK-012", "TK-015", "TK-016"],
+    "draft": []
+  },
+  "limitations": [
+    "hybrid.py was not available; validate, graph, package and render were reproduced manually",
+    "the host interpreter has no project test tooling; the verified core run used an isolated Python 3.11 environment with pinned test/build dependencies",
+    "the full core run passed 459 tests with six explicit skips: one opt-in RAGFlow spike and five optional Chroma paths",
+    "RAGFlow v0.27.2, DeepDoc/OCR and the real book-to-skill harness remain not_run because endpoint/token/image digest/service and harness inputs were not provisioned; the pinned SDK resolves only in isolated Python 3.13",
+    "the core release gate passed 22/22 stages with zero failures and zero not-run stages; the RAGFlow profile remains an external-only gate",
+    "release contraction remains intentionally pending: the surface auditor reports the expected pre-cutover editorial/legacy findings and no destructive removal was performed"
+  ],
+  "external_blockers": [
+    "No operator-provisioned RAGFlow endpoint, token, image digest or service is available in this checkout; Docker host resources are below the documented self-hosting profile, so no deployment was started.",
+    "No real DeepDoc/OCR runtime or approved OCR fixture receipt is available.",
+    "No external book-to-skill harness/package and inputs are provisioned; the local adapter is contract-only."
+  ],
+  "next_action": "Provision the pinned RAGFlow v0.27.2 endpoint/token/image digest/service, DeepDoc/OCR runtime and book-to-skill harness inputs, then rerun TK-001, TK-007, TK-011, TK-013/014 and the full RAGFlow profile; do not approve TK-017/019 contraction before TK-018 cutover evidence."
+}

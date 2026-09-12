@@ -4,15 +4,22 @@ O núcleo `docops` usa a biblioteca padrão do Python. Os perfis opcionais são:
 
 - `formats`: `PyYAML==6.0.3`, `pypdf==6.16.2` e `python-docx==1.2.0`;
 - `rag`: `knowledge-rag==4.8.5` e suas dependências locais;
+- `ragflow`: `ragflow-sdk==0.27.2`, somente Python 3.13, para o perfil externo
+  RAGFlow do Farol 2.0;
 - `dev`: `pytest==9.1.1`, `ruff==0.12.7`, `pip-audit==2.10.1` e
   `setuptools==84.0.0`.
 
-As versões diretas são repetidas em `pyproject.toml`,
+As versões diretas dos perfis core são repetidas em `pyproject.toml`,
 `requirements-dev.txt` e `requirements.lock`. O bootstrap atualiza o
 instalador para `pip==26.2.1` antes de instalar o projeto. O lock é uma lista
 de requisitos diretos exatos, não um lock transitivo com hashes: wheels e
 dependências transitivas variam por sistema operacional e Python, e o CI
 resolve cada ambiente em um clone limpo.
+
+O SDK RAGFlow fica apenas no extra `ragflow` do `pyproject.toml`: a restrição
+Python 3.13 impede adicioná-lo ao lock agregado usado pelos perfis core 3.11–3.12.
+O perfil externo deve instalar esse extra no mesmo intérprete que executará o
+spike e ainda exige endpoint, token e imagem fixada por digest.
 
 ## Política de atualização
 

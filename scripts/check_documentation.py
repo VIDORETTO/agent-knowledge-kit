@@ -171,9 +171,12 @@ def _docops_argv(line: str) -> list[str] | None:
     match = _DOCOPS_START_RE.match(line)
     if not match:
         return None
+    args = match.group("args")
+    if not args:
+        return None
     try:
-        return shlex.split(match.group("args"), posix=True)
-    except ValueError:
+        return shlex.split(args, posix=True)
+    except (TypeError, ValueError):
         return None
 
 

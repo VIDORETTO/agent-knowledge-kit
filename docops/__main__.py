@@ -76,6 +76,7 @@ from .operations import apply as apply_operation
 from .operations import cleanup as cleanup_residue
 from .operations import plan as build_plan
 from .package_validator import validate_package
+from .project import ProjectError, ProjectService
 from .rag_sync import RagSnapshotError, compare_embedding_profiles, snapshot_rag_package
 from .reader_sessions import create_reader_session, query_reader_session, revoke_reader_session
 from .source_policy import reconcile_source, register_source
@@ -161,6 +162,9 @@ CLI_COMPATIBILITY_MAP = {
     "project-restore": "project restore",
     "project-preset": "project preset",
     "project-preset-candidates": "project preset candidates",
+    "project-v2-start": "v2 start",
+    "project-v2-inspect": "v2 inspect",
+    "project-v2-apply": "v2 apply",
     "supervisor-run": "supervisor run",
     "supervisor-stop": "supervisor stop",
     "supervisor-resume": "supervisor resume",
@@ -184,6 +188,7 @@ _CANONICAL_HELP = """Canonical domain commands:
   lifecycle feedback {submit,report}
   init {start,status,answer,finalize}
   project {inspect,adopt,source,evidence,change,rollback,health,backup,restore,preset}
+  v2 {start,inspect,apply}
   supervisor {run,stop,resume}
 
 Flat commands are temporary compatibility aliases. They emit the same JSON
@@ -196,6 +201,7 @@ _CANONICAL_GROUP_HELP = {
     "lifecycle": "lifecycle status source event worker candidate reader rag learning feedback",
     "init": "init start status answer finalize",
     "project": "project inspect adopt source evidence change rollback health backup restore preset",
+    "v2": "v2 start inspect apply",
     "supervisor": "supervisor run stop resume",
 }
 
@@ -763,6 +769,26 @@ def build_parser() -> argparse.ArgumentParser:
     project_preset_candidates.add_argument("--preset", required=True)
     project_preset_candidates.add_argument("--theme")
     project_preset_candidates.add_argument("--json", action="store_true")
+    project_v2_start = commands.add_parser("project-v2-start", help="start a resumable Farol 2.0 project")
+    project_v2_start.add_argument("--project", type=Path, required=True)
+    project_v2_start.add_argument("--name", required=True)
+    project_v2_start.add_argument("--objective", required=True)
+    project_v2_start.add_argument("--sources", type=Path, required=True, help="JSON object or array of sources")
+    project_v2_start.add_argument("--idempotency-key", required=True)
+    project_v2_start.add_argument("--session-id")
+    project_v2_start.add_argument("--json", action="store_true")
+    project_v2_inspect = commands.add_parser("project-v2-inspect", help="inspect a Farol 2.0 project")
+    project_v2_inspect.add_argument("--project", type=Path, required=True)
+    project_v2_inspect.add_argument("--json", action="store_true")
+    project_v2_apply = commands.add_parser("project-v2-apply", help="apply a resumable Farol 2.0 operation")
+    project_v2_apply.add_argument("--project", type=Path, required=True)
+    project_v2_apply.add_argument(
+        "--operation", choices=("plan", "apply", "resume", "inspect", "migrate"), required=True
+    )
+    project_v2_apply.add_argument("--inputs", type=Path, help="JSON object with operation inputs")
+    project_v2_apply.add_argument("--expected-revision", type=int, required=True)
+    project_v2_apply.add_argument("--idempotency-key", required=True)
+    project_v2_apply.add_argument("--json", action="store_true")
     supervisor_run = commands.add_parser("supervisor-run", help="poll a project supervisor once")
     supervisor_run.add_argument("--project", type=Path, required=True)
     supervisor_run.add_argument("--source", type=Path)
@@ -819,6 +845,15 @@ def _read_input_file(path: Path | None) -> dict[str, object]:
     if not isinstance(value, dict):
         raise ValueError("--input must contain a JSON object")
     return value
+
+
+def _read_sources_file(path: Path) -> list[dict[str, object]]:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(value, dict):
+        value = value.get("sources")
+    if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
+        raise ValueError("--sources must contain a JSON array or an object with a sources array")
+    return [dict(item) for item in value]
 
 
 def _new_result_exit(result: dict[str, object]) -> int:
@@ -888,6 +923,29 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _print_new_result(result)
     if args.command == "project-inspect":
         return _print_new_result(inspect_project(args.project))
+    if args.command == "project-v2-start":
+        result = ProjectService(args.project).start(
+            args.name,
+            args.objective,
+            _read_sources_file(args.sources),
+            idempotency_key=args.idempotency_key,
+            session_id=args.session_id,
+        )
+        print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.status == "succeeded" else 2 if result.status == "needs_input" else 1
+    if args.command == "project-v2-inspect":
+        project = ProjectService(args.project).inspect()
+        print(json.dumps(project.to_dict(), indent=2, ensure_ascii=False, sort_keys=True))
+        return 0
+    if args.command == "project-v2-apply":
+        result = ProjectService(args.project).apply(
+            args.operation,
+            _read_input_file(args.inputs),
+            expected_revision=args.expected_revision,
+            idempotency_key=args.idempotency_key,
+        )
+        print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.status in {"succeeded", "resumed"} else 2 if result.status == "needs_input" else 1
     if args.command == "project-adopt":
         return _print_new_result(
             adopt_project_package(
@@ -1609,7 +1667,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(_expand_canonical_argv(raw_argv))
     try:
         return _dispatch(args)
-    except (OSError, TypeError, UnicodeError, ValueError) as exc:
+    except (OSError, TypeError, UnicodeError, ValueError, ProjectError) as exc:
         print(
             json.dumps(
                 {

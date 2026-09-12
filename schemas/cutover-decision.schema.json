@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://consulta-documentacao.invalid/schemas/cutover-decision.schema.json",
+  "title": "Farol 2.0 cutover decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "status", "ok", "legacy_preserved", "gates", "blockers"],
+  "properties": {
+    "schema_version": {"const": 2, "type": "integer"},
+    "kind": {"const": "cutover_decision", "type": "string"},
+    "status": {"enum": ["cutover_approved", "cutover_rejected", "not_run"], "type": "string"},
+    "ok": {"type": "boolean"},
+    "legacy_preserved": {"type": "boolean"},
+    "gates": {"type": "object"},
+    "blockers": {"type": "array", "items": {"type": "string"}}
+  }
+}

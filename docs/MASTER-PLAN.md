@@ -1,4 +1,9 @@
-# Plano master — evolução de projetos de conhecimento
+# Plano master histórico — evolução de projetos de conhecimento
+
+> **Supersedido para trabalho futuro:** este documento registra a evolução
+> Farol 1.x e inclui linhas de produto que não pertencem ao Farol 2.0. A fonte
+> normativa atual é [`specs/farol-2/`](../specs/farol-2/README.md). Não crie
+> novos tickets a partir deste plano.
 
 Data: 2026-09-07. Baseline estudado: `c438c82e6350f9dc4971a355a4f0dcb9931d74c3`, branch `codex/main-consolidation`.
 Status: especificação implementada localmente nesta execução; publicação pública, corpus/índice real e autorizações externas continuam fora do escopo.
